@@ -12,49 +12,53 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.v2ray.ang.R
 import com.v2ray.ang.dto.GroupMapItem
-import com.v2ray.ang.dto.entities.ServersCache
 import kotlinx.coroutines.flow.StateFlow
+
+private val TabRowEdgePadding = 16.dp
+private val TabMinWidth = 56.dp
+private val TabIndicatorCorner = 3.dp
+private const val TabRowContainerAlpha = 0.95f
 
 @Composable
 fun GroupTabBar(
     groups: List<GroupMapItem>,
     selectedTabIndex: Int,
-    mainViewModel: MainViewModel,
+    counts: (String) -> StateFlow<Int>,
     onTabClick: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
+    val safeIndex = selectedTabIndex.coerceIn(0, groups.lastIndex)
     PrimaryScrollableTabRow(
-        selectedTabIndex = selectedTabIndex.coerceIn(0, groups.lastIndex),
+        selectedTabIndex = safeIndex,
         modifier = modifier.fillMaxWidth(),
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = TabRowContainerAlpha),
         contentColor = MaterialTheme.colorScheme.onSurface,
-        edgePadding = 16.dp,
-        minTabWidth = 56.dp,
+        edgePadding = TabRowEdgePadding,
+        minTabWidth = TabMinWidth,
         indicator = {
             TabRowDefaults.PrimaryIndicator(
                 modifier = Modifier
-                    .tabIndicatorOffset(
-                        selectedTabIndex = selectedTabIndex.coerceIn(0, groups.lastIndex),
-                        matchContentSize = true
-                    )
-                    .clip(RoundedCornerShape(3.dp)),
+                    .tabIndicatorOffset(selectedTabIndex = safeIndex, matchContentSize = true)
+                    .clip(RoundedCornerShape(TabIndicatorCorner)),
                 width = Dp.Unspecified,
-                color = MaterialTheme.colorScheme.secondary
+                color = MaterialTheme.colorScheme.secondary,
             )
         },
-        divider = {}
+        divider = {},
     ) {
         groups.forEachIndexed { index, group ->
             GroupTabItem(
                 group = group,
-                selected = index == selectedTabIndex,
-                serverFlowProvider = { mainViewModel.serversForGroup(group.id) },
-                onClick = { onTabClick(index) }
+                selected = index == safeIndex,
+                counts = counts,
+                onClick = { onTabClick(index) },
             )
         }
     }
@@ -64,25 +68,21 @@ fun GroupTabBar(
 private fun GroupTabItem(
     group: GroupMapItem,
     selected: Boolean,
-    serverFlowProvider: () -> StateFlow<List<ServersCache>>,
-    onClick: () -> Unit
+    counts: (String) -> StateFlow<Int>,
+    onClick: () -> Unit,
 ) {
-    val serverFlow = remember(group.id) { serverFlowProvider() }
-    val servers by serverFlow.collectAsStateWithLifecycle()
+    val isAllGroup = group.id.isEmpty()
+    val count by remember(group.id) { counts(group.id) }.collectAsStateWithLifecycle()
+    val allTitle = stringResource(R.string.filter_config_all)
     Tab(
         selected = selected,
         onClick = onClick,
         text = {
-            val text = if (group.id.isEmpty()) {
-                group.remarks
-            } else {
-                "${group.remarks} (${servers.size})"
-            }
             Text(
-                text = text,
+                text = if (isAllGroup) allTitle else "${group.remarks} ($count)",
                 maxLines = 1,
                 softWrap = false,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
             )
         }
     )
