@@ -796,21 +796,30 @@ object CoreConfigManager {
         // hardcode googleapi rule to fix play store problems
         hosts[AppConfig.GOOGLEAPIS_CN_DOMAIN] = AppConfig.GOOGLEAPIS_COM_DOMAIN
 
-        // hardcode popular Android Private DNS rule to fix localhost DNS problem
-        hosts[AppConfig.DNS_ALIDNS_DOMAIN] = AppConfig.DNS_ALIDNS_ADDRESSES
-        hosts[AppConfig.DNS_CISCO_SSE_DOMAIN] = AppConfig.DNS_CISCO_SSE_ADDRESSES
-        hosts[AppConfig.DNS_CISCO_UMBRELLA_DOMAIN] = AppConfig.DNS_CISCO_UMBRELLA_ADDRESSES
-        hosts[AppConfig.DNS_CLOUDFLARE_ONE_DOMAIN] = AppConfig.DNS_CLOUDFLARE_ONE_ADDRESSES
-        hosts[AppConfig.DNS_CLOUDFLARE_ONEDOT_DNS_DOMAIN] = AppConfig.DNS_CLOUDFLARE_ONEDOT_DNS_ADDRESSES
-        hosts[AppConfig.DNS_CLOUDFLARE_DNS_COM_DOMAIN] = AppConfig.DNS_CLOUDFLARE_DNS_COM_ADDRESSES
-        hosts[AppConfig.DNS_CLOUDFLARE_DNS_DOMAIN] = AppConfig.DNS_CLOUDFLARE_DNS_ADDRESSES
-        hosts[AppConfig.DNS_CLOUDFLARE_WARP_DOMAIN] = AppConfig.DNS_CLOUDFLARE_WARP_ADDRESSES
-        hosts[AppConfig.DNS_DNSPOD_DOH_DOMAIN] = AppConfig.DNS_DNSPOD_DOH_ADDRESSES
-        hosts[AppConfig.DNS_DNSPOD_DOT_DOMAIN] = AppConfig.DNS_DNSPOD_DOT_ADDRESSES
-        hosts[AppConfig.DNS_GOOGLE_DOMAIN] = AppConfig.DNS_GOOGLE_ADDRESSES
-        hosts[AppConfig.DNS_QUAD9_DOMAIN] = AppConfig.DNS_QUAD9_ADDRESSES
-        hosts[AppConfig.DNS_SB_DOMAIN] = AppConfig.DNS_SB_ADDRESSES
-        hosts[AppConfig.DNS_YANDEX_DOMAIN] = AppConfig.DNS_YANDEX_ADDRESSES
+        val dohDomains = extractDoHDomains(remoteDns + domesticDns)
+
+        val DnsHostsMap = mapOf(
+            AppConfig.DNS_ALIDNS_DOMAIN to AppConfig.DNS_ALIDNS_ADDRESSES,
+            AppConfig.DNS_CISCO_SSE_DOMAIN to AppConfig.DNS_CISCO_SSE_ADDRESSES,
+            AppConfig.DNS_CISCO_UMBRELLA_DOMAIN to AppConfig.DNS_CISCO_UMBRELLA_ADDRESSES,
+            AppConfig.DNS_CLOUDFLARE_ONE_DOMAIN to AppConfig.DNS_CLOUDFLARE_ONE_ADDRESSES,
+            AppConfig.DNS_CLOUDFLARE_ONEDOT_DNS_DOMAIN to AppConfig.DNS_CLOUDFLARE_ONEDOT_DNS_ADDRESSES,
+            AppConfig.DNS_CLOUDFLARE_DNS_COM_DOMAIN to AppConfig.DNS_CLOUDFLARE_DNS_COM_ADDRESSES,
+            AppConfig.DNS_CLOUDFLARE_DNS_DOMAIN to AppConfig.DNS_CLOUDFLARE_DNS_ADDRESSES,
+            AppConfig.DNS_CLOUDFLARE_WARP_DOMAIN to AppConfig.DNS_CLOUDFLARE_WARP_ADDRESSES,
+            AppConfig.DNS_DNSPOD_DOH_DOMAIN to AppConfig.DNS_DNSPOD_DOH_ADDRESSES,
+            AppConfig.DNS_DNSPOD_DOT_DOMAIN to AppConfig.DNS_DNSPOD_DOT_ADDRESSES,
+            AppConfig.DNS_GOOGLE_DOMAIN to AppConfig.DNS_GOOGLE_ADDRESSES,
+            AppConfig.DNS_QUAD9_DOMAIN to AppConfig.DNS_QUAD9_ADDRESSES,
+            AppConfig.DNS_SB_DOMAIN to AppConfig.DNS_SB_ADDRESSES,
+            AppConfig.DNS_YANDEX_DOMAIN to AppConfig.DNS_YANDEX_ADDRESSES,
+        )
+
+        for ((domain, addresses) in DnsHostsMap) {
+            if (dohDomains.contains(domain)) {
+                hosts[domain] = addresses
+            }
+        }
 
         //User DNS hosts
         val userHosts = MmkvManager.decodeSettingsString(AppConfig.PREF_DNS_HOSTS)
@@ -822,6 +831,32 @@ object CoreConfigManager {
             if (userHostsMap != null) {
                 hosts.putAll(userHostsMap)
             }
+        }
+
+        /**
+         * Extract domain names from DoH (DNS-over-HTTPS) addresses.
+         *
+         * Only addresses matching the pattern "https://domain/dns-query" (or similar HTTPS URLs)
+         * will have their domain extracted. Pure IP addresses and non-HTTPS DNS addresses are ignored.
+         *
+         * @param dnsServers List of DNS server addresses (may include IPs, DoH URLs, etc.)
+         * @return Set of domain names extracted from DoH addresses
+         */
+        private fun extractDoHDomains(dnsServers: List<String>): Set<String> {
+            val dohDomains = mutableSetOf<String>()
+            for (dns in dnsServers) {
+                if (!dns.startsWith("https://")) continue
+                try {
+                    val uri = java.net.URI(dns)
+                    val host = uri.host
+                    if (!host.isNullOrEmpty() && !Utils.isPureIpAddress(host)) {
+                        dohDomains.add(host)
+                    }
+                } catch (e: Exception) {
+                    LogUtil.w(AppConfig.TAG, "Failed to parse DoH DNS address: $dns")
+                }
+            }
+            return dohDomains
         }
 
         // DNS dns
