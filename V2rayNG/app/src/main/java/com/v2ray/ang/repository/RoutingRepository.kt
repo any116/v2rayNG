@@ -2,6 +2,7 @@ package com.v2ray.ang.repository
 
 import android.app.Application
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.RoutingEditData
 import com.v2ray.ang.dto.RoutingRuleRow
 import com.v2ray.ang.dto.entities.RulesetItem
@@ -11,11 +12,17 @@ import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import javax.inject.Inject
 
-open class RoutingRepository(private val app: Application) : BaseRepository() {
+open class RoutingRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher = Dispatchers.IO,
+) : BaseRepository(io) {
 
     // ----- Rule loading with id deduplication -----
 

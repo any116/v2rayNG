@@ -3,6 +3,7 @@ package com.v2ray.ang.repository
 import android.app.Application
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.ServerEditData
 import com.v2ray.ang.dto.SubscriptionOption
 import com.v2ray.ang.dto.entities.ProfileItem
@@ -12,8 +13,14 @@ import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.CertificateFingerprintManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import javax.inject.Inject
 
-open class ServerRepository(private val app: Application) : BaseRepository() {
+open class ServerRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher = Dispatchers.IO,
+) : BaseRepository(io) {
 
     open suspend fun loadEdit(guid: String, fallbackType: EConfigType): ServerEditData = withIO {
         val stored = if (guid.isEmpty()) null else MmkvManager.decodeServerConfig(guid)

@@ -4,8 +4,12 @@ import android.app.Application
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.TranslatorsParser
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import javax.inject.Inject
 
 /**
  * One contributor line, already resolved for display.
@@ -26,7 +30,10 @@ data class TranslatorGroup(
  * Data layer of the about screen: build metadata, the native core version, the static link table
  * and the bundled translators file.
  */
-open class AboutRepository(private val app: Application) : BaseRepository() {
+open class AboutRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher = Dispatchers.IO,
+) : BaseRepository(io) {
 
     open fun applicationId(): String = BuildConfig.APPLICATION_ID
 

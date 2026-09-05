@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.SubEditData
 import com.v2ray.ang.dto.SubUpdateOptions
 import com.v2ray.ang.dto.SubscriptionUpdateMessage
@@ -20,10 +21,16 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.util.QRCodeDecoder
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import javax.inject.Inject
 
-open class SubRepository(private val app: Application) : BaseRepository() {
+open class SubRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher = Dispatchers.IO,
+) : BaseRepository(io) {
 
     // ---- Read ----
 

@@ -10,7 +10,9 @@ import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.compose.ThemeManager
+import dagger.hilt.android.HiltAndroidApp
 
+@HiltAndroidApp
 class AngApplication : Application() {
     companion object {
         lateinit var application: AngApplication

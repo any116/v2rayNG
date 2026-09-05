@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.UrlContentRequest
 import com.v2ray.ang.dto.entities.AssetUrlCache
 import com.v2ray.ang.dto.entities.AssetUrlItem
@@ -15,11 +16,14 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
+import javax.inject.Inject
 
 /**
  * Domain model of one asset entry. It lives in the data layer on purpose: the repository used to
@@ -57,9 +61,12 @@ enum class AssetImportResult { SUCCESS, DUPLICATE, FAILURE }
 
 /**
  * Data layer of the user-asset feature: MMKV, the external asset directory and geo-file
- * downloads. Every entry point is `suspend` and main-safe; 
+ * downloads. Every entry point is `suspend` and main-safe;
  */
-open class UserAssetRepository(private val app: Application) : BaseRepository() {
+open class UserAssetRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher = Dispatchers.IO,
+) : BaseRepository(io) {
 
     private val extDir: File get() = File(Utils.userAssetPath(app))
 

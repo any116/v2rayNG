@@ -9,9 +9,12 @@ import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.util.JsonUtil
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import javax.inject.Inject
 
-class RoutingEditViewModel(
+@HiltViewModel
+class RoutingEditViewModel @Inject constructor(
     handle: SavedStateHandle,
     private val repo: RoutingRepository,
 ) : BaseEditViewModel<RoutingEditUiState, RoutingEditAction>(
