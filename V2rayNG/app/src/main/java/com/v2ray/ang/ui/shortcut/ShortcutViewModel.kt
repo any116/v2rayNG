@@ -7,11 +7,21 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
 import com.v2ray.ang.ui.compose.ToastType
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
 
-class ShortcutViewModel(
-    command: ShortcutCommand,
+@HiltViewModel(assistedFactory = ShortcutViewModel.Factory::class)
+class ShortcutViewModel @AssistedInject constructor(
+    @Assisted command: ShortcutCommand,
     private val repo: ShortcutRepository
 ) : BaseViewModel<ShortcutUiState, ShortcutAction>(ShortcutUiState(command)) {
+
+    @AssistedFactory
+    interface Factory {
+        fun create(command: ShortcutCommand): ShortcutViewModel
+    }
 
     init {
         dispatchCommand()

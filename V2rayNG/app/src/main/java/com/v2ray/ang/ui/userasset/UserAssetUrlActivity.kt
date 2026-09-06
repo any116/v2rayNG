@@ -1,15 +1,14 @@
 package com.v2ray.ang.ui.userasset
 
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
-import com.v2ray.ang.repository.UserAssetRepository
 import com.v2ray.ang.ui.base.BaseActivity
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class UserAssetUrlActivity : BaseActivity() {
 
-    private val viewModel: UserAssetUrlViewModel by baseViewModels { app, handle ->
-        UserAssetUrlViewModel(handle, UserAssetRepository(app))
-    }
+    private val viewModel: UserAssetUrlViewModel by viewModels()
 
     @Composable
     override fun ScreenContent() = UserAssetUrlScreen(viewModel)

@@ -1,14 +1,16 @@
 package com.v2ray.ang.repository
 
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.TaskerProfile
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager
+import kotlinx.coroutines.CoroutineDispatcher
+import javax.inject.Inject
 
-/**
- * Data facade of the launcher-shortcut and Tasker entries.
- */
-open class ShortcutRepository : BaseRepository() {
+open class ShortcutRepository @Inject constructor(
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     /**
      * Probes the core. Only meaningful in `:RunSoLibV2RayDaemon`, which is where the three service

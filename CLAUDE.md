@@ -64,9 +64,19 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | Coil | 2.7.0 | 只用于分应用代理的应用图标 |
 | reorderable | 3.1.0 | `sh.calvin.reorderable`，列表拖拽排序 |
 | Lifecycle | 2.11.0 | 含 `lifecycle-runtime-compose` |
+| Hilt | 2.60.1 | `hilt-android` + `hilt-android-compiler`(KSP) |
+| androidx.hilt | 1.4.0 | `hilt-work` + `hilt-compiler`，@HiltWorker 用 |
 
-**没有 DI 框架**（无 Hilt / Koin）。依赖靠 `BaseViewModelFactory` + `baseViewModels {}`
-在 Activity 里手工构造，不要引入 DI。
+**DI 框架：Hilt**（`com.google.dagger.hilt.android`，KSP 处理器）。
+Application 带 `@HiltAndroidApp`，Activity 带 `@AndroidEntryPoint`，ViewModel 带
+`@HiltViewModel` + `@Inject constructor`，Activity 侧用标准 `by viewModels<XxxViewModel>()`。
+Worker 用 `@HiltWorker` + `@AssistedInject`，`HiltWorkerFactory` 挂在
+`AngApplication` 手动构建的 WorkManager `Configuration` 上。
+
+`BaseViewModelFactory` / `baseViewModels {}` 已从生产代码移除，不要新增自定义 Factory。
+`@Inject constructor` 的参数**不得**全部带默认值，否则 Kotlin 合成的无参构造函数会
+让 Dagger 报 `may only contain one injected constructor`。细则见
+`docs/project-rules/hilt-rules.md`。
 
 ## Architecture
 
@@ -223,3 +233,4 @@ CI 不跑 `test`、不跑 `lint`，所以**本地必须自己跑**。
 4. 找一个同类型的现有屏作模板（pref 型看 `settings/`，编辑型看 `server/` 或
    `subscription/`，列表型看 `perappproxy/`，复杂型看 `main/`），保持风格一致；
 5. 改数据层前先看 `handler/MmkvManager.kt` 已有的读写方法，绝大多数已经存在。
+6. 加 Repository / ViewModel / Worker 的依赖注入 | `hilt-rules.md` |

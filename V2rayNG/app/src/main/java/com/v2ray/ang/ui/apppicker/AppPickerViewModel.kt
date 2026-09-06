@@ -4,15 +4,18 @@ import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.AppInfo
+import com.v2ray.ang.extension.delay
 import com.v2ray.ang.repository.AppListRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import javax.inject.Inject
 
-class AppPickerViewModel(
+@HiltViewModel
+class AppPickerViewModel @Inject constructor(
     private val repo: AppListRepository,
     private val handle: SavedStateHandle
 ) : BaseViewModel<AppPickerUiState, AppPickerAction>(initialState(handle)) {
@@ -58,9 +61,6 @@ class AppPickerViewModel(
 
     // ===== loading =====
 
-    /**
-     * Loads the list ordered against the selection the screen started with.
-     */
     private fun load() = launch(loading = true, context = Dispatchers.Default) {
         val snapshot = state.selected
         allApps = repo.loadApps(selectedSnapshot = snapshot)
@@ -87,10 +87,6 @@ class AppPickerViewModel(
 
     private fun closeSearch() = applyQuery("", searchActive = false, debounce = false)
 
-    /**
-     * Cancels a filter that may still be holding the pre-load (empty) list, so the load is always
-     * the last publisher and the screen cannot be left showing an empty result.
-     */
     private fun republish() {
         queryJob?.cancel()
         publishRows(repo.filter(allApps, state.query))
@@ -104,7 +100,6 @@ class AppPickerViewModel(
         setState { copy(selected = next) }
     }
 
-    /** Bulk actions act on the visible rows only, so a filter narrows their scope as expected. */
     private fun mutateSelection(operation: (Set<String>, Collection<String>) -> Set<String>) {
         val visible = state.apps.map { it.packageName }
         if (visible.isEmpty()) return
@@ -127,7 +122,6 @@ class AppPickerViewModel(
 
     // ===== reduction helpers =====
 
-    /** Mapping happens once per list change, never per frame and never inside the reducer. */
     private fun publishRows(apps: List<AppInfo>) {
         val rows = apps.map { it.toRow() }
         setState { copy(apps = rows) }

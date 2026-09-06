@@ -1,19 +1,14 @@
 package com.v2ray.ang.handler
 
-import android.annotation.SuppressLint
 import android.content.Context
 import androidx.work.Constraints
-import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.WorkerParameters
 import androidx.work.multiprocess.RemoteWorkManager
 import androidx.work.workDataOf
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.dto.SubscriptionUpdateMessage
-import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.util.LogUtil
 import java.util.concurrent.TimeUnit
 
@@ -35,12 +30,19 @@ object SubscriptionUpdater {
         context: Context = AngApplication.application,
         forceReschedule: Boolean = false
     ) {
-        val existingWorkPolicy =
-            if (forceReschedule) {
-                ExistingPeriodicWorkPolicy.REPLACE
-            } else {
-                ExistingPeriodicWorkPolicy.KEEP
-            }
+        val migrating = needsWorkerMigration()
+        val existingWorkPolicy = when {
+            forceReschedule -> ExistingPeriodicWorkPolicy.REPLACE
+
+            // The worker class became top-level when it was converted to @HiltWorker, and
+            // WorkManager persists the class name. Rows written by an older build still name the
+            // removed nested class and would fail to instantiate forever under KEEP. UPDATE
+            // rewrites the work spec, including the class name, while preserving the existing
+            // period, which REPLACE would reset.
+            migrating -> ExistingPeriodicWorkPolicy.UPDATE
+
+            else -> ExistingPeriodicWorkPolicy.KEEP
+        }
 
         MmkvManager.decodeSubscriptions()
             .filter { it.subscription.autoUpdate && it.subscription.url.isNotEmpty() }
@@ -51,9 +53,13 @@ object SubscriptionUpdater {
                     existingWorkPolicy = existingWorkPolicy
                 )
             }
+
+        if (migrating) {
+            markWorkerMigrated()
+        }
         LogUtil.i(
             AppConfig.TAG,
-            "SubscriptionUpdater: sync complete forceReschedule=$forceReschedule"
+            "SubscriptionUpdater: sync complete forceReschedule=$forceReschedule migrating=$migrating"
         )
     }
 
@@ -88,6 +94,30 @@ object SubscriptionUpdater {
         MmkvManager.encodeSubscription(subId, subItem)
         syncOne(context, subId)
     }
+
+    // -------------------------------------------------------------------------
+    // Worker class migration
+    // -------------------------------------------------------------------------
+
+    /**
+     * Generation of the persisted worker class names.
+     *
+     * 1 — `SubscriptionUpdater$UpdateTask`, the nested CoroutineWorker.
+     * 2 — `SubscriptionUpdateWorker`, top-level and @HiltWorker.
+     *
+     * Bump this whenever a worker is renamed or moved, otherwise already-enqueued rows keep
+     * naming a class that no longer exists.
+     */
+    private const val WORKER_SCHEMA_VERSION = 2
+
+    private fun needsWorkerMigration(): Boolean =
+        MmkvManager.decodeSettingsString(AppConfig.CACHE_WORKER_SCHEMA_VERSION)
+            ?.toIntOrNull() != WORKER_SCHEMA_VERSION
+
+    private fun markWorkerMigrated() = MmkvManager.encodeSettings(
+        AppConfig.CACHE_WORKER_SCHEMA_VERSION,
+        WORKER_SCHEMA_VERSION.toString()
+    )
 
     // -------------------------------------------------------------------------
     // Internal scheduling logic
@@ -133,13 +163,16 @@ object SubscriptionUpdater {
             initialDelayMillis = 5000L
         }
 
-        val request = PeriodicWorkRequestBuilder<UpdateTask>(intervalMinutes, TimeUnit.MINUTES)
+        val request = PeriodicWorkRequestBuilder<SubscriptionUpdateWorker>(
+            intervalMinutes,
+            TimeUnit.MINUTES
+        )
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build()
             )
-            .setInputData(workDataOf(KEY_SUB_ID to subId))
+            .setInputData(workDataOf(SubscriptionUpdateWorker.KEY_SUB_ID to subId))
             .setInitialDelay(initialDelayMillis, TimeUnit.MILLISECONDS)
             .addTag(AppConfig.SUBSCRIPTION_UPDATE_TASK_NAME)
             .build()
@@ -155,35 +188,5 @@ object SubscriptionUpdater {
             "SubscriptionUpdater: scheduled [${subItem.remarks}] interval=${intervalMinutes}min " +
                     "initialDelay=${initialDelayMillis / 1000}s policy=$existingWorkPolicy"
         )
-    }
-
-    // -------------------------------------------------------------------------
-    // Worker
-    // -------------------------------------------------------------------------
-
-    private const val KEY_SUB_ID = "subId"
-
-    class UpdateTask(context: Context, params: WorkerParameters) :
-        CoroutineWorker(context, params) {
-
-        @SuppressLint("MissingPermission")
-        override suspend fun doWork(): Result {
-            val subId = inputData.getString(KEY_SUB_ID)
-            LogUtil.i(AppConfig.TAG, "SubscriptionUpdater update starting via Service: $subId")
-
-            if (subId.isNullOrEmpty()) {
-                LogUtil.w(AppConfig.TAG, "SubscriptionUpdater: missing subId in worker input")
-                return Result.success()
-            }
-
-            updateLastUpdatedAndReschedule(applicationContext, subId)
-
-            MessageHelper.sendMsg2SubscriptionService(
-                applicationContext,
-                SubscriptionUpdateMessage(AppConfig.MSG_SUB_UPDATE_START, true, listOf(subId))
-            )
-
-            return Result.success()
-        }
     }
 }

@@ -1,15 +1,14 @@
 package com.v2ray.ang.ui.apppicker
 
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
-import com.v2ray.ang.repository.AppListRepository
 import com.v2ray.ang.ui.base.BaseActivity
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class AppPickerActivity : BaseActivity() {
 
-    private val viewModel: AppPickerViewModel by baseViewModels { app, handle ->
-        AppPickerViewModel(AppListRepository(app), handle)
-    }
+    private val viewModel: AppPickerViewModel by viewModels()
 
     @Composable
     override fun ScreenContent() = AppPickerScreen(viewModel)

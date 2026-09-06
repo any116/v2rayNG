@@ -8,8 +8,15 @@ import com.v2ray.ang.repository.ShortcutRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
-class TaskerViewModel(
+/** Edit-state keys; kept apart from the Tasker protocol extras that seed the initial state. */
+private const val KEY_EDIT_START = "tasker_edit_start"
+private const val KEY_EDIT_GUID = "tasker_edit_guid"
+
+@HiltViewModel
+class TaskerViewModel @Inject constructor(
     private val handle: SavedStateHandle,
     private val repo: ShortcutRepository
 ) : BaseViewModel<TaskerUiState, TaskerAction>(initialState(handle)) {
@@ -73,10 +80,6 @@ class TaskerViewModel(
         platform(TaskerEvent.SaveSetting(state.startService, profile.guid, blurb))
     }
 }
-
-/** Edit-state keys; kept apart from the Tasker protocol extras that seed the initial state. */
-private const val KEY_EDIT_START = "tasker_edit_start"
-private const val KEY_EDIT_GUID = "tasker_edit_guid"
 
 /**
  * Reads the settings Tasker passes back for editing. Intent extras are exposed through the

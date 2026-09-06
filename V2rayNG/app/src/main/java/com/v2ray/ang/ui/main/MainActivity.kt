@@ -6,21 +6,20 @@ import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.enums.PermissionType
-import com.v2ray.ang.repository.MainRepository
 import com.v2ray.ang.ui.base.BaseHelperActivity
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class MainActivity : BaseHelperActivity() {
 
-    private val viewModel: MainViewModel by baseViewModels { app, _ ->
-        MainViewModel(MainRepository(app))
-    }
+    private val viewModel: MainViewModel by viewModels()
 
     private var pendingLocalNetwork = false
 

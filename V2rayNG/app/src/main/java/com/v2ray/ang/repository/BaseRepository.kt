@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 
+/**
+ * Thread confinement for the data layer.
+ */
 abstract class BaseRepository(
     protected val io: CoroutineDispatcher = Dispatchers.IO
 ) {

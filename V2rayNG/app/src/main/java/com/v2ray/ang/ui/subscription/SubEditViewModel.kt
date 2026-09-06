@@ -12,9 +12,12 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import javax.inject.Inject
 
-class SubEditViewModel(
+@HiltViewModel
+class SubEditViewModel @Inject constructor(
     handle: SavedStateHandle,
     private val repo: SubRepository,
 ) : BaseEditViewModel<SubEditUiState, SubEditAction>(

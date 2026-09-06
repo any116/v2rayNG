@@ -1,16 +1,15 @@
 package com.v2ray.ang.ui.scanner
 
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import com.v2ray.ang.enums.PermissionType
-import com.v2ray.ang.repository.ScannerRepository
 import com.v2ray.ang.ui.base.BaseHelperActivity
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class ScannerActivity : BaseHelperActivity() {
 
-    private val viewModel: ScannerViewModel by baseViewModels { app, _ ->
-        ScannerViewModel(ScannerRepository(app))
-    }
+    private val viewModel: ScannerViewModel by viewModels()
 
     private val platformEventHandler: (ScannerEvent) -> Boolean = { event ->
         when (event) {

@@ -15,6 +15,7 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
 import com.v2ray.ang.util.LogUtil
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -28,13 +29,15 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.PatternSyntaxException
+import javax.inject.Inject
 
 private const val PREFETCH_RADIUS = 1
 private const val PREFETCH_DELAY_MS = 32
 private const val SEARCH_DEBOUNCE_MS = 300
 private const val DELAY_REFRESH_INTERVAL_MS = 400
 
-class MainViewModel(
+@HiltViewModel
+class MainViewModel @Inject constructor(
     private val repo: MainRepository,
 ) : BaseViewModel<MainUiState, MainAction>(
     MainUiState(

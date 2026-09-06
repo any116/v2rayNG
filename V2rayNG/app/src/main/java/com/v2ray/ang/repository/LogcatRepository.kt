@@ -2,17 +2,24 @@ package com.v2ray.ang.repository
 
 import android.app.Application
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import javax.inject.Inject
 
-open class LogcatRepository(private val app: Application) : BaseRepository() {
+/** Reads logd through ProcessBuilder and writes exports into the app cache dir. */
+open class LogcatRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     /** Reads the most recent entries, newest first. Returns an empty list when logd refuses. */
     open suspend fun read(): List<String> = runIO(emptyList()) {

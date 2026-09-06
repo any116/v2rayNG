@@ -5,9 +5,12 @@ import com.v2ray.ang.R
 import com.v2ray.ang.repository.ScannerRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import javax.inject.Inject
 
-class ScannerViewModel(
+@HiltViewModel
+class ScannerViewModel @Inject constructor(
     private val repo: ScannerRepository
 ) : BaseViewModel<ScannerUiState, ScannerAction>(ScannerUiState()) {
 

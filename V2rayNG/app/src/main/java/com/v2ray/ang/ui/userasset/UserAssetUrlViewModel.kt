@@ -9,12 +9,15 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.compose.ToastType
 import com.v2ray.ang.util.Utils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import javax.inject.Inject
 
-class UserAssetUrlViewModel(
+@HiltViewModel
+class UserAssetUrlViewModel @Inject constructor(
     private val handle: SavedStateHandle,
     private val repo: UserAssetRepository
 ) : BaseEditViewModel<UserAssetUrlUiState, UserAssetUrlAction>(

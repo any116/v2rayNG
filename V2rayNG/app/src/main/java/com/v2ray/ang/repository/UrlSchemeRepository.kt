@@ -1,7 +1,10 @@
 package com.v2ray.ang.repository
 
 import android.net.Uri
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AngConfigManager
+import kotlinx.coroutines.CoroutineDispatcher
+import javax.inject.Inject
 
 /** Matches a surviving percent-escape; compiled once instead of per import. */
 private val PERCENT_ESCAPE = Regex("%[0-9A-Fa-f]{2}")
@@ -55,15 +58,10 @@ internal fun mergeFragment(decoded: String, fragment: String): String {
 
 /**
  * Data layer of the external URL-scheme entry point.
- *
- * Owns two concerns the ViewModel must not know about: turning whatever an external app handed us
- * into one canonical share URL, and running the import. Both happen inside [withIO], so the
- * ViewModel never picks a dispatcher and never touches [AngConfigManager] directly.
- *
- * Holds no Application: nothing here needs a Context, and an unused one only invites the data
- * layer to start reaching for Android services.
  */
-open class UrlSchemeRepository : BaseRepository() {
+open class UrlSchemeRepository @Inject constructor(
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     /**
      * Normalises [payload] and imports it into the ungrouped ("Default") group.

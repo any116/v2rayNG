@@ -7,6 +7,7 @@ import android.os.IBinder
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.SubscriptionUpdateMessage
 import com.v2ray.ang.dto.entities.SubscriptionCache
@@ -17,24 +18,38 @@ import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class SubscriptionUpdateService : Service() {
 
     override fun attachBaseContext(newBase: Context?) {
+        // No injected field may be read here: injection happens inside super.onCreate().
         super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
     }
 
+    /** The one real injected dependency; replaces the previously hard-coded Dispatchers.IO. */
+    @Inject
+    @IoDispatcher
+    lateinit var io: CoroutineDispatcher
+
     private val serviceJob = Job()
-    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
+
+    /**
+     * `by lazy` because [io] is only available after `super.onCreate()`. A property initialiser
+     * would run during construction and crash on the uninitialised lateinit.
+     */
+    private val serviceScope: CoroutineScope by lazy { CoroutineScope(io + serviceJob) }
 
     private val runningTasks = AtomicInteger(0)
 

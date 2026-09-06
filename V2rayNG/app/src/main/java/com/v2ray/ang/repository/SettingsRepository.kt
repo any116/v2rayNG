@@ -2,10 +2,13 @@ package com.v2ray.ang.repository
 
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.AppConfig.VPN
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.enums.AppThemeMode
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.root.RootManager
+import kotlinx.coroutines.CoroutineDispatcher
+import javax.inject.Inject
 
 enum class BoolPref(val key: String, val default: Boolean) {
     SPEED_ENABLED(AppConfig.PREF_SPEED_ENABLED, false),
@@ -102,7 +105,10 @@ data class SettingsPrefs(
     val dynamicColorSupported: Boolean = false,
 )
 
-open class SettingsRepository : BaseRepository() {
+open class SettingsRepository @Inject constructor(
+    private val theme: ThemeStore,
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     open suspend fun load(): SettingsPrefs = withIO {
         val bools = BoolPref.entries.associateWithTo(LinkedHashMap()) {
@@ -111,18 +117,18 @@ open class SettingsRepository : BaseRepository() {
         val strings = StringPref.entries.associateWith {
             MmkvManager.decodeSettingsString(it.key, it.default) ?: it.default
         }
-        bools[BoolPref.DYNAMIC_COLOR] = ThemeRepository.isDynamicColorEnabled()
+        bools[BoolPref.DYNAMIC_COLOR] = theme.isDynamicColorEnabled()
         if (strings[StringPref.MODE] == VPN && bools[BoolPref.USE_HEV_TUNNEL] == true
             && bools[BoolPref.ENABLE_LOCAL_PROXY] != true) {
             MmkvManager.encodeSettings(AppConfig.PREF_ENABLE_LOCAL_PROXY, true)
             bools[BoolPref.ENABLE_LOCAL_PROXY] = true
         }
-        SettingsPrefs(bools, strings, ThemeRepository.isDynamicColorSupported)
+        SettingsPrefs(bools, strings, theme.isDynamicColorSupported)
     }
 
     open suspend fun setBool(pref: BoolPref, value: Boolean) = withIO {
         if (pref == BoolPref.DYNAMIC_COLOR) {
-            ThemeRepository.setDynamicColorEnabled(value)
+            theme.setDynamicColorEnabled(value)
         } else {
             MmkvManager.encodeSettings(pref.key, value)
         }
@@ -131,7 +137,7 @@ open class SettingsRepository : BaseRepository() {
 
     open suspend fun setString(pref: StringPref, value: String) = withIO {
         if (pref == StringPref.UI_MODE_NIGHT) {
-            ThemeRepository.setThemeMode(AppThemeMode.from(value))
+            theme.setThemeMode(AppThemeMode.from(value))
         } else {
             MmkvManager.encodeSettings(pref.key, value)
         }

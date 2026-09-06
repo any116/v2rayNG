@@ -1,18 +1,17 @@
 package com.v2ray.ang.ui.logcat
 
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.LogcatRepository
 import com.v2ray.ang.ui.base.BaseActivity
-import com.v2ray.ang.ui.base.baseViewModels
 import com.v2ray.ang.util.ShareUtil
+import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 
+@AndroidEntryPoint
 class LogcatActivity : BaseActivity() {
 
-    private val viewModel: LogcatViewModel by baseViewModels { app, _ ->
-        LogcatViewModel(LogcatRepository(app))
-    }
+    private val viewModel: LogcatViewModel by viewModels()
 
     @Composable
     override fun ScreenContent() = LogcatScreen(

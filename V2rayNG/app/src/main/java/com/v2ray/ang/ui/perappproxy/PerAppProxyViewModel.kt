@@ -4,20 +4,23 @@ import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.AppInfo
+import com.v2ray.ang.extension.delay
 import com.v2ray.ang.repository.PerAppProxyRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
 private const val SEARCH_DEBOUNCE_MS = 300L
 private const val KEY_SAVED = "per_app_proxy_saved_state"
 private const val KEY_QUERY = "query"
 
-class PerAppProxyViewModel(
+@HiltViewModel
+class PerAppProxyViewModel @Inject constructor(
     private val repo: PerAppProxyRepository,
     private val handle: SavedStateHandle
 ) : BaseViewModel<PerAppProxyUiState, PerAppProxyAction>(initialState(repo, handle)) {

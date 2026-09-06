@@ -2,6 +2,7 @@ package com.v2ray.ang.repository
 
 import android.app.Application
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.AppInfo
 import com.v2ray.ang.dto.UrlContentRequest
 import com.v2ray.ang.handler.MmkvManager
@@ -10,6 +11,8 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.CoroutineDispatcher
+import javax.inject.Inject
 
 data class PerAppProxyPreferences(
     val selected: Set<String>,
@@ -17,10 +20,11 @@ data class PerAppProxyPreferences(
     val bypassMode: Boolean
 )
 
-open class PerAppProxyRepository(
+open class PerAppProxyRepository @Inject constructor(
     private val app: Application,
-    private val appList: AppListRepository = AppListRepository(app)
-) : BaseRepository() {
+    private val appList: AppListRepository,
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     // ---------- Installed applications ----------
 

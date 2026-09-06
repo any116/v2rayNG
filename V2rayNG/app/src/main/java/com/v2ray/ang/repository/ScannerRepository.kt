@@ -5,14 +5,17 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.QRCodeDecoder
+import kotlinx.coroutines.CoroutineDispatcher
 import java.io.InputStream
+import javax.inject.Inject
 
-/**
- * Data layer of the scanner feature. Bitmap decoding is expensive, so it runs on IO.
- */
-open class ScannerRepository(private val app: Application) : BaseRepository() {
+open class ScannerRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     /** @return the QR code content, or null when the image cannot be read or decoded. */
     open suspend fun decodeQrCode(uri: Uri): String? = withIO {

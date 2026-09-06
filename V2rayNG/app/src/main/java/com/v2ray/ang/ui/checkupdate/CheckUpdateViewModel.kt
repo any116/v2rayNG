@@ -5,11 +5,14 @@ import com.v2ray.ang.repository.CheckUpdateRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class CheckUpdateViewModel(
+@HiltViewModel
+class CheckUpdateViewModel @Inject constructor(
     private val repo: CheckUpdateRepository
 ) : BaseViewModel<CheckUpdateUiState, CheckUpdateAction>(CheckUpdateUiState()) {
 
