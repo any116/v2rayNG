@@ -9,14 +9,17 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
 import com.v2ray.ang.util.Utils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
 
 /**
  * Geo-file downloads run with a determinate top-bar progress and a final result toast.
  */
-class UserAssetViewModel(
+@HiltViewModel
+class UserAssetViewModel @Inject constructor(
     private val repo: UserAssetRepository
 ) : BaseViewModel<UserAssetUiState, UserAssetAction>(UserAssetUiState()) {
 

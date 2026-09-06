@@ -6,10 +6,13 @@ import com.v2ray.ang.repository.RoutingRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.update
+import javax.inject.Inject
 
-class RoutingSettingViewModel(
+@HiltViewModel
+class RoutingSettingViewModel @Inject constructor(
     private val repo: RoutingRepository,
 ) : BaseViewModel<RoutingUiState, RoutingAction>(RoutingUiState()) {
 

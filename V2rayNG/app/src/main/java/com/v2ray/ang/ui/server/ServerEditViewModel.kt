@@ -15,14 +15,17 @@ import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.ui.compose.ToastType
 import com.v2ray.ang.util.JsonUtil
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import javax.inject.Inject
 
-class ServerEditViewModel(
+@HiltViewModel
+class ServerEditViewModel @Inject constructor(
     handle: SavedStateHandle,
     private val repository: ServerRepository,
 ) : BaseEditViewModel<ServerUiState, ServerAction>(initialState(handle)) {

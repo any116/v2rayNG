@@ -49,10 +49,44 @@
   `res/layout/widget_switch.xml`，不要试图 Compose 化。
 - `PendingIntent` 必须带 `FLAG_IMMUTABLE`。
 
-## 5. Worker
+## 5. Worker 与 WorkManager
 
-- WorkManager 配置在 `AngApplication.onCreate`，指定 `:bg` 进程，
-  依赖 `work-multiprocess`。
-- Worker 只能依赖 `handler/` 与 `util/`。
-- 订阅自动更新走 `SubscriptionUpdateService` / `SubscriptionUpdater`，
-  不要另起一套定时机制。
+### 初始化只有一条路径
+
+`AngApplication.onCreate()` 手动 `WorkManager.initialize(this, config)`，manifest 里
+`WorkManagerInitializer` 保持 `tools:node="remove"`。**不实现 `Configuration.Provider`** ——
+两种初始化并存会产生难以定位的进程级差异。
+
+`Configuration` 必须在 `super.onCreate()` 之后构建，因为它要用到注入的
+`HiltWorkerFactory`。`setWorkerFactory` 不会破坏非 Hilt 的 Worker：WorkManager 走
+`createWorkerWithDefaultFallback`，`HiltWorkerFactory` 返回 null 时自动回退到反射。
+
+### Worker 用 @HiltWorker
+
+```kotlin
+@HiltWorker
+class XxxWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted params: WorkerParameters,
+    @IoDispatcher private val io: CoroutineDispatcher,
+) : CoroutineWorker(appContext, params)
+```
+
+- `Context` 与 `WorkerParameters` 必须是 `@Assisted`。
+- `@HiltWorker` **只支持顶层类**，不能嵌套在 object 里。
+- Worker 跑在 `:bg`，只能注入进程无关的依赖。**Worker 不得依赖 `repository/`**，
+  数据一律直接调 `handler/`（见 `repository-rules.md` 第 5 节的表）。
+
+### 改 Worker 类名 = 数据迁移
+
+WorkManager 把 **Worker 的全限定类名持久化在库里**。重命名或移动 Worker 之后，
+旧版本入队的行仍然指向旧类名，在 `KEEP` 策略下会永久失败。
+
+做法：`SubscriptionUpdater.WORKER_SCHEMA_VERSION` 递增，`sync()` 检测到版本不一致时
+本次改用 `ExistingPeriodicWorkPolicy.UPDATE`（改写 work spec 含类名，**保留**原周期），
+完成后写回版本号。不要用 `REPLACE` —— 它会重置计时。
+
+### 验收
+
+主进程未打开时任务可执行；`:bg` 被杀后恢复；唯一任务名去重；重试与取消；
+**升级路径**：旧类名的行被改写且周期未被重置。

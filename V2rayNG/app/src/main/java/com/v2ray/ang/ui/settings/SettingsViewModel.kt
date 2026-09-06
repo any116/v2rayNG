@@ -8,11 +8,14 @@ import com.v2ray.ang.repository.StringPref
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class SettingsViewModel(
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
     private val repo: SettingsRepository,
 ) : BaseViewModel<SettingsUiState, SettingsAction>(SettingsUiState()) {
 

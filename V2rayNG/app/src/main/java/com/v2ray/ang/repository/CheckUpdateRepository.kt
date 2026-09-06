@@ -3,11 +3,16 @@ package com.v2ray.ang.repository
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.CheckUpdateResult
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.UpdateCheckerManager
+import kotlinx.coroutines.CoroutineDispatcher
+import javax.inject.Inject
 
-open class CheckUpdateRepository : BaseRepository() {
+open class CheckUpdateRepository @Inject constructor(
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     open fun isCheckPreRelease(): Boolean =
         MmkvManager.decodeSettingsBool(AppConfig.PREF_CHECK_UPDATE_PRE_RELEASE, false)

@@ -7,12 +7,15 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
 import com.v2ray.ang.ui.compose.ToastType
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
+import javax.inject.Inject
 
-class BackupViewModel(
+@HiltViewModel
+class BackupViewModel @Inject constructor(
     private val repo: BackupRepository
 ) : BaseViewModel<BackupUiState, BackupAction>(BackupUiState()) {
 

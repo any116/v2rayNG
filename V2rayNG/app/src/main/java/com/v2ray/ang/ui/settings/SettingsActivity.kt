@@ -1,16 +1,15 @@
 package com.v2ray.ang.ui.settings
 
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import com.v2ray.ang.handler.AppLocaleManager
-import com.v2ray.ang.repository.SettingsRepository
 import com.v2ray.ang.ui.base.BaseActivity
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class SettingsActivity : BaseActivity() {
 
-    private val viewModel: SettingsViewModel by baseViewModels { _, _ ->
-        SettingsViewModel(SettingsRepository())
-    }
+    private val viewModel: SettingsViewModel by viewModels()
 
     private val platformEvents: (SettingsEvent) -> Boolean = ::handlePlatformEvent
 

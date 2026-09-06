@@ -6,9 +6,12 @@ import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
 import com.v2ray.ang.util.LogUtil
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import javax.inject.Inject
 
-class AboutViewModel(
+@HiltViewModel
+class AboutViewModel @Inject constructor(
     private val repo: AboutRepository
 ) : BaseViewModel<AboutUiState, AboutAction>(AboutUiState()) {
 

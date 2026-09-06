@@ -11,10 +11,13 @@ import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
 import com.v2ray.ang.util.LogUtil
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.inject.Inject
 
-class UrlSchemeViewModel(
+@HiltViewModel
+class UrlSchemeViewModel @Inject constructor(
     private val handle: SavedStateHandle,
     private val repo: UrlSchemeRepository
 ) : BaseViewModel<UrlSchemeUiState, UrlSchemeAction>(UrlSchemeUiState) {

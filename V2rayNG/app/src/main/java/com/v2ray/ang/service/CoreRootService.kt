@@ -7,28 +7,47 @@ import android.os.IBinder
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.root.RootProxyManager
 import com.v2ray.ang.util.LogUtil
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.lang.ref.SoftReference
+import javax.inject.Inject
 
 /**
  * Foreground service for the root (system-wide) run modes. Unlike [CoreVpnService] it
  * does not use Android VpnService — traffic is routed by iptables instead
  * (see [RootProxyManager]).
- *
- * The in-process core is started first (so its listener is up and the foreground
- * notification is posted promptly), then the root routing rules are installed off the
- * main thread. On teardown the rules are removed before the core stops.
  */
+@AndroidEntryPoint
 class CoreRootService : Service(), ServiceControl {
+
+    /**
+     * Injected rather than hard-coded so the root shell work is driven by the same binding the
+     * data layer uses. Field injection completes inside `super.onCreate()`.
+     */
+    @Inject
+    @IoDispatcher
+    lateinit var io: CoroutineDispatcher
+
+    /**
+     * Service-owned scope for setup work.
+     *
+     * `by lazy` on purpose: a property initialiser is evaluated during construction, before Hilt
+     * has injected [io], which would throw UninitializedPropertyAccessException. First touch is in
+     * [onStartCommand], which always runs after `onCreate()`.
+     */
+    private val serviceScope: CoroutineScope by lazy { CoroutineScope(SupervisorJob() + io) }
 
     private var setupJob: Job? = null
 
@@ -55,7 +74,10 @@ class CoreRootService : Service(), ServiceControl {
             return START_NOT_STICKY
         }
 
-        setupJob = CoroutineScope(Dispatchers.IO).launch {
+        // Child of the service-owned scope, so onDestroy cancels it. A second equivalent command
+        // must not install a second rule set: cancel the in-flight attempt before replacing it.
+        setupJob?.cancel()
+        setupJob = serviceScope.launch {
             if (!RootProxyManager.start(this@CoreRootService)) {
                 LogUtil.e(AppConfig.TAG, "StartCore-Root: failed to start root mode, stopping")
                 stopService()
@@ -73,6 +95,8 @@ class CoreRootService : Service(), ServiceControl {
         // the setup would then re-install the rules + tun pointing at a now-dead core,
         // blackholing all traffic until the next start/stop cycle clears it.
         runBlocking { setupJob?.cancelAndJoin() }
+        setupJob = null
+        serviceScope.cancel()
         // Remove routing rules BEFORE stopping the core so traffic is never redirected
         // to a dead listener. Synchronous on purpose — leaving rules behind breaks the net.
         RootProxyManager.stop(this)
@@ -94,6 +118,7 @@ class CoreRootService : Service(), ServiceControl {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun attachBaseContext(newBase: Context?) {
+        // Must not touch any injected field here — injection has not happened yet.
         val context = newBase?.let(AppLocaleManager::localizedContext)
         super.attachBaseContext(context)
     }

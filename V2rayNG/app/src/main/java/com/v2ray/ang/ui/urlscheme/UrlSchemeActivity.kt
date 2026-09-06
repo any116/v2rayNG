@@ -2,16 +2,15 @@ package com.v2ray.ang.ui.urlscheme
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
-import com.v2ray.ang.repository.UrlSchemeRepository
 import com.v2ray.ang.ui.base.BaseActivity
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class UrlSchemeActivity : BaseActivity() {
 
-    private val viewModel: UrlSchemeViewModel by baseViewModels { _, handle ->
-        UrlSchemeViewModel(handle, UrlSchemeRepository())
-    }
+    private val viewModel: UrlSchemeViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

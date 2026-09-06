@@ -1,15 +1,14 @@
 package com.v2ray.ang.ui.subscription
 
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
-import com.v2ray.ang.repository.SubRepository
 import com.v2ray.ang.ui.base.BaseActivity
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class SubEditActivity : BaseActivity() {
 
-    private val viewModel: SubEditViewModel by baseViewModels { app, handle ->
-        SubEditViewModel(handle, SubRepository(app))
-    }
+    private val viewModel: SubEditViewModel by viewModels()
 
     @Composable
     override fun ScreenContent() = SubEditScreen(viewModel)

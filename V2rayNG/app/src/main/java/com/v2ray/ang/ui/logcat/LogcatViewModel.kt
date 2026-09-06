@@ -5,11 +5,14 @@ import com.v2ray.ang.extension.delay
 import com.v2ray.ang.repository.LogcatRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class LogcatViewModel(
+@HiltViewModel
+class LogcatViewModel @Inject constructor(
     private val repo: LogcatRepository
 ) : BaseViewModel<LogcatUiState, LogcatAction>(LogcatUiState()) {
 
@@ -130,7 +133,6 @@ class LogcatViewModel(
         platform(LogcatEvent.ShareFile(path))
     }
 
-    /** Releases the snapshot eagerly instead of waiting for the whole ViewModel to be collected. */
     override fun onCleared() {
         bufferJob?.cancel()
         filterJob?.cancel()

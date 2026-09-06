@@ -1,20 +1,19 @@
 package com.v2ray.ang.ui.shortcut
 
 import android.content.Intent
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.core.os.bundleOf
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.repository.ShortcutRepository
 import com.v2ray.ang.ui.base.BaseActivity
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.asString
-import com.v2ray.ang.ui.base.baseViewModels
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class TaskerActivity : BaseActivity() {
 
-    private val viewModel: TaskerViewModel by baseViewModels { _, handle ->
-        TaskerViewModel(handle, ShortcutRepository())
-    }
+    private val viewModel: TaskerViewModel by viewModels()
 
     @Composable
     override fun ScreenContent() = TaskerScreen(viewModel, ::handleEvent)

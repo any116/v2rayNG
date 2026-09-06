@@ -6,30 +6,25 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.AppInfo
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.text.Collator
 import java.util.Locale
+import javax.inject.Inject
 
 /**
  * Data layer for screens that list installed applications (app picker, per-app proxy).
- *
- * Matches the historical behavior of v2rayNG: returns all installed packages, without
- * filtering by `INTERNET` permission or any other capability. The order is: unidentified
- * pseudo-entry first, then checked-first (against [selectedSnapshot]), then user apps
- * before system apps, each group sorted by localized label.
  */
-open class AppListRepository(private val app: Application) : BaseRepository() {
+open class AppListRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     // ---------- Loading ----------
 
-    /**
-     * Loads all installed applications, already ordered for display.
-     *
-     * @param selectedSnapshot packages considered checked when computing the order
-     * @param includeUnidentified prepend the entry standing for traffic with no owning package
-     */
     open suspend fun loadApps(
         selectedSnapshot: Set<String> = emptySet(),
         includeUnidentified: Boolean = true
@@ -45,19 +40,10 @@ open class AppListRepository(private val app: Application) : BaseRepository() {
         }
     }
 
-    /**
-     * Queries PackageManager for every installed package.
-     *
-     * No permission flags are requested because no permission filtering is performed.
-     * The loop checks for cancellation because [ApplicationInfo.loadLabel] hits the resource
-     * loader once per package, which on a device with several hundred apps takes long enough
-     * that a user leaving the screen must not have to wait for it.
-     */
     private suspend fun queryAllApps(): List<AppInfo> {
         val packageManager = app.packageManager
         val packages = installedPackages(packageManager)
         val apps = ArrayList<AppInfo>(packages.size)
-
         for (pkg in packages) {
             currentCoroutineContext().ensureActive()
             val applicationInfo = pkg.applicationInfo ?: continue
@@ -82,12 +68,6 @@ open class AppListRepository(private val app: Application) : BaseRepository() {
             packageManager.getInstalledPackages(0)
         }
 
-    /**
-     * The pseudo entry for traffic that cannot be attributed to a package.
-     *
-     * Its label is intentionally empty: the UI resolves `R.string.app_picker_unknown_app`
-     * itself, so the text follows a per-app locale change without reloading the list.
-     */
     private fun unidentifiedApp() = AppInfo(
         appName = "",
         packageName = AppConfig.UNIDENTIFIED_PACKAGE,
@@ -108,8 +88,6 @@ open class AppListRepository(private val app: Application) : BaseRepository() {
     }
 
     // ---------- Filtering ----------
-
-    /** Case-insensitive match on label or package name; a blank query keeps the list untouched. */
     open fun filter(apps: List<AppInfo>, query: String): List<AppInfo> {
         if (query.isBlank()) return apps
         return apps.filter {
@@ -119,29 +97,17 @@ open class AppListRepository(private val app: Application) : BaseRepository() {
     }
 
     // ---------- Selection arithmetic (pure, no I/O) ----------
-
-    /** Adds every package of [packageNames] to [current]; already-checked entries stay checked. */
     open fun selectAll(current: Set<String>, packageNames: Collection<String>): Set<String> =
         buildSet(current.size + packageNames.size) {
             addAll(current)
             addAll(packageNames)
         }
 
-    /** Flips each package of [packageNames] inside [current]; entries outside it are preserved. */
     open fun invert(current: Set<String>, packageNames: Collection<String>): Set<String> =
         current.toMutableSet().apply {
             packageNames.forEach { if (!add(it)) remove(it) }
         }
 
-    /**
-     * Derives the checked set from an imported proxy-package list.
-     *
-     * The list text is searched for each installed package name; this is deliberately a substring
-     * match, not exact line matching, to stay compatible with the lists users already have.
-     *
-     * @param bypassApps invert the meaning, i.e. check everything that must NOT be proxied
-     * @param forceGoogleApps treat `com.google.*` as proxied (except the system WebView)
-     */
     open fun fromProxyList(
         packageNames: Collection<String>,
         proxyAppList: String,

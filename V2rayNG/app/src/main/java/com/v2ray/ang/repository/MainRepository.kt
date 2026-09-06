@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.dto.ServerRowItem
@@ -26,6 +27,7 @@ import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -38,6 +40,7 @@ import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import javax.inject.Inject
 
 private const val LOAD_CHUNK_SIZE = 60
 
@@ -53,7 +56,10 @@ sealed interface MainServiceEvent {
     data class MeasureConfigFinish(val finishedCount: String?) : MainServiceEvent
 }
 
-open class MainRepository(private val app: Application) : BaseRepository(), Closeable {
+open class MainRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io), Closeable {
 
     private val closed = AtomicBoolean(false)
 

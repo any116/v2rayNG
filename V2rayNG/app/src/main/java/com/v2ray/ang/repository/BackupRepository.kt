@@ -5,6 +5,7 @@ import android.net.Uri
 import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.entities.WebDavConfig
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsChangeManager
@@ -12,12 +13,17 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.WebDavManager
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.ZipUtil
+import kotlinx.coroutines.CoroutineDispatcher
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
+import javax.inject.Inject
 
-open class BackupRepository(private val app: Application) : BaseRepository() {
+open class BackupRepository @Inject constructor(
+    private val app: Application,
+    @IoDispatcher io: CoroutineDispatcher
+) : BaseRepository(io) {
 
     private val workDir: File get() = File(app.cacheDir, WORK_DIR_NAME)
     private val appName: String get() = app.getString(R.string.app_name)

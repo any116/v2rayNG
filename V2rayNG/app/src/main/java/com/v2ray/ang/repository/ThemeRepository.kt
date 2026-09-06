@@ -8,36 +8,36 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-object ThemeRepository {
+object ThemeRepository : ThemeStore {
 
     private const val DEFAULT_DYNAMIC_COLOR = true
 
-    val isDynamicColorSupported: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    override val isDynamicColorSupported: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
     private val _themeMode = MutableStateFlow(readThemeMode())
-    val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
+    override val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
 
     private val _dynamicColorEnabled = MutableStateFlow(readDynamicColorEnabled())
-    val dynamicColorEnabled: StateFlow<Boolean> = _dynamicColorEnabled.asStateFlow()
+    override val dynamicColorEnabled: StateFlow<Boolean> = _dynamicColorEnabled.asStateFlow()
 
-    fun getThemeMode(): AppThemeMode = _themeMode.value
+    override fun getThemeMode(): AppThemeMode = _themeMode.value
 
-    fun setThemeMode(mode: AppThemeMode) {
+    override fun setThemeMode(mode: AppThemeMode) {
         if (_themeMode.value == mode) return
         MmkvManager.encodeSettings(AppConfig.PREF_UI_MODE_NIGHT, mode.value)
         _themeMode.value = mode
     }
 
-    fun isDynamicColorEnabled(): Boolean = _dynamicColorEnabled.value
+    override fun isDynamicColorEnabled(): Boolean = _dynamicColorEnabled.value
 
-    fun setDynamicColorEnabled(enabled: Boolean) {
+    override fun setDynamicColorEnabled(enabled: Boolean) {
         val resolved = enabled && isDynamicColorSupported
         if (_dynamicColorEnabled.value == resolved) return
         MmkvManager.encodeSettings(AppConfig.PREF_DYNAMIC_COLOR, resolved)
         _dynamicColorEnabled.value = resolved
     }
 
-    fun refresh() {
+    override fun refresh() {
         _themeMode.value = readThemeMode()
         _dynamicColorEnabled.value = readDynamicColorEnabled()
     }

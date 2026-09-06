@@ -8,14 +8,17 @@ import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class SubSettingViewModel(
+@HiltViewModel
+class SubSettingViewModel @Inject constructor(
     private val repo: SubRepository
 ) : BaseViewModel<SubUiState, SubAction>(
     SubUiState(confirmRemove = repo.confirmRemove())

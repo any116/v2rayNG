@@ -1,21 +1,20 @@
 package com.v2ray.ang.ui.backup
 
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.BackupRepository
 import com.v2ray.ang.ui.base.BaseHelperActivity
-import com.v2ray.ang.ui.base.baseViewModels
 import com.v2ray.ang.util.ShareUtil
+import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
 
 /**
  * Platform host of the backup/restore screen.
  */
+@AndroidEntryPoint
 class BackupActivity : BaseHelperActivity() {
 
-    private val viewModel: BackupViewModel by baseViewModels { app, _ ->
-        BackupViewModel(BackupRepository(app))
-    }
+    private val viewModel: BackupViewModel by viewModels()
 
     @Composable
     override fun ScreenContent() = BackupScreen(

@@ -22,6 +22,11 @@ import java.util.concurrent.TimeUnit
 object HttpUtil {
 
     /**
+     * The single connection pool and task dispatcher shared by every request in this process.
+     */
+    val sharedClient: OkHttpClient by lazy { OkHttpClient() }
+
+    /**
      * Converts the domain part of a URL string to its IDN (Punycode, ASCII Compatible Encoding) format.
      *
      * For example, a URL like "https://例子.中国/path" will be converted to "https://xn--fsqu00a.xn--fiqs8s/path".
@@ -226,7 +231,7 @@ object HttpUtil {
         proxyPassword: String?,
         followRedirects: Boolean
     ): OkHttpClient {
-        val builder = OkHttpClient.Builder()
+        val builder = sharedClient.newBuilder()
             .connectTimeout(timeout.toLong(), TimeUnit.MILLISECONDS)
             .readTimeout(timeout.toLong(), TimeUnit.MILLISECONDS)
             .followRedirects(followRedirects)
