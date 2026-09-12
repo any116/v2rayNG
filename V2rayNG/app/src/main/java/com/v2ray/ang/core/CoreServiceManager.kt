@@ -440,11 +440,14 @@ object CoreServiceManager {
             val serviceControl = serviceControl?.get() ?: return
             when (intent?.getIntExtra("key", 0)) {
                 AppConfig.MSG_REGISTER_CLIENT -> {
-                    if (isRunning()) {
-                        MessageHelper.sendMsg2UI(serviceControl.getService(), AppConfig.MSG_STATE_RUNNING, "")
-                    } else {
-                        MessageHelper.sendMsg2UI(serviceControl.getService(), AppConfig.MSG_STATE_NOT_RUNNING, "")
-                    }
+                    val running = isRunning()
+                    // Ordered senders (widget) need a definitive answer: no daemon, no RESULT_OK.
+                    if (isOrderedBroadcast && running) resultCode = Activity.RESULT_OK
+                    MessageHelper.sendMsg2UI(
+                        serviceControl.getService(),
+                        if (running) AppConfig.MSG_STATE_RUNNING else AppConfig.MSG_STATE_NOT_RUNNING,
+                        ""
+                    )
                 }
 
                 AppConfig.MSG_UNREGISTER_CLIENT -> {

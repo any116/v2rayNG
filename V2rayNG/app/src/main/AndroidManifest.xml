@@ -238,7 +238,8 @@
         <receiver
             android:name=".receiver.WidgetProvider"
             android:exported="true"
-            android:process=":daemon">
+            android:label="@string/app_widget_name"
+            android:process=":bg">
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/app_widget_provider" />

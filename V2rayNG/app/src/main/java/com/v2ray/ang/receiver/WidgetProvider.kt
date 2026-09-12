@@ -1,96 +1,106 @@
 package com.v2ray.ang.receiver
 
-import android.app.PendingIntent
-import android.appwidget.AppWidgetManager
-import android.appwidget.AppWidgetProvider
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.widget.RemoteViews
+import android.net.VpnService
+import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.updateAll
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.R
-import com.v2ray.ang.core.CoreServiceManager
 import com.v2ray.ang.core.LauncherManager
+import com.v2ray.ang.enums.WidgetRunState
+import com.v2ray.ang.handler.SettingsManager
+import com.v2ray.ang.handler.WidgetStateManager
+import com.v2ray.ang.ui.AppRoute
+import com.v2ray.ang.util.LogUtil
+import com.v2ray.ang.ui.widget.SwitchWidget
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
-class WidgetProvider : AppWidgetProvider() {
-    /**
-     * This method is called every time the widget is updated.
-     * It updates the widget background based on the V2Ray service running state.
-     *
-     * @param context The Context in which the receiver is running.
-     * @param appWidgetManager The AppWidgetManager instance.
-     * @param appWidgetIds The appWidgetIds for which an update is needed.
-     */
-    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
-        super.onUpdate(context, appWidgetManager, appWidgetIds)
-        updateWidgetBackground(context, appWidgetManager, appWidgetIds, CoreServiceManager.isRunning())
-    }
+/**
+ * Keeps the historical component name and provider metadata so widgets already placed on the home
+ * screen survive the move to Glance.
+ *
+ * Declared in `:bg` because WorkManager runs there: Glance resolves a running session from process
+ * memory, so the receiver and the session worker must share a process.
+ */
+class WidgetProvider : GlanceAppWidgetReceiver() {
 
-    /**
-     * Updates the widget background based on whether the V2Ray service is running.
-     *
-     * @param context The Context in which the receiver is running.
-     * @param appWidgetManager The AppWidgetManager instance.
-     * @param appWidgetIds The appWidgetIds for which an update is needed.
-     * @param isRunning Boolean indicating if the V2Ray service is running.
-     */
-    private fun updateWidgetBackground(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray, isRunning: Boolean) {
-        val remoteViews = RemoteViews(context.packageName, R.layout.widget_switch)
-        val intent = Intent(context, WidgetProvider::class.java)
-        intent.action = AppConfig.BROADCAST_ACTION_WIDGET_CLICK
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            R.id.layout_switch,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        remoteViews.setOnClickPendingIntent(R.id.layout_switch, pendingIntent)
-        if (isRunning) {
-            remoteViews.setInt(R.id.image_switch, "setImageResource", R.drawable.ic_stop_24dp)
-            remoteViews.setInt(R.id.layout_background, "setBackgroundResource", R.drawable.ic_rounded_corner_active)
-        } else {
-            remoteViews.setInt(R.id.image_switch, "setImageResource", R.drawable.ic_play_24dp)
-            remoteViews.setInt(R.id.layout_background, "setBackgroundResource", R.drawable.ic_rounded_corner_inactive)
-        }
+    override val glanceAppWidget: GlanceAppWidget = SwitchWidget()
 
-        for (appWidgetId in appWidgetIds) {
-            appWidgetManager.updateAppWidget(appWidgetId, remoteViews)
-        }
-    }
-
-    /**
-     * This method is called when the BroadcastReceiver is receiving an Intent broadcast.
-     * It handles widget click actions and updates the widget background based on the V2Ray service state.
-     *
-     * @param context The Context in which the receiver is running.
-     * @param intent The Intent being received.
-     */
     override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (AppConfig.BROADCAST_ACTION_WIDGET_CLICK == intent.action) {
-            if (CoreServiceManager.isRunning()) {
-                LauncherManager.stopService(context)
-            } else {
-                LauncherManager.startServiceFromToggle(context)
-            }
-        } else if (AppConfig.BROADCAST_ACTION_ACTIVITY == intent.action) {
-            AppWidgetManager.getInstance(context)?.let { manager ->
-                when (intent.getIntExtra("key", 0)) {
-                    AppConfig.MSG_STATE_RUNNING, AppConfig.MSG_STATE_START_SUCCESS -> {
-                        updateWidgetBackground(
-                            context, manager, manager.getAppWidgetIds(ComponentName(context, WidgetProvider::class.java)),
-                            true
-                        )
-                    }
+        when (intent.action) {
+            AppConfig.BROADCAST_ACTION_WIDGET_CLICK -> handleAsync(context) { toggle(context) }
 
-                    AppConfig.MSG_STATE_NOT_RUNNING, AppConfig.MSG_STATE_START_FAILURE, AppConfig.MSG_STATE_STOP_SUCCESS -> {
-                        updateWidgetBackground(
-                            context, manager, manager.getAppWidgetIds(ComponentName(context, WidgetProvider::class.java)),
-                            false
-                        )
-                    }
-                }
+            AppConfig.BROADCAST_ACTION_ACTIVITY -> {
+                val state = WidgetStateManager.fromServiceMessage(intent.getIntExtra("key", 0))
+                    ?: return
+                handleAsync(context) { WidgetStateManager.publish(state) }
+            }
+
+            else -> super.onReceive(context, intent)
+        }
+    }
+
+    /**
+     * A click records a request and forwards it; it never claims the switch already flipped.
+     * The daemon is asked first so a stale snapshot cannot send a stop command to a dead core,
+     * and a pending command is dropped instead of enqueued twice.
+     */
+    private suspend fun toggle(context: Context) {
+        when (val state = WidgetStateManager.reconcile(context)) {
+            WidgetRunState.RUNNING -> {
+                WidgetStateManager.publish(WidgetRunState.STOPPING)
+                LauncherManager.stopService(context)
+            }
+
+            WidgetRunState.STARTING, WidgetRunState.STOPPING -> {
+                LogUtil.i(AppConfig.TAG, "Widget: ignoring click, $state already requested")
+            }
+
+            else -> start(context)
+        }
+    }
+
+    private fun start(context: Context) {
+        if (requiresVpnPermission(context)) {
+            // The system consent dialog needs a visible Activity; a receiver cannot show one.
+            WidgetStateManager.publish(WidgetRunState.PERMISSION_REQUIRED)
+            context.startActivity(
+                AppRoute.Main.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            return
+        }
+
+        WidgetStateManager.publish(WidgetRunState.STARTING)
+        if (!LauncherManager.startServiceFromToggle(context)) {
+            WidgetStateManager.publish(WidgetRunState.STOPPED)
+        }
+    }
+
+    private fun requiresVpnPermission(context: Context): Boolean {
+        if (SettingsManager.isRootMode() || !SettingsManager.isVpnMode()) return false
+        return runCatching { VpnService.prepare(context) != null }.getOrDefault(false)
+    }
+
+    private fun handleAsync(context: Context, block: suspend () -> Unit) {
+        // goAsync() hands out the single PendingResult, so super.onReceive must not run as well.
+        val pendingResult = goAsync()
+        scope.launch {
+            try {
+                block()
+                glanceAppWidget.updateAll(context)
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "Widget: failed to handle broadcast", e)
+            } finally {
+                pendingResult.finish()
             }
         }
+    }
+
+    private companion object {
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     }
 }
