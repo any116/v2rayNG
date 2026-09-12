@@ -1,8 +1,6 @@
 package com.v2ray.ang.ui.about
 
 import android.content.res.Configuration
-import android.os.Build
-import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,21 +17,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -43,7 +36,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.repository.TranslatorGroup
@@ -68,83 +60,46 @@ private val GroupSpacing = 12.dp
 private val LinkIconSize = 20.dp
 private val LinkIconGap = 12.dp
 private val ContributorDividerThickness = 0.5.dp
-private val LicenseMinHeight = 160.dp
-private val LicenseMaxHeight = 500.dp
 
 private const val NameMaxLines = 2
 
 private const val TranslatorGroupContentType = "translator-group"
 
-private const val LICENSE_ASSET_URL = "file:///android_asset/open_source_licenses.html"
-
-private sealed interface AboutDialog {
-    data object OssLicense : AboutDialog
-}
-
-/**
- * Holds the dialog outside the UiState and exposes constant lambda references.
- */
-@Stable
-private class AboutDialogHost {
-
-    var current by mutableStateOf<AboutDialog?>(null)
-        private set
-
-    val show: (AboutDialog) -> Unit = { current = it }
-
-    val dismiss: () -> Unit = { current = null }
-}
-
 @Composable
 fun AboutScreen(viewModel: AboutViewModel) {
     val dispatch = remember(viewModel) { viewModel::onAction }
     val onBack = remember(dispatch) { { dispatch(AboutAction.Back) } }
-    val dialogs = remember { AboutDialogHost() }
 
     BackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,
-        onEvent = { event ->
-            when (event) {
-                AboutEvent.ShowOssLicense -> {
-                    dialogs.show(AboutDialog.OssLicense)
-                    true
-                }
-                else -> false
-            }
-        },
         topBar = {
-            val showTranslators by rememberTranslatorsMode(viewModel)
-            AppTopBar(
-                title = if (showTranslators) {
-                    stringResource(R.string.title_translators)
-                } else {
-                    stringResource(R.string.title_about)
-                },
-                onBackClick = onBack
-            )
+            val page by rememberAboutPage(viewModel)
+            AppTopBar(title = stringResource(page.titleRes), onBackClick = onBack)
         }
     ) { state, onAction ->
-        if (state.showTranslators) {
-            TranslatorsContent(groups = state.translators, onAction = onAction)
-        } else {
-            AboutContent(
+        when (state.page) {
+            AboutPage.MENU -> AboutContent(
                 versionText = state.versionText,
                 appId = state.appId,
                 onAction = onAction
             )
+            AboutPage.TRANSLATORS -> TranslatorsContent(
+                groups = state.translators,
+                onAction = onAction
+            )
+            AboutPage.OSS_LICENSE -> AboutLicenseContent()
         }
-        AboutDialogs(dialog = dialogs.current, onDismiss = dialogs.dismiss)
     }
 }
 
 @Composable
-private fun rememberTranslatorsMode(viewModel: AboutViewModel): State<Boolean> {
+private fun rememberAboutPage(viewModel: AboutViewModel): State<AboutPage> {
     val flow = remember(viewModel) {
-        viewModel.uiState.map { it.showTranslators }.distinctUntilChanged()
+        viewModel.uiState.map { it.page }.distinctUntilChanged()
     }
-    val initial = remember(viewModel) { viewModel.uiState.value.showTranslators }
+    val initial = remember(viewModel) { viewModel.uiState.value.page }
     return flow.collectAsStateWithLifecycle(initialValue = initial)
 }
 
@@ -187,60 +142,6 @@ private fun AboutMenuRow(
         title = stringResource(entry.titleRes),
         onClick = onClick,
         modifier = modifier
-    )
-}
-
-// ===== dialogs =====
-
-@Composable
-private fun AboutDialogs(dialog: AboutDialog?, onDismiss: () -> Unit) {
-    when (dialog) {
-        AboutDialog.OssLicense -> OssLicenseDialog(onDismiss = onDismiss)
-        null -> Unit
-    }
-}
-
-@Composable
-private fun OssLicenseDialog(onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = modifier,
-        title = { Text(stringResource(R.string.title_oss_license)) },
-        text = { LicenseWebView() },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_ok))
-            }
-        },
-        containerColor = MaterialTheme.colorScheme.surface
-    )
-}
-
-/**
- * The only [AndroidView] in the project: the bundled licence page is generated HTML and there is
- * no Compose renderer for it. 
- */
-@Composable
-private fun LicenseWebView(modifier: Modifier = Modifier) {
-    AndroidView(
-        factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = false
-                settings.allowFileAccess = false
-                settings.allowContentAccess = false
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    settings.isAlgorithmicDarkeningAllowed = true
-                }
-                loadUrl(LICENSE_ASSET_URL)
-            }
-        },
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = LicenseMinHeight, max = LicenseMaxHeight),
-        onRelease = { webView ->
-            webView.stopLoading()
-            webView.destroy()
-        }
     )
 }
 
@@ -354,9 +255,7 @@ private fun ContributorRow(
             Icon(
                 painter = painterResource(R.drawable.ic_github_24dp),
                 contentDescription = null,
-                modifier = Modifier
-                    .size(LinkIconSize)
-                    .padding(end = 0.dp),
+                modifier = Modifier.size(LinkIconSize),
                 tint = MaterialTheme.colorScheme.primary
             )
         }
@@ -382,7 +281,7 @@ private fun ContributorRow(
 @Composable
 private fun AboutContentPreview() = AppTheme {
     AboutContent(
-        versionText = "v2.3.3 (26.2.6)",
+        versionText = "v2.3.6 (26.2.6)",
         appId = "com.v2ray.ang",
         onAction = {}
     )
@@ -395,16 +294,10 @@ private fun TranslatorsContentPreview() = AppTheme {
     TranslatorsContent(
         groups = listOf(
             TranslatorGroup(
-                language = "简体中文",
+                language = "Chinese",
                 members = listOf(
                     TranslatorRow(id = "zh#0", displayName = "2dust", url = "https://github.com/2dust"),
                     TranslatorRow(id = "zh#1", displayName = "anonymous contributor", url = null)
-                )
-            ),
-            TranslatorGroup(
-                language = "Persian (a language name long enough to be ellipsized)",
-                members = listOf(
-                    TranslatorRow(id = "fa#0", displayName = "someone", url = "https://github.com/someone")
                 )
             )
         ),

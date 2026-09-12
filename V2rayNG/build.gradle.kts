@@ -6,10 +6,5 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.hilt) apply false
     alias(libs.plugins.ksp) apply false
-}
-
-buildscript {
-    dependencies {
-        classpath(libs.gradle.license.plugin)
-    }
+    alias(libs.plugins.aboutlibraries) apply false
 }
