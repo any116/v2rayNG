@@ -82,10 +82,10 @@ class RealPingWorkerService(
             try {
                 joinAll(*jobs.toTypedArray())
                 if (isActive) {
-                    onEvent(RealPingEvent.Finish("0"))
+                    onEvent(RealPingEvent.Finish)
                 }
             } catch (_: CancellationException) {
-                // If cancelled, don't send finish event to avoid confusion
+                // Cancelled batches are reported by the owner as a cancel, not as a finish.
             } finally {
                 close()
             }

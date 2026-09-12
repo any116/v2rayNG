@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.contracts.IDialerService
 import com.v2ray.ang.contracts.ServiceControl
+import com.v2ray.ang.dto.ConnectionTestResponse
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.OutboundTrafficStat
 import com.v2ray.ang.dto.entities.ProfileItem
@@ -304,42 +305,44 @@ object CoreServiceManager {
     }
 
     /**
-     * Measures the connection delay for the current V2Ray configuration.
-     * Tests with primary URL first, then falls back to alternative URL if needed.
-     * Also fetches remote IP information if the delay test was successful.
+     * Measures the delay of the running configuration for one request.
+     * @return true only when the measurement was accepted and started, so the caller can
+     * acknowledge an ordered broadcast honestly.
      */
-    private fun measureV2rayDelay() {
-        if (!isRunning()) {
-            return
-        }
+    private fun measureV2rayDelay(requestId: String): Boolean {
+        if (requestId.isEmpty()) return false
+        if (!isRunning()) return false
+        val service = getService() ?: return false
 
         CoroutineScope(Dispatchers.IO).launch {
-            val service = getService() ?: return@launch
-            var time = -1L
-            var errorStr = ""
-
+            var replied = false
             try {
-                time = coreController.measureDelay(SettingsManager.getDelayTestUrl())
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to measure delay", e)
-                errorStr = e.message?.substringAfter("\":").orEmpty()
-            }
-/*            if (time == -1L) {
+                var time = -1L
+                var errorStr = ""
                 try {
-                    time = coreController.measureDelay(SettingsManager.getDelayTestUrl(true))
+                    time = coreController.measureDelay(SettingsManager.getDelayTestUrl())
                 } catch (e: Exception) {
                     LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to measure delay", e)
                     errorStr = e.message?.substringAfter("\":").orEmpty()
                 }
+                MessageHelper.sendMsg2UI(
+                    service,
+                    AppConfig.MSG_MEASURE_DELAY_RESULT,
+                    ConnectionTestResponse(requestId, ConnectionTestResult(time, errorStr))
+                )
+                replied = true
+            } catch (e: Throwable) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Manager: Delay request $requestId failed", e)
+            } finally {
+                // A request must always be closed, otherwise the UI stays in the testing state.
+                if (!replied) {
+                    runCatching {
+                        MessageHelper.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_CANCELED, requestId)
+                    }
+                }
             }
-
-            val endpoint = if (time >= 0) SpeedtestManager.getRemoteIPInfo() else null*/
-            val result = ConnectionTestResult(
-                delayMillis = time,
-                errorMessage = errorStr
-            )
-            MessageHelper.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_RESULT, result)
         }
+        return true
     }
 
     /**
@@ -476,7 +479,16 @@ object CoreServiceManager {
                 }
 
                 AppConfig.MSG_MEASURE_DELAY -> {
-                    measureV2rayDelay()
+                    val requestId = intent.getStringExtra("content").orEmpty()
+                    val accepted = measureV2rayDelay(requestId)
+                    if (isOrderedBroadcast && accepted) resultCode = Activity.RESULT_OK
+                    if (!accepted && requestId.isNotEmpty()) {
+                        MessageHelper.sendMsg2UI(
+                            serviceControl.getService(),
+                            AppConfig.MSG_MEASURE_DELAY_CANCELED,
+                            requestId
+                        )
+                    }
                 }
             }
 

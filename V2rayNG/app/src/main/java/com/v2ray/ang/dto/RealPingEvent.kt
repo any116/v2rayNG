@@ -8,7 +8,6 @@ sealed class RealPingEvent {
     /** A single server result is available. */
     data class Result(val guid: String, val delayMillis: Long) : RealPingEvent()
 
-    /** The entire batch has finished or been cancelled. */
-    data class Finish(val status: String) : RealPingEvent()
+    /** Every unit of the batch has settled; cancellation never reaches this event. */
+    data object Finish : RealPingEvent()
 }
-
