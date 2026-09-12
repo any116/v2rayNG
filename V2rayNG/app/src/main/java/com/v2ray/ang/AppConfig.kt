@@ -94,6 +94,8 @@ object AppConfig {
     const val CACHE_SUBSCRIPTION_ID = "cache_subscription_id"
     const val CACHE_LOGCAT_CLEARED_AT = "cache_logcat_cleared_at"
     const val CACHE_WORKER_SCHEMA_VERSION = "cache_worker_schema_version"
+    const val CACHE_WIDGET_STATE = "cache_widget_state"
+    const val CACHE_WIDGET_STATE_AT = "cache_widget_state_at"
 
     /** Protocol identifiers. */
     const val PROTOCOL_FREEDOM = "freedom"

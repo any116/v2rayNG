@@ -45,8 +45,9 @@
 - manifest 注册的三个：`BootReceiver`（开机自启）、`TaskerReceiver`（第三方自动化）、
   `WidgetProvider`（桌面小组件）。
 - 只允许"翻译 + 转发"，禁止业务判断与 IO。需要耗时工作时启动 Service 或入队 Worker。
-- `WidgetProvider` 用 `RemoteViews`，不是 Compose；改小组件样式改
-  `res/layout/widget_switch.xml`，不要试图 Compose 化。
+- `WidgetProvider` 继承 `GlanceAppWidgetReceiver`，UI 在 `widget/SwitchWidget.kt`；改样式改 Composable，不要新建 `res/layout`。
+  该接收器必须与 WorkManager 同进程（`:bg`）。Glance 从进程内存解析运行中的 session，跨进程 `update()` 会命中 `getSession()` 为 null 的空指针。
+  组件状态只经 `handler/WidgetStateManager`：MMKV 存快照，`MSG_REGISTER_CLIENT` 有序广播取真值，不要在 `:bg` 读 `CoreServiceManager`。
 - `PendingIntent` 必须带 `FLAG_IMMUTABLE`。
 
 ## 5. Worker 与 WorkManager

@@ -239,6 +239,9 @@ dependencies {
     // Reorderable list
     implementation(libs.reorderable)
 
+    // Widget
+    implementation(libs.androidx.glance.appwidget)
+
     // Testing Libraries
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
