@@ -41,10 +41,9 @@ class AboutViewModel @Inject constructor(
         super.onCleared()
     }
 
-    /** The translators page is a sub-page, not a screen: back leaves it before closing. */
     private fun back() {
-        if (state.showTranslators) {
-            setState { copy(showTranslators = false) }
+        if (state.page != AboutPage.MENU) {
+            setState { copy(page = AboutPage.MENU) }
         } else {
             finishWith(BaseResult.Cancelled)
         }
@@ -53,8 +52,8 @@ class AboutViewModel @Inject constructor(
     private fun openEntry(entry: AboutEntry) {
         when (entry) {
             AboutEntry.SOURCE_CODE -> openUrl(repo.sourceCodeUrl())
-            AboutEntry.OSS_LICENSE -> platform(AboutEvent.ShowOssLicense)
-            AboutEntry.TRANSLATORS -> setState { copy(showTranslators = true) }
+            AboutEntry.OSS_LICENSE -> setState { copy(page = AboutPage.OSS_LICENSE) }
+            AboutEntry.TRANSLATORS -> setState { copy(page = AboutPage.TRANSLATORS) }
             AboutEntry.FEEDBACK -> openUrl(repo.issuesUrl())
             AboutEntry.TG_CHANNEL -> openUrl(repo.tgChannelUrl())
             AboutEntry.PRIVACY_POLICY -> openUrl(repo.privacyPolicyUrl())

@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    id("com.jaredsburrows.license")
+    alias(libs.plugins.aboutlibraries)
 }
 
 android {
@@ -160,6 +160,26 @@ android {
 
 }
 
+aboutLibraries {
+    offlineMode = true
+
+    collect {
+        fetchRemoteLicense = false
+        fetchRemoteFunding = false
+        includePlatform = false
+    }
+
+    export {
+        prettyPrint = false
+        excludeFields.addAll("funding")
+    }
+
+    library {
+        duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.MERGE
+        duplicationRule = com.mikepenz.aboutlibraries.plugin.DuplicateRule.SIMPLE
+    }
+}
+
 dependencies {
     // Core Libraries
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
@@ -181,6 +201,10 @@ dependencies {
     implementation(libs.coil.compose)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // Open source licenses
+    implementation(libs.aboutlibraries.core)
+    implementation(libs.aboutlibraries.compose.m3)
 
     // Data and Storage Libraries
     implementation(libs.mmkv.static)
