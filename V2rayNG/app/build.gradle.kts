@@ -26,20 +26,27 @@ android {
                 } else {
                     include(
                         "arm64-v8a",
-                        "armeabi-v7a",
-                        "x86_64",
-                        "x86"
                     )
                 }
-                isUniversalApk = abiFilterList.isNullOrEmpty()
+                isUniversalApk = false
             }
         }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("123.keystore")
+            storePassword = "00000000"
+            keyAlias = "123"
+            keyPassword = "00000000"
+            enableV3Signing = true
+        }
+    }
     buildTypes {
         release {
+        signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
