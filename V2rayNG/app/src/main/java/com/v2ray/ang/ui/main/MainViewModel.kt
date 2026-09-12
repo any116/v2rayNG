@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.regex.PatternSyntaxException
@@ -69,8 +70,13 @@ class MainViewModel @Inject constructor(
     private val groupJobs = ConcurrentHashMap<String, Job>()
     private val orderJobs = ConcurrentHashMap<String, Job>()
 
-    @Volatile private var testingGroupId: String? = null
+    // Request registry. Owned by the main thread: every mutation happens in onAction or in the
+    // serviceEvents collector, both of which run on the ViewModel's main dispatcher.
+    private var currentTestId: String? = null
+    private var batchTestId: String? = null
+    private var batchGroupId: String? = null
     private val delayDirty = AtomicBoolean(false)
+
     private var initialized = false
     private val firstPageReady = CompletableDeferred<Unit>()
 
@@ -194,27 +200,34 @@ class MainViewModel @Inject constructor(
 
     private fun handleServiceEvent(event: MainServiceEvent) {
         when (event) {
-            MainServiceEvent.StateRunning -> updateRunning(true, keepTestingText = true)
-            MainServiceEvent.StateNotRunning -> updateRunning(false, keepTestingText = true)
+            MainServiceEvent.StateRunning -> onRunningChanged(true, keepTestingText = true)
+            MainServiceEvent.StateNotRunning -> onRunningChanged(false, keepTestingText = true)
             MainServiceEvent.StateStartSuccess -> {
                 toastSuccess(R.string.toast_services_success)
-                updateRunning(true)
+                onRunningChanged(true)
             }
             is MainServiceEvent.StateStartFailure -> {
                 if (event.errorMessage.isNotBlank()) toastError(event.errorMessage)
                 else toastError(R.string.toast_services_failure)
-                updateRunning(false)
+                onRunningChanged(false)
             }
-            MainServiceEvent.StateStopSuccess -> updateRunning(false)
-            is MainServiceEvent.MeasureDelayResult -> {
-                setState { copy(status = MainStatus.ConnectionTest(event.result)) }
-            }
-            is MainServiceEvent.MeasureConfigNotify -> {
-                setState { copy(status = MainStatus.TestProgress(event.progress)) }
-            }
-            MainServiceEvent.MeasureConfigSuccess -> scheduleDelayRefresh(testingGroupId ?: state.selectedGroupId)
-            is MainServiceEvent.MeasureConfigFinish -> onTestsFinished()
+            MainServiceEvent.StateStopSuccess -> onRunningChanged(false)
+            is MainServiceEvent.MeasureDelayResult -> onCurrentTestResult(event.requestId, event.result)
+            is MainServiceEvent.MeasureDelayCanceled -> onCurrentTestCanceled(event.requestId)
+            is MainServiceEvent.MeasureConfigNotify -> onBatchProgress(event.requestId, event.progress)
+            is MainServiceEvent.MeasureConfigSuccess -> onBatchServerTested(event.requestId)
+            is MainServiceEvent.MeasureConfigFinish -> onBatchFinished(event.requestId)
+            is MainServiceEvent.MeasureConfigCanceled -> onBatchCanceled(event.requestId)
         }
+    }
+
+    /**
+     * A running-state change kills the daemon that owns the pending current-server request, so the
+     * request is released here and the status bar falls back to the batch request state.
+     */
+    private fun onRunningChanged(running: Boolean, keepTestingText: Boolean = false) {
+        currentTestId = null
+        updateRunning(running, keepTestingText)
     }
 
     private fun updateRunning(running: Boolean, keepTestingText: Boolean = false) = setState {
@@ -226,6 +239,40 @@ class MainViewModel @Inject constructor(
                 else -> MainStatus.Disconnected
             },
         )
+    }
+
+    private fun newRequestId(): String = UUID.randomUUID().toString()
+
+    private fun testCurrentServer() {
+        val requestId = newRequestId()
+        currentTestId = requestId
+        setState { copy(status = MainStatus.Testing) }
+        launch(onError = { onCurrentTestCanceled(requestId) }) {
+            repo.testCurrentServer(requestId)
+        }
+    }
+
+    private fun onCurrentTestResult(requestId: String, result: ConnectionTestResult) {
+        if (requestId != currentTestId) return
+        currentTestId = null
+        // A live batch owns the status bar; overwriting it here would make the bar flicker.
+        if (batchTestId != null) return
+        setState { copy(status = MainStatus.ConnectionTest(result)) }
+    }
+
+    private fun onCurrentTestCanceled(requestId: String) {
+        if (requestId != currentTestId) return
+        currentTestId = null
+        applyIdleStatus()
+    }
+
+    private fun applyIdleStatus() {
+        if (batchTestId != null) return
+        if (currentTestId != null) {
+            setState { copy(status = MainStatus.Testing) }
+            return
+        }
+        setState { copy(status = if (isRunning) MainStatus.Connected else MainStatus.Disconnected) }
     }
 
     private fun publish(groupId: String, rows: List<ServerRowItem>) {
@@ -470,64 +517,82 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun testCurrentServer() {
-        setState { copy(status = MainStatus.Testing) }
-        launch(onError = {}) { repo.testCurrentServer() }
-    }
-
     private fun testAll(onlyTcp: Boolean) {
         val groupId = state.selectedGroupId
         val rows = currentServers()
-        if (rows.isEmpty()) { setState { copy(isTesting = false) }; return }
-        testingGroupId = groupId
+        if (rows.isEmpty()) {
+            releaseBatch(batchTestId)
+            return
+        }
+        val previousId = batchTestId
+        val targets = rows.map { it.guid }
+        val guids = if (state.searchQuery.isNotEmpty()) targets else emptyList()
+        val requestId = newRequestId()
+        batchTestId = requestId
+        batchGroupId = groupId
+        delayJob?.cancel()
+        delayDirty.set(false)
         setState { copy(isTesting = true, status = MainStatus.Testing) }
-        launch(onError = {}) {
-            repo.cancelBatchTest()
-            repo.clearTestResults(rows.map { it.guid })
-            repo.startBatchTest(
-                groupId = groupId,
-                guids = if (state.searchQuery.isNotEmpty()) rows.map { it.guid } else emptyList(),
-                onlyTcp = onlyTcp,
-            )
+        launch(onError = { onBatchCanceled(requestId) }) {
+            if (previousId != null) repo.cancelBatchTest(previousId)
+            repo.clearTestResults(targets)
+            repo.startBatchTest(requestId, groupId, guids, onlyTcp)
         }
     }
 
-    private fun scheduleDelayRefresh(groupId: String) {
+    private fun onBatchProgress(requestId: String, progress: String) {
+        if (requestId != batchTestId) return
+        setState { copy(status = MainStatus.TestProgress(progress)) }
+    }
+
+    private fun onBatchServerTested(requestId: String) {
+        if (requestId != batchTestId) return
+        scheduleDelayRefresh(requestId, batchGroupId ?: state.selectedGroupId)
+    }
+
+    private fun onBatchFinished(requestId: String) {
+        val groupId = batchGroupId ?: state.selectedGroupId
+        if (!releaseBatch(requestId)) return
+        launch(onError = {}) {
+            repo.refreshDelays(groupId)?.let { publish(groupId, it) }
+        }
+    }
+
+    private fun onBatchCanceled(requestId: String) {
+        releaseBatch(requestId)
+    }
+
+    private fun cancelTesting() {
+        val batchId = batchTestId
+        currentTestId = null
+        releaseBatch(batchId)
+        launch(onError = {}) {
+            batchId?.let { repo.cancelBatchTest(it) }
+        }
+    }
+
+    /** Unregisters [requestId] if it is still the current batch; returns false for stale ids. */
+    private fun releaseBatch(requestId: String?): Boolean {
+        if (requestId == null || requestId != batchTestId) return false
+        batchTestId = null
+        batchGroupId = null
+        delayJob?.cancel()
+        delayDirty.set(false)
+        setState { copy(isTesting = false) }
+        applyIdleStatus()
+        return true
+    }
+
+    private fun scheduleDelayRefresh(requestId: String, groupId: String) {
         delayDirty.set(true)
         if (delayJob?.isActive == true) return
         delayJob = launch(onError = {}) {
-            while (delayDirty.getAndSet(false)) {
+            while (delayDirty.getAndSet(false) && batchTestId == requestId) {
                 currentCoroutineContext().ensureActive()
                 repo.refreshDelays(groupId)?.let { publish(groupId, it) }
                 delay(DELAY_REFRESH_INTERVAL_MS)
             }
         }
-    }
-
-    private fun cancelTesting() {
-        delayJob?.cancel()
-        testingGroupId = null
-        setState {
-            copy(
-                isTesting = false,
-                status = if (isRunning) MainStatus.Connected else MainStatus.Disconnected,
-            )
-        }
-        launch(onError = {}) { repo.cancelBatchTest() }
-    }
-
-    private fun onTestsFinished() = launch(onError = {}) {
-        val groupId = testingGroupId ?: state.selectedGroupId
-        delayJob?.cancel()
-        delayDirty.set(false)
-        testingGroupId = null
-        setState {
-            copy(
-                isTesting = false,
-                status = if (isRunning) MainStatus.Connected else MainStatus.Disconnected,
-            )
-        }
-        repo.refreshDelays(groupId)?.let { publish(groupId, it) }
     }
 
     private fun locateSelectedServer() = launch(onError = {}) {
@@ -550,6 +615,9 @@ class MainViewModel @Inject constructor(
         delayJob?.cancel()
         groupJobs.values.forEach { it.cancel() }
         orderJobs.values.forEach { it.cancel() }
+        currentTestId = null
+        batchTestId = null
+        batchGroupId = null
         repo.close()
         super.onCleared()
     }

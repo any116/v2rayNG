@@ -10,6 +10,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.dto.RealPingEvent
+import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
 import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
@@ -20,15 +21,25 @@ import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 
 class CoreTestService : Service() {
+
+    /**
+     * One unit of work, tagged with the request that owns it. Removal from [units] is the atomic
+     * claim: the winner is the only party allowed to report a finish or a cancel for the unit.
+     */
+    private class BatchUnit(val requestId: String, val subscriptionId: String) {
+        lateinit var worker: RealPingWorkerService
+    }
+
+    private val units: MutableSet<BatchUnit> =
+        Collections.newSetFromMap(ConcurrentHashMap<BatchUnit, Boolean>())
 
     override fun attachBaseContext(newBase: Context?) {
         super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
     }
 
-    // manage active batch workers so each batch is independent and cancellable
-    private val activeWorkers = Collections.synchronizedList(mutableListOf<RealPingWorkerService>())
     private val cancelAction by lazy {
         val intent = Intent(this, CoreTestService::class.java).putExtra(
             "content",
@@ -47,43 +58,21 @@ class CoreTestService : Service() {
         ).build()
     }
 
-    /**
-     * Initializes the V2Ray environment.
-     */
     override fun onCreate() {
         super.onCreate()
         CoreNativeManager.initCoreEnv(this)
     }
 
-    /**
-     * Binds the service.
-     * @param intent The intent.
-     * @return The binder.
-     */
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 
-    /**
-     * Cleans up resources when the service is destroyed.
-     */
+    /** Service death invalidates every request, so each one gets its own cancel reply. */
     override fun onDestroy() {
-        LogUtil.i(AppConfig.TAG, "CoreTestService is being destroyed, cancelling ${activeWorkers.size} active workers")
-        // cancel any active workers
-        val snapshot = ArrayList(activeWorkers)
-        snapshot.forEach { it.cancel() }
-        activeWorkers.clear()
+        LogUtil.i(AppConfig.TAG, "CoreTestService destroyed, cancelling ${units.size} units")
+        cancelUnits(units.toList())
         NotificationHelper.stopForeground(this)
         super.onDestroy()
     }
 
-    /**
-     * Handles the start command for the service.
-     * @param intent The intent.
-     * @param flags The flags.
-     * @param startId The start ID.
-     * @return The start mode.
-     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         NotificationHelper.startForeground(
             this,
@@ -94,90 +83,123 @@ class CoreTestService : Service() {
         )
         val message = intent?.serializable<TestServiceMessage>("content")
         if (message == null) {
-            stopSelf(startId)
+            stopIfIdle(startId)
             return START_NOT_STICKY
         }
 
         when (message.key) {
             AppConfig.MSG_MEASURE_CONFIG_START -> handleMeasureStart(message, startId)
-            AppConfig.MSG_MEASURE_CONFIG_CANCEL -> handleMeasureCancel()
-            else -> {
-                NotificationHelper.stopForeground(this); stopSelf(startId)
-            }
+            AppConfig.MSG_MEASURE_CONFIG_CANCEL -> handleMeasureCancel(message)
+            else -> stopIfIdle(startId)
         }
         return START_NOT_STICKY
     }
 
     private fun handleMeasureStart(message: TestServiceMessage, startId: Int) {
-        LogUtil.i(AppConfig.TAG, "CoreTestService starting worker   subscription ${message.subscriptionId}")
+        val requestId = message.requestId
+        if (requestId.isEmpty()) {
+            LogUtil.w(AppConfig.TAG, "CoreTestService rejected a batch start without a request id")
+            stopIfIdle(startId)
+            return
+        }
+        LogUtil.i(AppConfig.TAG, "CoreTestService starting request $requestId for ${message.subscriptionId}")
 
-        val guidsList = when {
+        // Defence against silently shadowing an older batch: still-registered units are cancelled
+        // and reported, never dropped.
+        cancelUnits(units.toList())
+
+        val guids = when {
             message.serverGuids.isNotEmpty() -> message.serverGuids
             message.subscriptionId.isNotEmpty() -> MmkvManager.decodeServerList(message.subscriptionId)
             else -> MmkvManager.decodeAllServerList()
         }
-
-        if (guidsList.isNotEmpty()) {
-            lateinit var worker: RealPingWorkerService
-            worker = RealPingWorkerService(
-                context = this,
-                guids = guidsList,
-                onlyTcp = message.onlyTcp,
-                onEvent = { event -> handleWorkerEvent(event, message) { activeWorkers.remove(worker) } }
-            )
-            activeWorkers.add(worker)
-            worker.start()
-        } else {
-            NotificationHelper.stopForeground(this)
-            stopSelf(startId)
+        if (guids.isEmpty()) {
+            sendCanceled(requestId)
+            stopIfIdle(startId)
+            return
         }
+
+        val unit = BatchUnit(requestId, message.subscriptionId)
+        unit.worker = RealPingWorkerService(
+            context = this,
+            guids = guids,
+            onlyTcp = message.onlyTcp,
+            onEvent = { event -> handleWorkerEvent(event, unit) }
+        )
+        units.add(unit)
+        unit.worker.start()
     }
 
-    private fun handleWorkerEvent(event: RealPingEvent, message: TestServiceMessage, onWorkerDone: () -> Unit) {
+    private fun handleWorkerEvent(event: RealPingEvent, unit: BatchUnit) {
         when (event) {
             is RealPingEvent.Progress -> {
+                if (unit !in units) return
                 NotificationHelper.updateNotification(
                     channelType = NotificationChannelType.CORE_TEST,
                     context = this,
                     title = getString(R.string.app_name),
                     content = getString(R.string.connection_running_task_left, event.text)
                 )
-                MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_NOTIFY, event.text)
+                sendNotify(AppConfig.MSG_MEASURE_CONFIG_NOTIFY, unit.requestId, event.text)
             }
 
             is RealPingEvent.Result -> {
                 MmkvManager.encodeServerTestDelayMillis(event.guid, event.delayMillis)
-                MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_SUCCESS, event.guid)
+                if (unit !in units) return
+                sendNotify(AppConfig.MSG_MEASURE_CONFIG_SUCCESS, unit.requestId, event.guid)
             }
 
-            is RealPingEvent.Finish -> {
-                if (message.subscriptionId.isNotEmpty()) {
-                    if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
-                        AngConfigManager.removeInvalidServer(message.subscriptionId)
-                    }
-
-                    if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)) {
-                        AngConfigManager.sortByTestResultsForSub(message.subscriptionId)
-                    }
-                }
-
-                MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_FINISH, event.status)
-                onWorkerDone()
-                if (activeWorkers.isEmpty()) {
-                    NotificationHelper.stopForeground(this)
-                    stopSelf()
-                }
+            RealPingEvent.Finish -> {
+                // Losing the claim means the unit was already cancelled; do not also finish it.
+                if (!units.remove(unit)) return
+                applyPostProcessing(unit.subscriptionId)
+                sendNotify(AppConfig.MSG_MEASURE_CONFIG_FINISH, unit.requestId)
+                stopIfIdle()
             }
         }
     }
 
-    private fun handleMeasureCancel() {
-        MessageHelper.sendMsg2UI(this, AppConfig.MSG_MEASURE_CONFIG_FINISH, "0")
-        LogUtil.i(AppConfig.TAG, "CoreTestService received cancel message, cancelling ${activeWorkers.size} active workers")
-        val snapshot = ArrayList(activeWorkers)
-        snapshot.forEach { it.cancel() }
-        activeWorkers.clear()
+    private fun handleMeasureCancel(message: TestServiceMessage) {
+        val targets = if (message.requestId.isEmpty()) {
+            units.toList()
+        } else {
+            units.filter { it.requestId == message.requestId }
+        }
+        LogUtil.i(AppConfig.TAG, "CoreTestService cancelling ${targets.size} units")
+        cancelUnits(targets)
+        stopIfIdle()
+    }
+
+    /** Cancels each unit in isolation, so one failure cannot block the remaining requests. */
+    private fun cancelUnits(targets: List<BatchUnit>) {
+        targets.forEach { unit ->
+            if (!units.remove(unit)) return@forEach
+            runCatching { unit.worker.cancel() }
+                .onFailure { LogUtil.e(AppConfig.TAG, "Failed to cancel worker of ${unit.requestId}", it) }
+            runCatching { sendCanceled(unit.requestId) }
+                .onFailure { LogUtil.e(AppConfig.TAG, "Failed to report cancel of ${unit.requestId}", it) }
+        }
+    }
+
+    private fun applyPostProcessing(subscriptionId: String) {
+        if (subscriptionId.isEmpty()) return
+        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
+            AngConfigManager.removeInvalidServer(subscriptionId)
+        }
+        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)) {
+            AngConfigManager.sortByTestResultsForSub(subscriptionId)
+        }
+    }
+
+    private fun sendCanceled(requestId: String) =
+        sendNotify(AppConfig.MSG_MEASURE_CONFIG_CANCELED, requestId)
+
+    private fun sendNotify(key: Int, requestId: String, payload: String = "") =
+        MessageHelper.sendMsg2UI(this, key, TestNotification(requestId, payload))
+
+    private fun stopIfIdle(startId: Int? = null) {
+        if (units.isNotEmpty()) return
         NotificationHelper.stopForeground(this)
-        stopSelf()
+        if (startId == null) stopSelf() else stopSelf(startId)
     }
 }

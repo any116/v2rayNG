@@ -10,10 +10,12 @@ import android.net.Uri
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.di.IoDispatcher
+import com.v2ray.ang.dto.ConnectionTestResponse
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.dto.SubscriptionUpdateResult
+import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
 import com.v2ray.ang.dto.entities.ProfileItem
 import com.v2ray.ang.dto.entities.SubscriptionCache
@@ -50,10 +52,12 @@ sealed interface MainServiceEvent {
     data object StateStartSuccess : MainServiceEvent
     data class StateStartFailure(val errorMessage: String) : MainServiceEvent
     data object StateStopSuccess : MainServiceEvent
-    data class MeasureDelayResult(val result: ConnectionTestResult) : MainServiceEvent
-    data object MeasureConfigSuccess : MainServiceEvent
-    data class MeasureConfigNotify(val progress: String) : MainServiceEvent
-    data class MeasureConfigFinish(val finishedCount: String?) : MainServiceEvent
+    data class MeasureDelayResult(val requestId: String, val result: ConnectionTestResult) : MainServiceEvent
+    data class MeasureDelayCanceled(val requestId: String) : MainServiceEvent
+    data class MeasureConfigSuccess(val requestId: String) : MainServiceEvent
+    data class MeasureConfigNotify(val requestId: String, val progress: String) : MainServiceEvent
+    data class MeasureConfigFinish(val requestId: String) : MainServiceEvent
+    data class MeasureConfigCanceled(val requestId: String) : MainServiceEvent
 }
 
 open class MainRepository @Inject constructor(
@@ -78,14 +82,26 @@ open class MainRepository @Inject constructor(
                 AppConfig.MSG_STATE_RUNNING -> MainServiceEvent.StateRunning
                 AppConfig.MSG_STATE_NOT_RUNNING -> MainServiceEvent.StateNotRunning
                 AppConfig.MSG_STATE_START_SUCCESS -> MainServiceEvent.StateStartSuccess
-                AppConfig.MSG_STATE_START_FAILURE -> MainServiceEvent.StateStartFailure(content.orEmpty())
+                AppConfig.MSG_STATE_START_FAILURE ->
+                    MainServiceEvent.StateStartFailure(content.orEmpty())
                 AppConfig.MSG_STATE_STOP_SUCCESS -> MainServiceEvent.StateStopSuccess
                 AppConfig.MSG_MEASURE_DELAY_RESULT -> data
-                    .serializable<ConnectionTestResult>("content")
-                    ?.let { MainServiceEvent.MeasureDelayResult(it) }
-                AppConfig.MSG_MEASURE_CONFIG_SUCCESS -> MainServiceEvent.MeasureConfigSuccess
-                AppConfig.MSG_MEASURE_CONFIG_NOTIFY -> MainServiceEvent.MeasureConfigNotify(content.orEmpty())
-                AppConfig.MSG_MEASURE_CONFIG_FINISH -> MainServiceEvent.MeasureConfigFinish(content)
+                    .serializable<ConnectionTestResponse>("content")
+                    ?.let { MainServiceEvent.MeasureDelayResult(it.requestId, it.result) }
+                AppConfig.MSG_MEASURE_DELAY_CANCELED -> content
+                    ?.let { MainServiceEvent.MeasureDelayCanceled(it) }
+                AppConfig.MSG_MEASURE_CONFIG_SUCCESS -> data
+                    .serializable<TestNotification>("content")
+                    ?.let { MainServiceEvent.MeasureConfigSuccess(it.requestId) }
+                AppConfig.MSG_MEASURE_CONFIG_NOTIFY -> data
+                    .serializable<TestNotification>("content")
+                    ?.let { MainServiceEvent.MeasureConfigNotify(it.requestId, it.payload) }
+                AppConfig.MSG_MEASURE_CONFIG_FINISH -> data
+                    .serializable<TestNotification>("content")
+                    ?.let { MainServiceEvent.MeasureConfigFinish(it.requestId) }
+                AppConfig.MSG_MEASURE_CONFIG_CANCELED -> data
+                    .serializable<TestNotification>("content")
+                    ?.let { MainServiceEvent.MeasureConfigCanceled(it.requestId) }
                 else -> null
             }
             event?.let { _serviceEvents.tryEmit(it) }
@@ -103,7 +119,7 @@ open class MainRepository @Inject constructor(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
-        runCatching { sendCancelBatchTest() }
+        runCatching { sendCancelBatchTest("") }
             .onFailure { LogUtil.e(AppConfig.TAG, "Failed to cancel batch test on close", it) }
         runCatching { MessageHelper.sendMsg2Service(app, AppConfig.MSG_UNREGISTER_CLIENT, "") }
             .onFailure { LogUtil.e(AppConfig.TAG, "Failed to unregister service client", it) }
@@ -341,11 +357,17 @@ open class MainRepository @Inject constructor(
             .getOrNull()
     }
 
-    open suspend fun startBatchTest(groupId: String, guids: List<String>, onlyTcp: Boolean) = withIO {
+    open suspend fun startBatchTest(
+        requestId: String,
+        groupId: String,
+        guids: List<String>,
+        onlyTcp: Boolean
+    ) = withIO {
         MessageHelper.sendMsg2TestService(
             app,
             TestServiceMessage(
                 key = AppConfig.MSG_MEASURE_CONFIG_START,
+                requestId = requestId,
                 subscriptionId = groupId,
                 serverGuids = guids,
                 onlyTcp = onlyTcp
@@ -353,13 +375,33 @@ open class MainRepository @Inject constructor(
         )
     }
 
-    open suspend fun cancelBatchTest() = withIO { sendCancelBatchTest() }
+    /** An empty [requestId] cancels every batch request the service still owns. */
+    open suspend fun cancelBatchTest(requestId: String) = withIO {
+        sendCancelBatchTest(requestId)
+    }
 
-    private fun sendCancelBatchTest() =
-        MessageHelper.sendMsg2TestService(app, TestServiceMessage(key = AppConfig.MSG_MEASURE_CONFIG_CANCEL))
+    private fun sendCancelBatchTest(requestId: String) =
+        MessageHelper.sendMsg2TestService(
+            app,
+            TestServiceMessage(
+                key = AppConfig.MSG_MEASURE_CONFIG_CANCEL,
+                requestId = requestId
+            )
+        )
 
-    open suspend fun testCurrentServer() = withIO {
-        MessageHelper.sendMsg2Service(app, AppConfig.MSG_MEASURE_DELAY, "")
+    /**
+     * Sends one current-server test request. The ordered broadcast tells whether a daemon took it;
+     * an unhandled request is closed by the sender through the same cancel path the daemon uses.
+     */
+    open suspend fun testCurrentServer(requestId: String) = withIO {
+        MessageHelper.sendMsg2ServiceForResult(app, AppConfig.MSG_MEASURE_DELAY, requestId) { handled ->
+            if (!handled) emitDelayCanceled(requestId)
+        }
+    }
+
+    private fun emitDelayCanceled(requestId: String) {
+        if (closed.get()) return
+        _serviceEvents.tryEmit(MainServiceEvent.MeasureDelayCanceled(requestId))
     }
 
     open suspend fun clearTestResults(guids: List<String>) =
