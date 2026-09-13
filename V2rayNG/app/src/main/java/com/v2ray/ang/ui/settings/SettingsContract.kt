@@ -2,8 +2,8 @@ package com.v2ray.ang.ui.settings
 
 import androidx.compose.runtime.Immutable
 import com.v2ray.ang.AppConfig.VPN
-import com.v2ray.ang.repository.BoolPref
-import com.v2ray.ang.repository.StringPref
+import com.v2ray.ang.data.repository.BoolPref
+import com.v2ray.ang.data.repository.StringPref
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseUiState

@@ -20,8 +20,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.BoolPref
-import com.v2ray.ang.repository.StringPref
+import com.v2ray.ang.data.repository.BoolPref
+import com.v2ray.ang.data.repository.StringPref
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.CollapsiblePreferenceGroupHeader

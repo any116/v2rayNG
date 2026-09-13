@@ -2,8 +2,8 @@ package com.v2ray.ang.ui.routing
 
 import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.R
-import com.v2ray.ang.dto.entities.RulesetItem
-import com.v2ray.ang.repository.RoutingRepository
+import com.v2ray.ang.data.entities.RulesetItem
+import com.v2ray.ang.data.repository.RoutingRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult

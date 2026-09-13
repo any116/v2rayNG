@@ -5,8 +5,8 @@ import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.extension.delay
-import com.v2ray.ang.repository.UrlSchemeImport
-import com.v2ray.ang.repository.UrlSchemeRepository
+import com.v2ray.ang.data.repository.UrlSchemeImport
+import com.v2ray.ang.data.repository.UrlSchemeRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel

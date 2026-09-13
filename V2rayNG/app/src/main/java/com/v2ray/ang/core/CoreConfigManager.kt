@@ -8,8 +8,8 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.ConfigResult
 import com.v2ray.ang.dto.CoreConfigContext
 import com.v2ray.ang.dto.V2rayConfig
-import com.v2ray.ang.dto.entities.ProfileItem
-import com.v2ray.ang.dto.entities.RulesetItem
+import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType
 import com.v2ray.ang.enums.EConfigType

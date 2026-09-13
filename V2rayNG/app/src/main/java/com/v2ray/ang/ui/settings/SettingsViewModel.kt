@@ -2,9 +2,9 @@ package com.v2ray.ang.ui.settings
 
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.BoolPref
-import com.v2ray.ang.repository.SettingsRepository
-import com.v2ray.ang.repository.StringPref
+import com.v2ray.ang.data.repository.BoolPref
+import com.v2ray.ang.data.repository.SettingsRepository
+import com.v2ray.ang.data.repository.StringPref
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel

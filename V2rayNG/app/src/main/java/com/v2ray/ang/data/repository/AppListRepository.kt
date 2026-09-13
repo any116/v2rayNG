@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import android.app.Application
 import android.content.pm.ApplicationInfo

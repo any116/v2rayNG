@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.v2ray.ang.dto.SubUpdateOptions
-import com.v2ray.ang.dto.entities.SubscriptionCache
+import com.v2ray.ang.data.entities.SubscriptionCache
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseResult

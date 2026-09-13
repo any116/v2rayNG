@@ -1,6 +1,6 @@
 package com.v2ray.ang.handler
 
-import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

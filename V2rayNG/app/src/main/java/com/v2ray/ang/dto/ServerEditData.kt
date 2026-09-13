@@ -1,6 +1,6 @@
 package com.v2ray.ang.dto
 
-import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileItem
 
 data class ServerEditData(
     val profile: ProfileItem?,

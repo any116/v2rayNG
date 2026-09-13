@@ -1,7 +1,7 @@
 package com.v2ray.ang.di
 
-import com.v2ray.ang.repository.ThemeRepository
-import com.v2ray.ang.repository.ThemeStore
+import com.v2ray.ang.data.repository.ThemeRepository
+import com.v2ray.ang.data.repository.ThemeStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn

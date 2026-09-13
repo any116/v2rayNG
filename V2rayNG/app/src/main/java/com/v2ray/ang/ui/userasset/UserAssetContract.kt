@@ -2,7 +2,7 @@ package com.v2ray.ang.ui.userasset
 
 import android.net.Uri
 import androidx.compose.runtime.Immutable
-import com.v2ray.ang.repository.AssetFile
+import com.v2ray.ang.data.repository.AssetFile
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseResult

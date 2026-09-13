@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import android.app.Application
 import android.content.BroadcastReceiver
@@ -17,8 +17,8 @@ import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
-import com.v2ray.ang.dto.entities.ProfileItem
-import com.v2ray.ang.dto.entities.SubscriptionCache
+import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.SubscriptionCache
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.extension.serializable

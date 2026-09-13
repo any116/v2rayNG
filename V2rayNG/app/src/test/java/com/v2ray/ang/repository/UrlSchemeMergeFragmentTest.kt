@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

@@ -1,7 +1,7 @@
 package com.v2ray.ang.dto
 
 import androidx.compose.runtime.Immutable
-import com.v2ray.ang.dto.entities.RulesetItem
+import com.v2ray.ang.data.entities.RulesetItem
 
 @Immutable
 data class RoutingRuleRow(

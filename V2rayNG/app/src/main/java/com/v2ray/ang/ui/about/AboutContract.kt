@@ -4,7 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.TranslatorGroup
+import com.v2ray.ang.data.repository.TranslatorGroup
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseUiState
 

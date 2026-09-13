@@ -1,7 +1,7 @@
 package com.v2ray.ang.ui.subscription
 
 import androidx.compose.runtime.Immutable
-import com.v2ray.ang.dto.entities.SubscriptionItem
+import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.extension.toLongEx
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseUiState

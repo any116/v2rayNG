@@ -1,7 +1,7 @@
 package com.v2ray.ang.ui.server
 
 import com.v2ray.ang.R
-import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.util.JsonUtil

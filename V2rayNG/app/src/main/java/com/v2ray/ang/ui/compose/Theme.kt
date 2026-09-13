@@ -24,7 +24,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.enums.AppThemeMode
-import com.v2ray.ang.repository.ThemeRepository
+import com.v2ray.ang.data.repository.ThemeRepository
 import kotlinx.coroutines.flow.StateFlow
 
 // Light color scheme with color comments

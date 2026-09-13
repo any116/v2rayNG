@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import com.v2ray.ang.core.CoreServiceManager
 import com.v2ray.ang.di.IoDispatcher

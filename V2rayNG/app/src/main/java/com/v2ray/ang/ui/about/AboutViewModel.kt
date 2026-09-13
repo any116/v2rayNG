@@ -1,7 +1,7 @@
 package com.v2ray.ang.ui.about
 
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.repository.AboutRepository
+import com.v2ray.ang.data.repository.AboutRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel

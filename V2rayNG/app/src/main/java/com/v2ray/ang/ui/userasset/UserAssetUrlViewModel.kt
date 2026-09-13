@@ -2,7 +2,7 @@ package com.v2ray.ang.ui.userasset
 
 import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.UserAssetRepository
+import com.v2ray.ang.data.repository.UserAssetRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult

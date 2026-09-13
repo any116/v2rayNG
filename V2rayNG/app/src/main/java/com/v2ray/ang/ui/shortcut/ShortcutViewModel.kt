@@ -1,7 +1,7 @@
 package com.v2ray.ang.ui.shortcut
 
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.ShortcutRepository
+import com.v2ray.ang.data.repository.ShortcutRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText

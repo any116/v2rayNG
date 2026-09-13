@@ -1,7 +1,7 @@
 package com.v2ray.ang.ui.checkupdate
 
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.CheckUpdateRepository
+import com.v2ray.ang.data.repository.CheckUpdateRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
