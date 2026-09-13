@@ -1,4 +1,4 @@
-package com.v2ray.ang.dto.entities
+package com.v2ray.ang.data.entities
 
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.enums.EConfigType

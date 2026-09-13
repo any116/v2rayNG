@@ -8,8 +8,8 @@ import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.extension.matchesPattern
 import com.v2ray.ang.extension.moveItem
-import com.v2ray.ang.repository.MainRepository
-import com.v2ray.ang.repository.MainServiceEvent
+import com.v2ray.ang.data.repository.MainRepository
+import com.v2ray.ang.data.repository.MainServiceEvent
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText

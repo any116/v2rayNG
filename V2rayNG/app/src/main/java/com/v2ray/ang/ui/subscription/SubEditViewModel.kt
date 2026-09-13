@@ -3,9 +3,9 @@ package com.v2ray.ang.ui.subscription
 import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.dto.entities.SubscriptionItem
+import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.extension.toLongEx
-import com.v2ray.ang.repository.SubRepository
+import com.v2ray.ang.data.repository.SubRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult

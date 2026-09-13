@@ -1,8 +1,8 @@
 package com.v2ray.ang.ui.routing
 
-import com.v2ray.ang.dto.entities.RulesetItem
+import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.dto.toRuleRows
-import com.v2ray.ang.repository.RoutingRepository
+import com.v2ray.ang.data.repository.RoutingRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel

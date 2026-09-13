@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.ShortcutRepository
+import com.v2ray.ang.data.repository.ShortcutRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel

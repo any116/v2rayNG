@@ -2,7 +2,7 @@ package com.v2ray.ang.ui.logcat
 
 import com.v2ray.ang.R
 import com.v2ray.ang.extension.delay
-import com.v2ray.ang.repository.LogcatRepository
+import com.v2ray.ang.data.repository.LogcatRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel

@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import android.net.Uri
 import com.v2ray.ang.di.IoDispatcher

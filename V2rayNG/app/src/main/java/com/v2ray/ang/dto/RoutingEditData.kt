@@ -1,6 +1,6 @@
 package com.v2ray.ang.dto
 
-import com.v2ray.ang.dto.entities.RulesetItem
+import com.v2ray.ang.data.entities.RulesetItem
 
 data class RoutingEditData(
     val ruleset: RulesetItem?,

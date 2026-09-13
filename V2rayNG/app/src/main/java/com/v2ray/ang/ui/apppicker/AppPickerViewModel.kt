@@ -5,7 +5,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.AppInfo
 import com.v2ray.ang.extension.delay
-import com.v2ray.ang.repository.AppListRepository
+import com.v2ray.ang.data.repository.AppListRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel

@@ -1,11 +1,11 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import android.app.Application
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.RoutingEditData
 import com.v2ray.ang.dto.RoutingRuleRow
-import com.v2ray.ang.dto.entities.RulesetItem
+import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.dto.toRuleRows
 import com.v2ray.ang.enums.RoutingType
 import com.v2ray.ang.handler.MmkvManager

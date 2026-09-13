@@ -3,7 +3,7 @@ package com.v2ray.ang.handler
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.CertSha256Request
 import com.v2ray.ang.dto.CertSha256Result
-import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil

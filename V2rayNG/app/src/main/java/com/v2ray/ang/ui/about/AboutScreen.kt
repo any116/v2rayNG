@@ -38,8 +38,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.TranslatorGroup
-import com.v2ray.ang.repository.TranslatorRow
+import com.v2ray.ang.data.repository.TranslatorGroup
+import com.v2ray.ang.data.repository.TranslatorRow
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.compose.AppTheme
 import com.v2ray.ang.ui.compose.AppTopBar

@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import android.app.Application
 import com.v2ray.ang.AppConfig
@@ -6,7 +6,7 @@ import com.v2ray.ang.R
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.ServerEditData
 import com.v2ray.ang.dto.SubscriptionOption
-import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.fmt.CustomFmt
 import com.v2ray.ang.handler.AngConfigManager

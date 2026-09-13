@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import android.app.Application
 import android.content.ClipData
@@ -11,8 +11,8 @@ import com.v2ray.ang.dto.SubEditData
 import com.v2ray.ang.dto.SubUpdateOptions
 import com.v2ray.ang.dto.SubscriptionUpdateMessage
 import com.v2ray.ang.dto.SubscriptionUpdateResult
-import com.v2ray.ang.dto.entities.SubscriptionCache
-import com.v2ray.ang.dto.entities.SubscriptionItem
+import com.v2ray.ang.data.entities.SubscriptionCache
+import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.MmkvManager

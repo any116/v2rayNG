@@ -2,8 +2,8 @@ package com.v2ray.ang.ui.subscription
 
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.SubUpdateOptions
-import com.v2ray.ang.dto.entities.SubscriptionCache
-import com.v2ray.ang.repository.SubRepository
+import com.v2ray.ang.data.entities.SubscriptionCache
+import com.v2ray.ang.data.repository.SubRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText

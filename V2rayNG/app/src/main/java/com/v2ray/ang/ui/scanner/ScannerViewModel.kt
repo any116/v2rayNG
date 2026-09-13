@@ -2,7 +2,7 @@ package com.v2ray.ang.ui.scanner
 
 import android.net.Uri
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.ScannerRepository
+import com.v2ray.ang.data.repository.ScannerRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel

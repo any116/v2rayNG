@@ -3,7 +3,7 @@ package com.v2ray.ang.ui.routing
 import androidx.compose.runtime.Immutable
 import com.v2ray.ang.AppConfig.TAG_PROXY
 import com.v2ray.ang.AppConfig.BUILTIN_OUTBOUND_TAGS
-import com.v2ray.ang.dto.entities.RulesetItem
+import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent

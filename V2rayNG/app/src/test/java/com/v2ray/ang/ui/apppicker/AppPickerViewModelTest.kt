@@ -1,7 +1,7 @@
 package com.v2ray.ang.ui.apppicker
 
 import androidx.lifecycle.SavedStateHandle
-import com.v2ray.ang.repository.AppListRepository
+import com.v2ray.ang.data.repository.AppListRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseResult

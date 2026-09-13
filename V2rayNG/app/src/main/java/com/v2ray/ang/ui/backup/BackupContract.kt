@@ -3,7 +3,7 @@ package com.v2ray.ang.ui.backup
 import android.net.Uri
 import androidx.compose.runtime.Immutable
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.dto.entities.WebDavConfig
+import com.v2ray.ang.data.entities.WebDavConfig
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseUiState

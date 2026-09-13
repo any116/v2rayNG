@@ -7,9 +7,9 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.CoreConfigManager
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.UrlContentRequest
-import com.v2ray.ang.dto.entities.ProfileItem
-import com.v2ray.ang.dto.entities.SubscriptionCache
-import com.v2ray.ang.dto.entities.SubscriptionItem
+import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.SubscriptionCache
+import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.fmt.CustomFmt

@@ -2,7 +2,7 @@ package com.v2ray.ang.fmt
 
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.V2rayNShareItem
-import com.v2ray.ang.dto.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil

@@ -1,4 +1,4 @@
-package com.v2ray.ang.repository
+package com.v2ray.ang.data.repository
 
 import android.app.Application
 import android.net.Uri
@@ -6,7 +6,7 @@ import com.tencent.mmkv.MMKV
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.di.IoDispatcher
-import com.v2ray.ang.dto.entities.WebDavConfig
+import com.v2ray.ang.data.entities.WebDavConfig
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SettingsManager

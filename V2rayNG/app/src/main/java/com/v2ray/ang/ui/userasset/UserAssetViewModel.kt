@@ -2,8 +2,8 @@ package com.v2ray.ang.ui.userasset
 
 import android.net.Uri
 import com.v2ray.ang.R
-import com.v2ray.ang.repository.AssetImportResult
-import com.v2ray.ang.repository.UserAssetRepository
+import com.v2ray.ang.data.repository.AssetImportResult
+import com.v2ray.ang.data.repository.UserAssetRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText

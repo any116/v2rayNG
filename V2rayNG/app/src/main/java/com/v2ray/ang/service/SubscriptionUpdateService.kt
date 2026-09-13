@@ -10,7 +10,7 @@ import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.SubscriptionUpdateMessage
-import com.v2ray.ang.dto.entities.SubscriptionCache
+import com.v2ray.ang.data.entities.SubscriptionCache
 import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
