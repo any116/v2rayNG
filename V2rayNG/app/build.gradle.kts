@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.aboutlibraries)
+    alias(libs.plugins.room3)
 }
 
 android {
@@ -160,6 +161,13 @@ android {
 
 }
 
+// Required by the Room Gradle Plugin. Schemas are emitted per flavor, e.g.
+// schemas/fdroidRelease/com.v2ray.ang.data.AppDatabase/1.json, and must be committed:
+// they are the input for auto-migrations and CI schema validation.
+room3 {
+    schemaDirectory("$projectDir/schemas")
+}
+
 aboutLibraries {
     offlineMode = true
 
@@ -211,6 +219,16 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.okhttp)
 
+    // Room 3
+    implementation(libs.androidx.room3.runtime)
+    implementation(libs.androidx.room3.paging)
+    implementation(libs.androidx.sqlite.bundled)
+    ksp(libs.androidx.room3.compiler)
+
+    // Paging 3
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
+
     // Reactive and Utility Libraries
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.core)
@@ -248,5 +266,12 @@ dependencies {
     androidTestImplementation(libs.androidx.espresso.core)
     testImplementation(libs.org.mockito.mockito.inline)
     testImplementation(libs.mockito.kotlin)
+
+    // DAO / Paging tests
+    testImplementation(libs.androidx.sqlite.bundled.jvm)
+    testImplementation(libs.androidx.room3.testing)
+    testImplementation(libs.androidx.paging.testing)
+    testImplementation(libs.kotlinx.coroutines.test)
+
     coreLibraryDesugaring(libs.desugar.jdk.libs)
 }
