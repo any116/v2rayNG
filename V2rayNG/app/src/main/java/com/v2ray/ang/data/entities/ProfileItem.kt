@@ -1,10 +1,35 @@
 package com.v2ray.ang.data.entities
 
+import androidx.room3.ColumnInfo
+import androidx.room3.Entity
+import androidx.room3.Index
+import androidx.room3.PrimaryKey
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.util.Utils
 
+@Entity(
+    tableName = "profiles",
+    indices = [
+        Index(value = ["subscriptionId", "sortOrder"]),
+        Index(value = ["dedupeKey"]),
+        Index(value = ["remarks"]),
+    ]
+)
 data class ProfileItem(
+    @PrimaryKey
+    val guid: String = "",
+
+    /** Sparse ordering within a group; drag/insert rewrites a single row. */
+    var sortOrder: Long = 0L,
+
+    /**
+     * Stable digest of duplicateIdentity() used by SQL dedupe. Empty means "not computed yet";
+     * ProfileDao.backfillDedupeKeys fills it lazily. Never set this by hand.
+     */
+    @ColumnInfo(defaultValue = "")
+    var dedupeKey: String = "",
+
     val configVersion: Int = 4,
     val configType: EConfigType,
     var subscriptionId: String = "",
@@ -76,8 +101,17 @@ data class ProfileItem(
 ) {
 
     companion object {
+        const val SORT_STEP = 1024L
+
+        /**
+         * Bump on ANY change that affects duplicateIdentity() output (new protocol field,
+         * renamed field, different JSON writer). Stored in settings as DEDUPE_ALGO_VERSION;
+         * a mismatch triggers a full backfill so old and new digests never coexist.
+         */
+        const val DEDUPE_ALGO_VERSION = 1
+
         fun create(configType: EConfigType): ProfileItem =
-            ProfileItem(configType = configType)
+            ProfileItem(guid = Utils.getUuid(), configType = configType)
     }
 
     fun getServerAddressAndPort(): String {
@@ -88,21 +122,15 @@ data class ProfileItem(
     }
 
     /**
-     * Dedicated identity for "remove duplicate configurations".
-     *
-     * Ignores metadata that does not affect connection:
-     * - configVersion
-     * - subscriptionId
-     * - addedTime
-     * - remarks
-     * - description
-     *
-     * All other fields, including configType, are included in the comparison.
-     *
-     * Returns a copy; the caller must not modify it further.
+     * Identity for "remove duplicate configurations": everything that does not affect the
+     * connection is zeroed. guid, sortOrder and dedupeKey MUST be cleared here or two rows can
+     * never compare equal. ProfileDaoTest covers each of the three.
      */
     fun duplicateIdentity(): ProfileItem =
         copy(
+            guid = "",
+            sortOrder = 0L,
+            dedupeKey = "",
             configVersion = 0,
             subscriptionId = "",
             addedTime = 0L,

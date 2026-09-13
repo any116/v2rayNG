@@ -17,12 +17,10 @@ import com.v2ray.ang.AppConfig.PREF_IS_BOOTED
 import com.v2ray.ang.AppConfig.PREF_ROUTING_RULESET
 import com.v2ray.ang.AppConfig.TAG
 import com.v2ray.ang.BuildConfig
-import com.v2ray.ang.data.entities.AssetUrlCache
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
-import com.v2ray.ang.data.entities.SubscriptionCache
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.data.entities.WebDavConfig
 import com.v2ray.ang.util.JsonUtil
@@ -255,7 +253,7 @@ object MmkvManager {
         if (json.isNullOrBlank()) {
             return null
         }
-        return JsonUtil.fromJsonSafe(json, ProfileItem::class.java)
+        return JsonUtil.fromJsonSafe(json, ProfileItem::class.java)?.copy(guid = guid)
     }
 
 
@@ -469,7 +467,7 @@ object MmkvManager {
         if (json.isNullOrBlank()) {
             return null
         }
-        return JsonUtil.fromJsonSafe(json, ServerAffiliationInfo::class.java)
+        return JsonUtil.fromJsonSafe(json, ServerAffiliationInfo::class.java)?.copy(guid = guid)
     }
 
     /**
@@ -482,7 +480,7 @@ object MmkvManager {
         if (guid.isBlank()) {
             return
         }
-        val aff = decodeServerAffiliationInfo(guid) ?: ServerAffiliationInfo()
+        val aff = decodeServerAffiliationInfo(guid) ?: ServerAffiliationInfo(guid = guid)
         aff.testDelayMillis = testResult
         serverAffStorage.encode(guid, JsonUtil.toJson(aff))
     }
@@ -643,18 +641,15 @@ object MmkvManager {
      *
      * @return The list of subscriptions.
      */
-    fun decodeSubscriptions(): List<SubscriptionCache> {
+    fun decodeSubscriptions(): List<SubscriptionItem> {
         initSubsList()
 
-        val subscriptions = mutableListOf<SubscriptionCache>()
-        decodeSubsList().forEach { key ->
+        return decodeSubsList().mapNotNull { key ->
             val json = subStorage.decodeString(key)
-            if (!json.isNullOrBlank()) {
-                val item = JsonUtil.fromJsonSafe(json, SubscriptionItem::class.java) ?: SubscriptionItem()
-                subscriptions.add(SubscriptionCache(key, item))
-            }
+            if (json.isNullOrBlank()) return@mapNotNull null
+            val item = JsonUtil.fromJsonSafe(json, SubscriptionItem::class.java) ?: SubscriptionItem()
+            item.copy(guid = key)
         }
-        return subscriptions
     }
 
     /**
@@ -696,7 +691,7 @@ object MmkvManager {
      */
     fun decodeSubscription(subscriptionId: String): SubscriptionItem? {
         val json = subStorage.decodeString(subscriptionId) ?: return null
-        return JsonUtil.fromJsonSafe(json, SubscriptionItem::class.java)
+        return JsonUtil.fromJsonSafe(json, SubscriptionItem::class.java)?.copy(guid = subscriptionId)
     }
 
     /**
@@ -731,17 +726,12 @@ object MmkvManager {
      *
      * @return The list of asset URLs.
      */
-    fun decodeAssetUrls(): List<AssetUrlCache> {
-        val assetUrlItems = mutableListOf<AssetUrlCache>()
-        assetStorage.allKeys()?.forEach { key ->
+    fun decodeAssetUrls(): List<AssetUrlItem> =
+        assetStorage.allKeys().orEmpty().mapNotNull { key ->
             val json = assetStorage.decodeString(key)
-            if (!json.isNullOrBlank()) {
-                val item = JsonUtil.fromJsonSafe(json, AssetUrlItem::class.java) ?: AssetUrlItem()
-                assetUrlItems.add(AssetUrlCache(key, item))
-            }
-        }
-        return assetUrlItems.sortedBy { it.assetUrl.addedTime }
-    }
+            if (json.isNullOrBlank()) return@mapNotNull null
+            (JsonUtil.fromJsonSafe(json, AssetUrlItem::class.java) ?: AssetUrlItem()).copy(guid = key)
+        }.sortedBy { it.addedTime }
 
     /**
      * Removes the asset URL.
@@ -771,7 +761,7 @@ object MmkvManager {
      */
     fun decodeAsset(assetid: String): AssetUrlItem? {
         val json = assetStorage.decodeString(assetid) ?: return null
-        return JsonUtil.fromJsonSafe(json, AssetUrlItem::class.java)
+        return JsonUtil.fromJsonSafe(json, AssetUrlItem::class.java)?.copy(guid = assetid)
     }
 
     //endregion
