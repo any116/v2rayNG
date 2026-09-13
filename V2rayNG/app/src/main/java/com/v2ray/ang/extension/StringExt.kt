@@ -51,3 +51,16 @@ fun String.matchesPattern(regex: Regex?, keyword: String?, ignoreCase: Boolean =
     return regex?.containsMatchIn(this)
         ?: this.contains(keyword, ignoreCase = ignoreCase)
 }
+
+/**
+ * LIKE parameter normalisation: lowercase plus wildcard escaping, matching the LOWER(col) and
+ * ESCAPE '\' in the DAO queries.
+ *
+ * SQLite's built-in LOWER() is ASCII-only. CJK and emoji are unaffected because they have no
+ * case; locale-sensitive folding (Turkish dotted I) is not supported and would need @Fts5.
+ */
+fun String.normalizeLike(): String =
+    lowercase()
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")

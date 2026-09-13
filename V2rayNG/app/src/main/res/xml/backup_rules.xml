@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android auto-backup copies databases/ but not the -wal sidecar, so a cross-device restore
+  would produce a database that is missing the most recent writes. Excluding the sidecars keeps
+  the main file self-consistent after the checkpoint.
+-->
+<full-backup-content>
+    <exclude domain="database" path="v2rayng.db-wal" />
+    <exclude domain="database" path="v2rayng.db-shm" />
+</full-backup-content>
