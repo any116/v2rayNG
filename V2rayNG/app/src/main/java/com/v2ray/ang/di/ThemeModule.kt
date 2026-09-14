@@ -2,33 +2,22 @@ package com.v2ray.ang.di
 
 import com.v2ray.ang.data.repository.ThemeRepository
 import com.v2ray.ang.data.repository.ThemeStore
+import dagger.Binds
 import dagger.Module
-import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
 /**
- * Re-exports the existing theme owner, in the same spirit as NetworkModule.
- *
- * @Provides rather than @Binds because the implementation is a Kotlin object: there is no
- * constructor for Dagger to call, and wrapping the object in a second @Singleton class is exactly
- * the "duplicate singleton" the migration plan forbids. @Singleton here only documents that the
- * graph hands out the one existing instance; it never creates one.
- *
- * The binding is not eager. Nothing may request ThemeStore before
- * AngApplication.onCreate() has run MmkvManager.initialize(), because touching the object reads
- * MMKV.
+ * @Binds now that the implementation has a constructor. The binding stays lazy: nothing may
+ * request ThemeStore before SettingsStore.refresh() has run, because construction reads the
+ * snapshot.
  */
 @Module
 @InstallIn(SingletonComponent::class)
-object ThemeModule {
+abstract class ThemeModule {
 
-    /**
-     * @return the process-wide theme state owner, the same instance ThemeManager exposes to
-     * Compose. There is deliberately no second StateFlow.
-     */
-    @Provides
+    @Binds
     @Singleton
-    fun provideThemeStore(): ThemeStore = ThemeRepository
+    abstract fun bindThemeStore(impl: ThemeRepository): ThemeStore
 }

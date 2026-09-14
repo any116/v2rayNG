@@ -10,6 +10,7 @@ import com.v2ray.ang.dto.CoreConfigContext
 import com.v2ray.ang.dto.V2rayConfig
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType
 import com.v2ray.ang.enums.EConfigType
@@ -99,7 +100,7 @@ object CoreConfigManager {
         val json = JsonUtil.parseString(raw)?.takeIf { it.isJsonObject }?.asJsonObject ?: return result
 
         // Inject or remove traffic statistics configuration based on user preference
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_SPEED_ENABLED) == true) {
+        if (Prefs.bool(AppConfig.PREF_SPEED_ENABLED) == true) {
             if (!json.has("stats")) {
                 json.add("stats", JsonObject())
             }
@@ -176,7 +177,7 @@ object CoreConfigManager {
         val primaryResolvedOutbound = configContext.resolvedOutbounds.first()
 
         val v2rayConfig = initV2rayConfig(configContext)
-        v2rayConfig.log.loglevel = MmkvManager.decodeSettingsString(AppConfig.PREF_LOGLEVEL) ?: "warning"
+        v2rayConfig.log.loglevel = Prefs.string(AppConfig.PREF_LOGLEVEL) ?: "warning"
         v2rayConfig.remarks = primaryResolvedOutbound.profile.remarks
 
         configureInbounds(v2rayConfig)
@@ -439,7 +440,7 @@ object CoreConfigManager {
      * Trim runtime sections that are not needed for latency testing.
      */
     private fun postProcessForSpeedtest(v2rayConfig: V2rayConfig) {
-        v2rayConfig.log.loglevel = MmkvManager.decodeSettingsString(AppConfig.PREF_LOGLEVEL) ?: "warning"
+        v2rayConfig.log.loglevel = Prefs.string(AppConfig.PREF_LOGLEVEL) ?: "warning"
         v2rayConfig.inbounds.clear()
         v2rayConfig.routing.rules.clear()
         v2rayConfig.dns = null
@@ -501,9 +502,9 @@ object CoreConfigManager {
         val useHev = SettingsManager.isUsingHevTun()
         val forcedByHev = vpn && useHev
         val forcedBySocksRoot = SettingsManager.isRootMode()
-                || MmkvManager.decodeSettingsBool(AppConfig.PREF_ROOT_LAN_SHARING)
+                || Prefs.bool(AppConfig.PREF_ROOT_LAN_SHARING)
 
-        val enableLocalProxy = forcedByHev || forcedBySocksRoot || MmkvManager.decodeSettingsBool(AppConfig.PREF_ENABLE_LOCAL_PROXY, true)
+        val enableLocalProxy = forcedByHev || forcedBySocksRoot || Prefs.bool(AppConfig.PREF_ENABLE_LOCAL_PROXY, true)
 
         val socksPort = SettingsManager.getSocksPort()
         val socksUsername = SettingsManager.getSocksUsername()
@@ -513,11 +514,11 @@ object CoreConfigManager {
             inbound1.settings = V2rayConfig.InboundBean.InSettingsBean()
         }
 
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) != true) {
+        if (Prefs.bool(AppConfig.PREF_PROXY_SHARING) != true) {
             inbound1.listen = AppConfig.LOOPBACK
         }
         inbound1.port = socksPort
-        inbound1.settings?.udp = MmkvManager.decodeSettingsBool(AppConfig.PREF_SOCKS_ENABLE_UDP, true)
+        inbound1.settings?.udp = Prefs.bool(AppConfig.PREF_SOCKS_ENABLE_UDP, true)
         if (socksUsername != null && socksPassword != null) {
             inbound1.settings?.auth = "password"
             inbound1.settings?.accounts = listOf(
@@ -530,12 +531,12 @@ object CoreConfigManager {
             inbound1.settings?.auth = "noauth"
             inbound1.settings?.accounts = null
         }
-        val fakedns = MmkvManager.decodeSettingsBool(AppConfig.PREF_FAKE_DNS_ENABLED) == true
+        val fakedns = Prefs.bool(AppConfig.PREF_FAKE_DNS_ENABLED) == true
         val sniffAllTlsAndHttp =
-            MmkvManager.decodeSettingsBool(AppConfig.PREF_SNIFFING_ENABLED, true) != false
+            Prefs.bool(AppConfig.PREF_SNIFFING_ENABLED, true) != false
         inbound1.sniffing?.enabled = fakedns || sniffAllTlsAndHttp
         inbound1.sniffing?.routeOnly =
-            MmkvManager.decodeSettingsBool(AppConfig.PREF_ROUTE_ONLY_ENABLED, false)
+            Prefs.bool(AppConfig.PREF_ROUTE_ONLY_ENABLED, false)
         if (!sniffAllTlsAndHttp) {
             inbound1.sniffing?.destOverride?.clear()
         }
@@ -569,8 +570,8 @@ object CoreConfigManager {
      * Enable fake DNS when local DNS and fake DNS are both enabled.
      */
     private fun configureFakeDns(v2rayConfig: V2rayConfig) {
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_LOCAL_DNS_ENABLED) == true
-            && MmkvManager.decodeSettingsBool(AppConfig.PREF_FAKE_DNS_ENABLED) == true
+        if (Prefs.bool(AppConfig.PREF_LOCAL_DNS_ENABLED) == true
+            && Prefs.bool(AppConfig.PREF_FAKE_DNS_ENABLED) == true
         ) {
             v2rayConfig.fakedns = listOf(V2rayConfig.FakednsBean())
         }
@@ -618,11 +619,11 @@ object CoreConfigManager {
      * Configure local DNS inbounds, outbounds, and routing rules.
      */
     private fun configureLocalDns(configContext: CoreConfigContext, v2rayConfig: V2rayConfig) {
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_LOCAL_DNS_ENABLED) != true) {
+        if (Prefs.bool(AppConfig.PREF_LOCAL_DNS_ENABLED) != true) {
             return
         }
 
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_FAKE_DNS_ENABLED) == true) {
+        if (Prefs.bool(AppConfig.PREF_FAKE_DNS_ENABLED) == true) {
             val geositeCn = arrayListOf(AppConfig.GEOSITE_CN)
             val routingDomains = configContext.routingDomainRules
                 .asSequence()
@@ -713,7 +714,7 @@ object CoreConfigManager {
      * Remove speed-test runtime sections when the feature is disabled.
      */
     private fun applySpeedDisabled(v2rayConfig: V2rayConfig) {
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_SPEED_ENABLED) != true) {
+        if (Prefs.bool(AppConfig.PREF_SPEED_ENABLED) != true) {
             v2rayConfig.stats = null
             v2rayConfig.policy?.system = null
         }
@@ -822,7 +823,7 @@ object CoreConfigManager {
         }
 
         //User DNS hosts
-        val userHosts = MmkvManager.decodeSettingsString(AppConfig.PREF_DNS_HOSTS)
+        val userHosts = Prefs.string(AppConfig.PREF_DNS_HOSTS)
         if (userHosts.isNotNullEmpty()) {
             val userHostsMap = userHosts?.split(",")
                 ?.filter { it.isNotEmpty() }
@@ -985,7 +986,7 @@ object CoreConfigManager {
         hosts[AppConfig.DNS_SB_DOMAIN] = AppConfig.DNS_SB_ADDRESSES
         hosts[AppConfig.DNS_YANDEX_DOMAIN] = AppConfig.DNS_YANDEX_ADDRESSES
 
-        val userHosts = MmkvManager.decodeSettingsString(AppConfig.PREF_DNS_HOSTS)
+        val userHosts = Prefs.string(AppConfig.PREF_DNS_HOSTS)
         if (userHosts.isNotNullEmpty()) {
             val userHostsMap = userHosts?.split(",").orEmpty()
                 .filter { it.isNotBlank() && it.contains(":") }
@@ -1093,14 +1094,14 @@ object CoreConfigManager {
      * Resolve outbound domains to IPs and write resolved hosts to DNS map.
      */
     private fun resolveOutboundDomainsToHosts(v2rayConfig: V2rayConfig) {
-        if (MmkvManager.decodeSettingsString(AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, "1") != "1") {
+        if (Prefs.string(AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, "1") != "1") {
             return
         }
 
         val proxyOutboundList = v2rayConfig.getAllProxyOutbound()
         val dns = v2rayConfig.dns ?: return
         val newHosts = dns.hosts?.toMutableMap() ?: mutableMapOf()
-        val preferIpv6 = MmkvManager.decodeSettingsBool(AppConfig.PREF_PREFER_IPV6) == true
+        val preferIpv6 = Prefs.bool(AppConfig.PREF_PREFER_IPV6) == true
 
         for (item in proxyOutboundList) {
             val domain = item.getServerAddress()
@@ -1191,7 +1192,7 @@ object CoreConfigManager {
     ) {
 
         v2rayConfig.routing.domainStrategy =
-            MmkvManager.decodeSettingsString(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY)
+            Prefs.string(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY)
                 ?: "AsIs"
 
         val rulesetItems = MmkvManager.decodeRoutingRulesets()
@@ -1272,10 +1273,10 @@ object CoreConfigManager {
         balancerTag: String = AppConfig.TAG_BALANCER,
         fallbackTag: String? = null,
     ): BalancerStrategy {
-        val probeUrl = MmkvManager.decodeSettingsString(AppConfig.PREF_DELAY_TEST_URL) ?: AppConfig.DELAY_TEST_URL
+        val probeUrl = Prefs.string(AppConfig.PREF_DELAY_TEST_URL) ?: AppConfig.DELAY_TEST_URL
         val leastPingInterval = decodeObservatoryDuration(AppConfig.PREF_OBSERVATORY_LEAST_PING_INTERVAL, AppConfig.OBSERVATORY_LEAST_PING_INTERVAL)
         val leastLoadInterval = decodeObservatoryDuration(AppConfig.PREF_OBSERVATORY_LEAST_LOAD_INTERVAL, AppConfig.OBSERVATORY_LEAST_LOAD_INTERVAL)
-        val leastLoadMethod = MmkvManager.decodeSettingsString(AppConfig.PREF_OBSERVATORY_LEAST_LOAD_METHOD, AppConfig.OBSERVATORY_LEAST_LOAD_METHOD)
+        val leastLoadMethod = Prefs.string(AppConfig.PREF_OBSERVATORY_LEAST_LOAD_METHOD, AppConfig.OBSERVATORY_LEAST_LOAD_METHOD)
         val leastLoadSampling = decodeObservatorySampling()
         val leastLoadTimeout = decodeObservatoryDuration(AppConfig.PREF_OBSERVATORY_LEAST_LOAD_TIMEOUT, AppConfig.OBSERVATORY_LEAST_LOAD_TIMEOUT)
         val balancer = V2rayConfig.RoutingBean.BalancerBean(
@@ -1308,7 +1309,7 @@ object CoreConfigManager {
     }
 
     private fun decodeObservatoryDuration(key: String, default: String): String {
-        val value = MmkvManager.decodeSettingsString(key)?.trim()
+        val value = Prefs.string(key)?.trim()
         return if (!value.isNullOrEmpty() && AppConfig.OBSERVATORY_DURATION_PATTERN.matches(value)) {
             value
         } else {
@@ -1317,7 +1318,7 @@ object CoreConfigManager {
     }
 
     private fun decodeObservatorySampling(): Int {
-        return MmkvManager.decodeSettingsString(AppConfig.PREF_OBSERVATORY_LEAST_LOAD_SAMPLING)
+        return Prefs.string(AppConfig.PREF_OBSERVATORY_LEAST_LOAD_SAMPLING)
             ?.trim()
             ?.toIntOrNull()
             ?.takeIf { it > 0 }

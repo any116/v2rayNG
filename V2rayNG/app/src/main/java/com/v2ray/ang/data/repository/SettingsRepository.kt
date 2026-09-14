@@ -2,9 +2,9 @@ package com.v2ray.ang.data.repository
 
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.AppConfig.VPN
+import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.enums.AppThemeMode
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.root.RootManager
 import kotlinx.coroutines.CoroutineDispatcher
@@ -106,40 +106,42 @@ data class SettingsPrefs(
 )
 
 open class SettingsRepository @Inject constructor(
+    private val settings: SettingsStore,
     private val theme: ThemeStore,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io) {
 
-    open suspend fun load(): SettingsPrefs = withIO {
+    /** Snapshot reads, no IO hop. Still suspend because the hev-tunnel repair may write. */
+    open suspend fun load(): SettingsPrefs {
         val bools = BoolPref.entries.associateWithTo(LinkedHashMap()) {
-            MmkvManager.decodeSettingsBool(it.key, it.default)
+            settings.bool(it.key, it.default)
         }
         val strings = StringPref.entries.associateWith {
-            MmkvManager.decodeSettingsString(it.key, it.default) ?: it.default
+            settings.string(it.key, it.default) ?: it.default
         }
         bools[BoolPref.DYNAMIC_COLOR] = theme.isDynamicColorEnabled()
         if (strings[StringPref.MODE] == VPN && bools[BoolPref.USE_HEV_TUNNEL] == true
             && bools[BoolPref.ENABLE_LOCAL_PROXY] != true) {
-            MmkvManager.encodeSettings(AppConfig.PREF_ENABLE_LOCAL_PROXY, true)
+            settings.putBool(AppConfig.PREF_ENABLE_LOCAL_PROXY, true)
             bools[BoolPref.ENABLE_LOCAL_PROXY] = true
         }
-        SettingsPrefs(bools, strings, theme.isDynamicColorSupported)
+        return SettingsPrefs(bools, strings, theme.isDynamicColorSupported)
     }
 
-    open suspend fun setBool(pref: BoolPref, value: Boolean) = withIO {
+    open suspend fun setBool(pref: BoolPref, value: Boolean) {
         if (pref == BoolPref.DYNAMIC_COLOR) {
             theme.setDynamicColorEnabled(value)
         } else {
-            MmkvManager.encodeSettings(pref.key, value)
+            settings.putBool(pref.key, value)
         }
         SettingsChangeManager.notifySettingChanged(pref.key)
     }
 
-    open suspend fun setString(pref: StringPref, value: String) = withIO {
+    open suspend fun setString(pref: StringPref, value: String) {
         if (pref == StringPref.UI_MODE_NIGHT) {
             theme.setThemeMode(AppThemeMode.from(value))
         } else {
-            MmkvManager.encodeSettings(pref.key, value)
+            settings.putString(pref.key, value)
         }
         SettingsChangeManager.notifySettingChanged(pref.key)
     }

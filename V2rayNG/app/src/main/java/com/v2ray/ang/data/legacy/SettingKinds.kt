@@ -51,7 +51,6 @@ internal object SettingKinds {
     )
 
     private val LONG_KEYS = setOf(
-        AppConfig.CACHE_LOGCAT_CLEARED_AT,
         AppConfig.CACHE_WIDGET_STATE_AT,
     )
 

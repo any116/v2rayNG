@@ -19,6 +19,7 @@ import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.SubscriptionCache
+import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.extension.serializable
@@ -62,6 +63,7 @@ sealed interface MainServiceEvent {
 
 open class MainRepository @Inject constructor(
     private val app: Application,
+    private val settings: SettingsStore,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io), Closeable {
 
@@ -128,25 +130,24 @@ open class MainRepository @Inject constructor(
     }
 
     open fun selectedGroupId(): String =
-        MmkvManager.decodeSettingsString(AppConfig.CACHE_SUBSCRIPTION_ID, "").orEmpty()
+        settings.string(AppConfig.CACHE_SUBSCRIPTION_ID, "").orEmpty()
 
-    open suspend fun setSelectedGroupId(id: String) = withIO {
-        MmkvManager.encodeSettings(AppConfig.CACHE_SUBSCRIPTION_ID, id)
-        Unit
+    open suspend fun setSelectedGroupId(id: String) {
+        settings.putString(AppConfig.CACHE_SUBSCRIPTION_ID, id)
     }
 
     open fun selectedGuid(): String? = MmkvManager.getSelectServer()
 
     open suspend fun setSelectedGuid(guid: String) = withIO { MmkvManager.setSelectServer(guid) }
 
-    open fun confirmRemove(): Boolean = MmkvManager.decodeSettingsBool(AppConfig.PREF_CONFIRM_REMOVE, false)
-    open fun doubleColumnDisplay(): Boolean = MmkvManager.decodeSettingsBool(AppConfig.PREF_DOUBLE_COLUMN_DISPLAY, false)
+    open fun confirmRemove(): Boolean = settings.bool(AppConfig.PREF_CONFIRM_REMOVE, false)
+    open fun doubleColumnDisplay(): Boolean = settings.bool(AppConfig.PREF_DOUBLE_COLUMN_DISPLAY, false)
     open fun isVpnMode(): Boolean = SettingsManager.isVpnMode()
-    open fun isProxySharing(): Boolean = MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)
+    open fun isProxySharing(): Boolean = settings.bool(AppConfig.PREF_PROXY_SHARING)
     open fun promotionUrl(): String = "${Utils.decode(AppConfig.APP_PROMOTION_URL)}?t=${System.currentTimeMillis()}"
 
     private fun isGroupAllDisplayEnabled(): Boolean =
-        MmkvManager.decodeSettingsBool(AppConfig.PREF_GROUP_ALL_DISPLAY)
+        settings.bool(AppConfig.PREF_GROUP_ALL_DISPLAY)
 
     private val cache = mutableMapOf<String, List<ServerRowItem>>()
     private val cacheMutex = Mutex()

@@ -8,6 +8,7 @@ import com.v2ray.ang.util.LogUtil
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -17,6 +18,11 @@ import javax.inject.Singleton
 
 /**
  * In-process synchronous snapshot of scalar preferences.
+ *
+ * Reads are synchronous, non blocking and never touch the database; refresh() must have run
+ * first. Writes are suspend and poke the local snapshot immediately. Cross process consistency
+ * is eventual: other processes catch up through the settings table invalidation. Paths that
+ * need a strong guarantee (core startup) call refresh() explicitly as their first step.
  */
 @Singleton
 class SettingsStore @Inject constructor(
@@ -27,6 +33,9 @@ class SettingsStore @Inject constructor(
 
     private val snapshot = ConcurrentHashMap<String, String>()
     private val ready = AtomicBoolean(false)
+
+    /** Owns fire and forget writes issued from non suspend call sites. */
+    private val writeScope = CoroutineScope(SupervisorJob() + io)
 
     val isReady: Boolean get() = ready.get()
 
@@ -44,6 +53,17 @@ class SettingsStore @Inject constructor(
         db.invalidationTracker.createFlow(TABLE, emitInitialState = false).collect { refresh() }
     }
 
+    /**
+     * Writes the coded defaults for keys that are absent or blank. Replaces
+     * SettingsManager.ensureDefaultSettings(); call it once, right after refresh().
+     */
+    suspend fun seedDefaults() {
+        val missing = SettingsDefaults.ENTRIES.filter { read(it.key).isNullOrBlank() }
+        if (missing.isEmpty()) return
+        dao.upsertAll(missing.map { SettingsEntry(it.key, it.value, it.kind) })
+        missing.forEach { snapshot[it.key] = it.value }
+    }
+
     private fun read(key: String): String? {
         if (!ready.get()) {
             LogUtil.w(AppConfig.TAG, "SettingsStore read before refresh(): $key")
@@ -53,6 +73,8 @@ class SettingsStore @Inject constructor(
     }
 
     // ---- Synchronous reads, one to one with MmkvManager.decodeSettingsXxx ----
+
+    fun contains(key: String): Boolean = read(key) != null
 
     fun bool(key: String, default: Boolean = false): Boolean =
         read(key)?.toBooleanStrictOrNull() ?: default
@@ -90,6 +112,30 @@ class SettingsStore @Inject constructor(
         poke(key, value)
     }
 
+    // ---- Fire and forget writes ----
+
+    /**
+     * For object singletons that persist a preference from a non suspend callback (locale
+     * handoff, widget state). The snapshot is updated before the coroutine is scheduled, so a
+     * synchronous read right after this call already sees the new value.
+     */
+    fun writeAsync(key: String, value: String?, kind: String): Job {
+        poke(key, value)
+        return writeScope.launch {
+            runCatching { put(key, value, kind) }
+                .onFailure { LogUtil.e(AppConfig.TAG, "Failed to persist setting $key", it) }
+        }
+    }
+
+    fun setBoolAsync(key: String, value: Boolean) = writeAsync(key, value.toString(), KIND_BOOL)
+
+    fun setStringAsync(key: String, value: String?) = writeAsync(key, value, KIND_STRING)
+
+    fun setIntAsync(key: String, value: Int) = writeAsync(key, value.toString(), KIND_INT)
+
+    fun setLongAsync(key: String, value: Long) = writeAsync(key, value.toString(), KIND_LONG)
+
+    /** Memory only patch, for writes that happen inside another DAO transaction. */
     fun poke(key: String, value: String?) {
         if (value == null) snapshot.remove(key) else snapshot[key] = value
     }

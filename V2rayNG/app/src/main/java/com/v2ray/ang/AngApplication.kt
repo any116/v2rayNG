@@ -7,11 +7,16 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.v2ray.ang.AppConfig.ANG_PACKAGE
+import com.v2ray.ang.data.SettingsStore
+import com.v2ray.ang.di.ApplicationScope
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.compose.ThemeManager
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -30,33 +35,43 @@ class AngApplication : Application() {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
-    /**
-     * Attaches the base context to the application.
-     * @param base The base context.
-     */
+    @Inject
+    lateinit var settings: SettingsStore
+
+    @Inject
+    @ApplicationScope
+    lateinit var appScope: CoroutineScope
+
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base?.let(ContextCompat::getContextForLanguage))
         application = this
     }
 
-    /**
-     * Initializes the application.
-     */
     override fun onCreate() {
-        // Hilt field injection runs inside this call; workerFactory is unusable before it returns.
+        // Hilt field injection runs inside this call; injected fields are unusable before it returns.
         super.onCreate()
 
+        // Still required: MmkvLegacyReader opens the legacy stores during the first database
+        // creation, which can happen on any thread in any process. Moves into the reader itself
+        // once the MMKV dependency is dropped.
         MmkvManager.initialize(this)
+
+        // The only runBlocking in the project. It replaces the previous MMKV mmap and is one
+        // SELECT over a few dozen rows. It must never read profiles.
+        runBlocking {
+            settings.refresh()
+            settings.seedDefaults()
+        }
+        settings.observe(appScope)
 
         AppLocaleManager.initialize(this)
 
-        // Initialize WorkManager with the custom configuration
         WorkManager.initialize(this, buildWorkManagerConfiguration())
 
-        // Ensure critical preference defaults are present in MMKV early
-        SettingsManager.initApp(this)
+        // Routing presets need the database, so they are seeded off the main thread. The call is
+        // idempotent and also runs at the head of the core startup sequence.
+        appScope.launch { SettingsManager.ensureRoutingRulesets(this@AngApplication) }
 
-        // Initialize theme state from MMKV
         ThemeManager.refresh()
     }
 
