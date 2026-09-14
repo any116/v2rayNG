@@ -15,6 +15,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreServiceManager
 import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.extension.toSpeedString
 import com.v2ray.ang.ui.main.MainActivity
@@ -44,7 +45,7 @@ object NotificationManager {
      * @param currentConfig The current profile configuration.
      */
     fun startSpeedNotification() {
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_SPEED_ENABLED) != true) return
+        if (Prefs.bool(AppConfig.PREF_SPEED_ENABLED) != true) return
         if (speedNotificationJob != null || CoreServiceManager.isRunning() == false) return
 
         var lastZeroSpeed = false

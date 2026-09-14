@@ -3,6 +3,7 @@ package com.v2ray.ang.handler
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.IPAPIInfo
 import com.v2ray.ang.dto.UrlContentRequest
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
@@ -54,7 +55,7 @@ object SpeedtestManager {
     }
 
     fun getRemoteIPInfo(): RemoteEndpointInfo? {
-        val url = MmkvManager.decodeSettingsString(AppConfig.PREF_IP_API_URL)
+        val url = Prefs.string(AppConfig.PREF_IP_API_URL)
             .takeIf { !it.isNullOrBlank() } ?: AppConfig.IP_API_URL
 
         val proxyUsername = SettingsManager.getSocksUsername()

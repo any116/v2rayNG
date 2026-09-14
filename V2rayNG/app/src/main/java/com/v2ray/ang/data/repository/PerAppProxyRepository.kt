@@ -2,10 +2,10 @@ package com.v2ray.ang.data.repository
 
 import android.app.Application
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.AppInfo
 import com.v2ray.ang.dto.UrlContentRequest
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.HttpUtil
@@ -23,6 +23,7 @@ data class PerAppProxyPreferences(
 open class PerAppProxyRepository @Inject constructor(
     private val app: Application,
     private val appList: AppListRepository,
+    private val settings: SettingsStore,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io) {
 
@@ -37,8 +38,7 @@ open class PerAppProxyRepository @Inject constructor(
 
     /**
      * "Select all" of this screen is a toggle, unlike the picker's additive one: when every
-     * visible row is already checked it clears them instead, which is the behaviour the menu item
-     * has always had here.
+     * visible row is already checked it clears them instead.
      *
      * @param visible only the rows currently passing the filter, so a search narrows the scope
      */
@@ -53,10 +53,8 @@ open class PerAppProxyRepository @Inject constructor(
         appList.invert(current, visible)
 
     /**
-     * Derives the checked set from a proxy-package list.
-     *
-     * Runs off the main thread because it is a substring scan of the whole list text for every
-     * installed package.
+     * Derives the checked set from a proxy-package list. Runs off the main thread because it is
+     * a substring scan of the whole list text for every installed package.
      *
      * @param bypassApps when in bypass mode the meaning inverts: check what must NOT be proxied
      * @param forceGoogleApps treat `com.google.*` as proxied, except the system WebView
@@ -73,23 +71,21 @@ open class PerAppProxyRepository @Inject constructor(
     // ---------- Persisted state ----------
 
     open fun loadPreferences() = PerAppProxyPreferences(
-        selected = MmkvManager.decodeSettingsStringSet(AppConfig.PREF_PER_APP_PROXY_SET)
-            ?.toSet()
-            .orEmpty(),
-        perAppProxyEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY, false),
-        bypassMode = MmkvManager.decodeSettingsBool(AppConfig.PREF_BYPASS_APPS, false)
+        selected = settings.stringSet(AppConfig.PREF_PER_APP_PROXY_SET),
+        perAppProxyEnabled = settings.bool(AppConfig.PREF_PER_APP_PROXY, false),
+        bypassMode = settings.bool(AppConfig.PREF_BYPASS_APPS, false)
     )
 
     open suspend fun saveSelection(selection: Set<String>) {
-        withIO { MmkvManager.encodeSettings(AppConfig.PREF_PER_APP_PROXY_SET, selection.toMutableSet()) }
+        settings.putStringSet(AppConfig.PREF_PER_APP_PROXY_SET, selection)
     }
 
     open suspend fun setPerAppProxyEnabled(enabled: Boolean) {
-        withIO { MmkvManager.encodeSettings(AppConfig.PREF_PER_APP_PROXY, enabled) }
+        settings.putBool(AppConfig.PREF_PER_APP_PROXY, enabled)
     }
 
     open suspend fun setBypassMode(enabled: Boolean) {
-        withIO { MmkvManager.encodeSettings(AppConfig.PREF_BYPASS_APPS, enabled) }
+        settings.putBool(AppConfig.PREF_BYPASS_APPS, enabled)
     }
 
     /**
@@ -97,7 +93,7 @@ open class PerAppProxyRepository @Inject constructor(
      * running service).
      */
     open suspend fun notifyRestartService() {
-        withIO { SettingsChangeManager.makeRestartService() }
+        SettingsChangeManager.makeRestartService()
     }
 
     // ---------- Recommended list ----------
@@ -143,8 +139,7 @@ open class PerAppProxyRepository @Inject constructor(
      * Serialises the selection - the current mode on the first line, then one package per line,
      * byte-compatible with the exports produced before the migration - and writes it out.
      *
-     * @return `false` when the clipboard rejected the write, so the caller can report a failure
-     *   instead of a silent success
+     * @return `false` when the clipboard rejected the write
      */
     open suspend fun exportSelection(bypassMode: Boolean, selection: Set<String>): Boolean = withIO {
         val payload = buildString {

@@ -2,8 +2,8 @@ package com.v2ray.ang.data.repository
 
 import android.app.Application
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.di.IoDispatcher
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher
@@ -18,6 +18,7 @@ import javax.inject.Inject
 /** Reads logd through ProcessBuilder and writes exports into the app cache dir. */
 open class LogcatRepository @Inject constructor(
     private val app: Application,
+    private val settings: SettingsStore,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io) {
 
@@ -43,29 +44,29 @@ open class LogcatRepository @Inject constructor(
      *
      * @return always true - from the user's point of view the screen is now empty and stays empty.
      */
-    open suspend fun clear(): Boolean = runIO(true) {
-        var process: Process? = null
-        try {
-            process = ProcessBuilder(listOf(CMD_LOGCAT, "-c")).redirectErrorStream(true).start()
-            // Drain before waiting, otherwise a full pipe would block the child forever.
-            process.inputStream.use { it.readBytes() }
-            process.waitFor()
-        } catch (e: Exception) {
-            // Expected on most retail devices: logd rejects unprivileged clears. There is no
-            // suspension point inside this block, so no CancellationException can be swallowed.
-            LogUtil.w(AppConfig.TAG, "logcat -c refused, falling back to a local baseline", e)
-        } finally {
-            process?.destroy()
+    open suspend fun clear(): Boolean {
+        runIO(Unit) {
+            var process: Process? = null
+            try {
+                process = ProcessBuilder(listOf(CMD_LOGCAT, "-c")).redirectErrorStream(true).start()
+                // Drain before waiting, otherwise a full pipe would block the child forever.
+                process.inputStream.use { it.readBytes() }
+                process.waitFor()
+            } catch (e: Exception) {
+                // Expected on most retail devices: logd rejects unprivileged clears.
+                LogUtil.w(AppConfig.TAG, "logcat -c refused, falling back to a local baseline", e)
+            } finally {
+                process?.destroy()
+            }
         }
-        MmkvManager.encodeSettings(AppConfig.CACHE_LOGCAT_CLEARED_AT, stampForNextRead())
-        true
+        settings.putString(AppConfig.CACHE_LOGCAT_CLEARED_AT, stampForNextRead())
+        return true
     }
 
     /**
      * Writes the given lines into a shareable cache file, wiping previous exports.
      *
-     * @return absolute path of the export, or null when it could not be written. A path keeps
-     * `java.io.File` out of the ViewModel.
+     * @return absolute path of the export, or null when it could not be written
      */
     open suspend fun writeShareFile(lines: List<String>): String? = runIO(null) {
         val dir = File(app.cacheDir, SHARE_DIR_NAME).apply {
@@ -89,7 +90,6 @@ open class LogcatRepository @Inject constructor(
 
     /**
      * Runs the command and returns at most [MAX_LINES] lines, newest first.
-     * A ring buffer keeps the footprint constant even if the command ignores `-t`.
      * Exceptions are intentionally not caught here: [runIO] logs them and applies the fallback.
      */
     private suspend fun exec(command: List<String>): List<String> {
@@ -113,14 +113,13 @@ open class LogcatRepository @Inject constructor(
     }
 
     /** The stored baseline, or null when it is absent or malformed. */
-    private fun baseline(): String? = MmkvManager
-        .decodeSettingsString(AppConfig.CACHE_LOGCAT_CLEARED_AT)
+    private fun baseline(): String? = settings
+        .string(AppConfig.CACHE_LOGCAT_CLEARED_AT)
         ?.takeIf { STAMP_PATTERN.matches(it) }
         ?.takeIf { stamp ->
             try {
                 val parsed = SimpleDateFormat(STAMP_FORMAT, Locale.US).parse(stamp)
-                val now = Date()
-                val diff = now.time - parsed.time
+                val diff = Date().time - parsed.time
                 diff in 0..365L * 24 * 60 * 60 * 1000
             } catch (_: Exception) { false }
         }

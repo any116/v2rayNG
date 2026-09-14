@@ -12,6 +12,7 @@ import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
@@ -183,10 +184,10 @@ class CoreTestService : Service() {
 
     private fun applyPostProcessing(subscriptionId: String) {
         if (subscriptionId.isEmpty()) return
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
+        if (Prefs.bool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
             AngConfigManager.removeInvalidServer(subscriptionId)
         }
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)) {
+        if (Prefs.string(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)) {
             AngConfigManager.sortByTestResultsForSub(subscriptionId)
         }
     }

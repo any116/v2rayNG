@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.UserManager
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.LauncherManager
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.util.LogUtil
@@ -45,7 +46,7 @@ class BootReceiver : BroadcastReceiver() {
             }
         }
 
-        if (!MmkvManager.decodeStartOnBoot()) {
+        if (!Prefs.bool(AppConfig.PREF_IS_BOOTED, false)) {
             LogUtil.i(AppConfig.TAG, "BootReceiver: Auto-start on boot is disabled")
             return
         }

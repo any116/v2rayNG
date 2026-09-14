@@ -9,6 +9,7 @@ import androidx.work.multiprocess.RemoteWorkManager
 import androidx.work.workDataOf
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.util.LogUtil
 import java.util.concurrent.TimeUnit
 
@@ -111,13 +112,10 @@ object SubscriptionUpdater {
     private const val WORKER_SCHEMA_VERSION = 2
 
     private fun needsWorkerMigration(): Boolean =
-        MmkvManager.decodeSettingsString(AppConfig.CACHE_WORKER_SCHEMA_VERSION)
-            ?.toIntOrNull() != WORKER_SCHEMA_VERSION
+        Prefs.string(AppConfig.CACHE_WORKER_SCHEMA_VERSION)?.toIntOrNull() != WORKER_SCHEMA_VERSION
 
-    private fun markWorkerMigrated() = MmkvManager.encodeSettings(
-        AppConfig.CACHE_WORKER_SCHEMA_VERSION,
-        WORKER_SCHEMA_VERSION.toString()
-    )
+    private fun markWorkerMigrated() =
+        Prefs.setString(AppConfig.CACHE_WORKER_SCHEMA_VERSION, WORKER_SCHEMA_VERSION.toString())
 
     // -------------------------------------------------------------------------
     // Internal scheduling logic

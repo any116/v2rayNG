@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.ParcelFileDescriptor
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.contracts.Tun2SocksControl
-import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.LogUtil
 import java.io.File
@@ -73,7 +73,7 @@ class TProxyService(
             appendLine("  mtu: ${SettingsManager.getVpnMtu()}")
             appendLine("  ipv4: ${vpnConfig.ipv4Client}")
 
-            if (MmkvManager.decodeSettingsBool(AppConfig.PREF_IPV6_ENABLED)) {
+            if (Prefs.bool(AppConfig.PREF_IPV6_ENABLED)) {
                 appendLine("  ipv6: '${vpnConfig.ipv6Client}'")
             }
 
@@ -87,7 +87,7 @@ class TProxyService(
             }
 
             // Read-write timeout settings
-            val timeoutSetting = MmkvManager.decodeSettingsString(AppConfig.PREF_HEV_TUNNEL_RW_TIMEOUT) ?: AppConfig.HEVTUN_RW_TIMEOUT
+            val timeoutSetting = Prefs.string(AppConfig.PREF_HEV_TUNNEL_RW_TIMEOUT) ?: AppConfig.HEVTUN_RW_TIMEOUT
             val parts = timeoutSetting.split(",")
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
@@ -97,7 +97,7 @@ class TProxyService(
             appendLine("misc:")
             appendLine("  tcp-read-write-timeout: ${tcpTimeout * 1000}")
             appendLine("  udp-read-write-timeout: ${udpTimeout * 1000}")
-            appendLine("  log-level: ${MmkvManager.decodeSettingsString(AppConfig.PREF_HEV_TUNNEL_LOGLEVEL) ?: "warn"}")
+            appendLine("  log-level: ${Prefs.string(AppConfig.PREF_HEV_TUNNEL_LOGLEVEL) ?: "warn"}")
         }
     }
 

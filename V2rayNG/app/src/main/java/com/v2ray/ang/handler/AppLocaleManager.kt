@@ -10,16 +10,15 @@ import androidx.core.app.LocaleManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.os.ConfigurationCompat
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.enums.Language
+import com.v2ray.ang.util.LogUtil
 
 /**
  * Keeps the legacy in-app language preference synchronized with Android's per-app locale APIs.
  */
 object AppLocaleManager {
 
-    /**
-     * Migrates the existing MMKV language preference and restores it before the first activity.
-     */
     fun initialize(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Api33.prepareMigration(context)
@@ -28,9 +27,7 @@ object AppLocaleManager {
         }
     }
 
-    /**
-     * Completes the one-time handoff after AppCompat has attached the activity context.
-     */
+    /** Completes the one-time handoff after AppCompat has attached the activity context. */
     fun onActivityCreated(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Api33.completeMigration(context)
@@ -39,18 +36,13 @@ object AppLocaleManager {
         }
     }
 
-    /**
-     * Applies a language selected in the app and lets AppCompat recreate the current activity.
-     */
     fun setApplicationLanguage(languageCode: String) {
         val language = Language.fromCode(languageCode)
         persistLegacyPreference(language)
         AppCompatDelegate.setApplicationLocales(language.toLocaleList())
     }
 
-    /**
-     * Returns a context suitable for resource access outside AppCompatActivity.
-     */
+    /** Returns a context suitable for resource access outside AppCompatActivity. */
     fun localizedContext(context: Context): Context {
         val localizedContext = ContextCompat.getContextForLanguage(context)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU || localizedContext !== context) {
@@ -58,7 +50,7 @@ object AppLocaleManager {
         }
 
         // During the one-time upgrade from the old picker, AppCompat has not written its locale
-        // record yet. Use the still-current MMKV value for non-activity contexts on that launch.
+        // record yet. Use the still-current stored value for non-activity contexts on that launch.
         val language = storedLanguage()
         language.locale ?: return context
         val configuration = Configuration(context.resources.configuration)
@@ -78,28 +70,29 @@ object AppLocaleManager {
         }
     }
 
-    private fun storedLanguage(): Language = Language.fromCode(
-        MmkvManager.decodeSettingsString(AppConfig.PREF_LANGUAGE) ?: Language.AUTO.code
-    )
+    private fun storedLanguage(): Language =
+        Language.fromCode(Prefs.string(AppConfig.PREF_LANGUAGE) ?: Language.AUTO.code)
 
     private fun syncLegacyPreference(languageTag: String?) {
         persistLegacyPreference(Language.fromLanguageTag(languageTag))
     }
 
     private fun persistLegacyPreference(language: Language) {
-        val current = MmkvManager.decodeSettingsString(AppConfig.PREF_LANGUAGE)
-        if (current != language.code) {
-            MmkvManager.encodeSettings(AppConfig.PREF_LANGUAGE, language.code)
-            SettingsChangeManager.notifySettingChanged(AppConfig.PREF_LANGUAGE)
+        // An unready snapshot reads as absent, which resolves to AUTO. Persisting that would
+        // destroy the real preference, so skip the write instead.
+        if (!Prefs.isReady) {
+            LogUtil.w(AppConfig.TAG, "Skipped locale write, settings snapshot not ready")
+            return
         }
+        if (Prefs.string(AppConfig.PREF_LANGUAGE) == language.code) return
+        Prefs.setString(AppConfig.PREF_LANGUAGE, language.code)
+        SettingsChangeManager.notifySettingChanged(AppConfig.PREF_LANGUAGE)
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private object Api33 {
         fun prepareMigration(context: Context) {
-            if (MmkvManager.decodeSettingsBool(AppConfig.PREF_APP_LOCALE_MIGRATED, false)) {
-                return
-            }
+            if (Prefs.bool(AppConfig.PREF_APP_LOCALE_MIGRATED, false)) return
 
             val localeManager = context.getSystemService(LocaleManager::class.java)
             val applicationLocales = localeManager.applicationLocales
@@ -119,7 +112,7 @@ object AppLocaleManager {
 
         fun completeMigration(context: Context) {
             val localeManager = context.getSystemService(LocaleManager::class.java)
-            if (!MmkvManager.decodeSettingsBool(AppConfig.PREF_APP_LOCALE_MIGRATED, false)) {
+            if (!Prefs.bool(AppConfig.PREF_APP_LOCALE_MIGRATED, false)) {
                 val frameworkLanguage = Language.fromLanguageTag(
                     localeManager.applicationLocales.get(0)?.toLanguageTag()
                 )
@@ -130,7 +123,7 @@ object AppLocaleManager {
                 // Activity.onCreate(), including on Android 13 and newer.
                 AppCompatDelegate.setApplicationLocales(language.toLocaleList())
                 persistLegacyPreference(language)
-                MmkvManager.encodeSettings(AppConfig.PREF_APP_LOCALE_MIGRATED, true)
+                Prefs.setBool(AppConfig.PREF_APP_LOCALE_MIGRATED, true)
                 return
             }
 

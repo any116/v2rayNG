@@ -23,8 +23,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.v2ray.ang.AngApplication
+import com.v2ray.ang.data.repository.ThemeStore
+import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.enums.AppThemeMode
-import com.v2ray.ang.data.repository.ThemeRepository
 import kotlinx.coroutines.flow.StateFlow
 
 // Light color scheme with color comments
@@ -159,19 +161,23 @@ val LocalAppColors = staticCompositionLocalOf { LightSemanticColors }
 val LocalDarkTheme = staticCompositionLocalOf { false }
 
 /**
- * UI-facing facade over [ThemeRepository], which owns the single source of truth for theming.
- * Kept as an object so existing call sites (Application bootstrap, settings screen) stay valid.
+ * UI-facing facade over [ThemeStore]. Kept as an object so existing call sites (application
+ * bootstrap, settings screen) stay valid; the instance itself comes from the Hilt graph.
  */
 object ThemeManager {
-    val mode: StateFlow<AppThemeMode> = ThemeRepository.themeMode
-    val dynamicColorEnabled: StateFlow<Boolean> = ThemeRepository.dynamicColorEnabled
-    val isDynamicColorSupported: Boolean get() = ThemeRepository.isDynamicColorSupported
+    private val store: ThemeStore by lazy {
+        PlatformDependencies.themeStore(AngApplication.application)
+    }
 
-    fun setMode(mode: AppThemeMode) = ThemeRepository.setThemeMode(mode)
+    val mode: StateFlow<AppThemeMode> get() = store.themeMode
+    val dynamicColorEnabled: StateFlow<Boolean> get() = store.dynamicColorEnabled
+    val isDynamicColorSupported: Boolean get() = store.isDynamicColorSupported
 
-    fun setDynamicColorEnabled(enabled: Boolean) = ThemeRepository.setDynamicColorEnabled(enabled)
+    fun setMode(mode: AppThemeMode) = store.setThemeModeAsync(mode)
 
-    fun refresh() = ThemeRepository.refresh()
+    fun setDynamicColorEnabled(enabled: Boolean) = store.setDynamicColorEnabledAsync(enabled)
+
+    fun refresh() = store.refresh()
 }
 
 /**

@@ -2,6 +2,7 @@ package com.v2ray.ang.handler
 
 import android.content.Context
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.enums.WidgetRunState
 import com.v2ray.ang.helper.MessageHelper
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,9 +12,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
-/**
- * Switch state for the home screen widget.
- */
+/** Switch state for the home screen widget. */
 object WidgetStateManager {
 
     /** A command that is never answered must not block the switch forever. */
@@ -24,9 +23,13 @@ object WidgetStateManager {
 
     val state: StateFlow<WidgetRunState> get() = flow.asStateFlow()
 
+    /**
+     * Both writes are asynchronous but patch the snapshot first, so the synchronous reads in
+     * restore() and stateAt() are correct immediately after this returns.
+     */
     fun publish(state: WidgetRunState) {
-        MmkvManager.encodeSettings(AppConfig.CACHE_WIDGET_STATE, state.name)
-        MmkvManager.encodeSettings(AppConfig.CACHE_WIDGET_STATE_AT, System.currentTimeMillis())
+        Prefs.setString(AppConfig.CACHE_WIDGET_STATE, state.name)
+        Prefs.setLong(AppConfig.CACHE_WIDGET_STATE_AT, System.currentTimeMillis())
         flow.value = state
     }
 
@@ -81,12 +84,11 @@ object WidgetStateManager {
     }
 
     private fun restore(): WidgetRunState {
-        val stored = WidgetRunState.from(MmkvManager.decodeSettingsString(AppConfig.CACHE_WIDGET_STATE))
+        val stored = WidgetRunState.from(Prefs.string(AppConfig.CACHE_WIDGET_STATE))
         if (!stored.isPending) return stored
         val age = System.currentTimeMillis() - stateAt()
         return if (age in 0..PENDING_TIMEOUT_MS) stored else WidgetRunState.UNKNOWN
     }
 
-    private fun stateAt(): Long =
-        MmkvManager.decodeSettingsLong(AppConfig.CACHE_WIDGET_STATE_AT, 0L)
+    private fun stateAt(): Long = Prefs.long(AppConfig.CACHE_WIDGET_STATE_AT, 0L)
 }

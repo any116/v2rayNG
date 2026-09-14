@@ -3,7 +3,8 @@ package com.v2ray.ang.di
 import javax.inject.Qualifier
 
 /**
- * Marks the dispatcher used for blocking work: MMKV, files, network, PackageManager, root shell.
+ * Marks the dispatcher used for blocking work: database, files, network, PackageManager,
+ * root shell.
  *
  * The qualifier exists so a repository never hard-codes [kotlinx.coroutines.Dispatchers.IO];
  * unit tests inject a deterministic dispatcher instead of relying on a real thread pool.
@@ -22,3 +23,14 @@ annotation class IoDispatcher
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class DefaultDispatcher
+
+/**
+ * Marks the process lifetime CoroutineScope owned by the application.
+ *
+ * Reserved for work that must outlive any screen and has no other owner, currently only the
+ * cross process settings snapshot subscription. Anything screen scoped belongs in
+ * viewModelScope, anything service scoped in that service's own scope.
+ */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope
