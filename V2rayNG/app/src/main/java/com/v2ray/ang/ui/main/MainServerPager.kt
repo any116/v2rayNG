@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
@@ -28,7 +26,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,12 +36,14 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemContentType
+import androidx.paging.compose.itemKey
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.enums.EConfigType
-import com.v2ray.ang.ui.compose.LocalAppColors
 import com.v2ray.ang.ui.compose.ItemDivider
+import com.v2ray.ang.ui.compose.LocalAppColors
 import com.v2ray.ang.ui.compose.ReorderableGridItem
 import com.v2ray.ang.ui.compose.ReorderableListItem
 import com.v2ray.ang.ui.compose.verticalScrollbar
@@ -73,8 +72,8 @@ fun GroupPagerPage(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier
 ) {
-    val rows by remember(groupId, handles) { handles.slices.servers(groupId) }
-        .collectAsStateWithLifecycle()
+    val items = remember(groupId, handles) { handles.slices.servers(groupId) }
+        .collectAsLazyPagingItems()
     val callbacks = remember(handles) {
         ServerRowCallbacks(
             onSelect = { guid -> handles.dispatch(MainAction.SelectServer(guid)) },
@@ -89,7 +88,8 @@ fun GroupPagerPage(
         val gridState = remember(handles, groupId) { handles.scrollStates.grid(groupId) }
         val reorderable = if (canReorder) {
             rememberReorderableLazyGridState(gridState) { from, to ->
-                handles.dispatch(MainAction.MoveServer(groupId, from.index, to.index))
+                val moved = from.key as? String ?: return@rememberReorderableLazyGridState
+                handles.dispatch(MainAction.MoveServer(groupId, moved, to.index))
             }
         } else null
         LazyVerticalGrid(
@@ -99,28 +99,34 @@ fun GroupPagerPage(
             contentPadding = contentPadding
         ) {
             items(
-                items = rows,
-                key = { it.guid },
-                contentType = { ServerRowContentType }
-            ) { row ->
-                val content: @Composable () -> Unit = {
-                    Column {
-                        ServerRow(row, row.guid == selectedGuid, showBadge, true, callbacks)
-                        ItemDivider()
+                count = items.itemCount,
+                key = items.itemKey { it.guid },
+                contentType = items.itemContentType { ServerRowContentType }
+            ) { index ->
+                val row = items[index]
+                if (row == null) {
+                    ServerRowPlaceholder()
+                } else {
+                    val content: @Composable () -> Unit = {
+                        Column {
+                            ServerRow(row, row.guid == selectedGuid, showBadge, true, callbacks)
+                            ItemDivider()
+                        }
                     }
+                    if (reorderable != null) {
+                        ReorderableItem(reorderable, key = row.guid) { isDragging ->
+                            ReorderableGridItem(scope = this, isDragging = isDragging) { content() }
+                        }
+                    } else content()
                 }
-                if (reorderable != null) {
-                    ReorderableItem(reorderable, key = row.guid) { isDragging ->
-                        ReorderableGridItem(scope = this, isDragging = isDragging) { content() }
-                    }
-                } else content()
             }
         }
     } else {
         val listState = remember(handles, groupId) { handles.scrollStates.list(groupId) }
         val reorderable = if (canReorder) {
             rememberReorderableLazyListState(listState) { from, to ->
-                handles.dispatch(MainAction.MoveServer(groupId, from.index, to.index))
+                val moved = from.key as? String ?: return@rememberReorderableLazyListState
+                handles.dispatch(MainAction.MoveServer(groupId, moved, to.index))
             }
         } else null
         LazyColumn(
@@ -129,21 +135,26 @@ fun GroupPagerPage(
             contentPadding = contentPadding
         ) {
             items(
-                items = rows,
-                key = { it.guid },
-                contentType = { ServerRowContentType }
-            ) { row ->
-                val content: @Composable () -> Unit = {
-                    Column {
-                        ServerRow(row, row.guid == selectedGuid, showBadge, false, callbacks)
-                        ItemDivider()
+                count = items.itemCount,
+                key = items.itemKey { it.guid },
+                contentType = items.itemContentType { ServerRowContentType }
+            ) { index ->
+                val row = items[index]
+                if (row == null) {
+                    ServerRowPlaceholder()
+                } else {
+                    val content: @Composable () -> Unit = {
+                        Column {
+                            ServerRow(row, row.guid == selectedGuid, showBadge, false, callbacks)
+                            ItemDivider()
+                        }
                     }
+                    if (reorderable != null) {
+                        ReorderableItem(reorderable, key = row.guid) { isDragging ->
+                            ReorderableListItem(scope = this, isDragging = isDragging) { content() }
+                        }
+                    } else content()
                 }
-                if (reorderable != null) {
-                    ReorderableItem(reorderable, key = row.guid) { isDragging ->
-                        ReorderableListItem(scope = this, isDragging = isDragging) { content() }
-                    }
-                } else content()
             }
         }
     }
@@ -157,6 +168,35 @@ class ServerRowCallbacks(
     val onMore: (String, EConfigType) -> Unit,
     val onRemove: (String) -> Unit
 )
+
+/**
+ * Mirrors the ServerRow skeleton so the scrollbar does not jump while a page loads:
+ * icon-button row height plus three text lines at the same styles.
+ */
+@Composable
+private fun ServerRowPlaceholder(modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            Spacer(Modifier.width(SelectionGutterWidth))
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+            ) {
+                Box(Modifier.height(RowIconButtonSize))
+                Spacer(Modifier.height(RowLineSpacing))
+                Text("", style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                Spacer(Modifier.height(RowLineSpacing))
+                Text("", style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            }
+        }
+        ItemDivider()
+    }
+}
 
 @Composable
 private fun ServerRow(

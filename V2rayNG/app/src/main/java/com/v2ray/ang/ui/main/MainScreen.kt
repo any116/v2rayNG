@@ -36,7 +36,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 private val ListBottomPadding = 80.dp
 private const val LocateViewportDivisor = 3
 private const val LocateLayoutTimeoutMs = 600L
-private const val LocateDataTimeoutMs = 500L
 
 @Composable
 fun MainScreen(
@@ -200,44 +199,43 @@ private fun MainContent(
             }
     }
 
+    /** The row index is computed in SQL, so no list scan and no wait for data is needed here. */
     LaunchedEffect(locateTarget) {
         val target = locateTarget ?: return@LaunchedEffect
         try {
-            val groupId = target.groupId
-            val serverGuid = target.serverGuid
-
-            val index = groups.indexOfFirst { it.id == groupId }
-            if (index !in 0 until pagerState.pageCount) return@LaunchedEffect
-            if (pagerState.settledPage != index) {
-                pagerState.scrollToPage(index)
-            }
-
-            val rows = withTimeoutOrNull(LocateDataTimeoutMs) {
-                handles.slices.servers(groupId).first { it.isNotEmpty() }
-            } ?: handles.slices.servers(groupId).value
-
-            val position = rows.indexOfFirst { it.guid == serverGuid }
-            if (position < 0) {
+            val page = groups.indexOfFirst { it.id == target.groupId }
+            if (page !in 0 until pagerState.pageCount) {
                 handles.dispatch(MainAction.LocateFailed)
                 return@LaunchedEffect
             }
+            if (pagerState.settledPage != page) pagerState.scrollToPage(page)
 
             if (args.doubleColumnDisplay) {
-                val grid = scrollStates.grid(groupId)
-                withTimeoutOrNull(LocateLayoutTimeoutMs) {
-                    snapshotFlow { grid.layoutInfo.viewportSize.height }.first { it > 0 }
+                val grid = scrollStates.grid(target.groupId)
+                val ready = withTimeoutOrNull(LocateLayoutTimeoutMs) {
+                    snapshotFlow { grid.layoutInfo.viewportSize.height to grid.layoutInfo.totalItemsCount }
+                        .first { (height, count) -> height > 0 && count > target.index }
+                }
+                if (ready == null) {
+                    handles.dispatch(MainAction.LocateFailed)
+                    return@LaunchedEffect
                 }
                 grid.scrollToItem(
-                    position,
+                    target.index,
                     -grid.layoutInfo.viewportSize.height / LocateViewportDivisor
                 )
             } else {
-                val list = scrollStates.list(groupId)
-                withTimeoutOrNull(LocateLayoutTimeoutMs) {
-                    snapshotFlow { list.layoutInfo.viewportSize.height }.first { it > 0 }
+                val list = scrollStates.list(target.groupId)
+                val ready = withTimeoutOrNull(LocateLayoutTimeoutMs) {
+                    snapshotFlow { list.layoutInfo.viewportSize.height to list.layoutInfo.totalItemsCount }
+                        .first { (height, count) -> height > 0 && count > target.index }
+                }
+                if (ready == null) {
+                    handles.dispatch(MainAction.LocateFailed)
+                    return@LaunchedEffect
                 }
                 list.scrollToItem(
-                    position,
+                    target.index,
                     -list.layoutInfo.viewportSize.height / LocateViewportDivisor
                 )
             }
