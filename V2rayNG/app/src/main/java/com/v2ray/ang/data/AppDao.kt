@@ -219,6 +219,21 @@ interface ProfileDao {
     )
     suspend fun allGuidsInOrder(): List<String>
 
+    /** Guids of the currently visible set, in list order. Backs export / batch test / scoped delete. */
+    @Query(
+        """
+        SELECT p.guid FROM profiles AS p
+          LEFT JOIN subscriptions AS s ON s.guid = p.subscriptionId
+         WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
+           AND (:query = ''
+                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
+                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
+                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
+         ORDER BY IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid
+        """
+    )
+    suspend fun guidsInScope(subscriptionId: String, query: String): List<String>
+
     @Query("SELECT subscriptionId FROM profiles WHERE guid = :guid")
     suspend fun subscriptionIdOf(guid: String): String?
 
