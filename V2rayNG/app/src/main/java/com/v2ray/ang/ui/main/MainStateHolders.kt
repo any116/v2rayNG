@@ -6,12 +6,14 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.paging.PagingData
 import com.v2ray.ang.dto.ServerRowItem
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 @Stable
 class MainSlices(
-    val servers: (String) -> StateFlow<List<ServerRowItem>>,
+    val servers: (String) -> Flow<PagingData<ServerRowItem>>,
     val counts: (String) -> StateFlow<Int>,
 )
 

@@ -14,8 +14,8 @@ import com.v2ray.ang.ui.base.BaseUiState
 
 @Immutable
 data class LocateTarget(
-    val serverGuid: String,
-    val groupId: String
+    val groupId: String,
+    val index: Int
 )
 
 @Immutable
@@ -66,7 +66,7 @@ sealed interface MainAction : BaseAction {
     data class SelectGroup(val groupId: String) : MainAction
     data class SelectServer(val guid: String) : MainAction
     data class RemoveServer(val guid: String) : MainAction
-    data class MoveServer(val groupId: String, val from: Int, val to: Int) : MainAction
+    data class MoveServer(val groupId: String, val movedGuid: String, val toIndex: Int) : MainAction
     data class Search(val query: String) : MainAction
     data class SetSearchActive(val active: Boolean) : MainAction
     data object LocateSelectedServer : MainAction

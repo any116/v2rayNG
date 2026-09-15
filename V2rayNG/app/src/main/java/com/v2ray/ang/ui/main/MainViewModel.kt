@@ -1,41 +1,37 @@
 package com.v2ray.ang.ui.main
 
-import com.v2ray.ang.AppConfig
+import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.v2ray.ang.R
+import com.v2ray.ang.data.repository.MainRepository
+import com.v2ray.ang.data.repository.MainServiceEvent
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.dto.ServerRowItem
-import com.v2ray.ang.extension.delay
-import com.v2ray.ang.extension.matchesPattern
-import com.v2ray.ang.extension.moveItem
-import com.v2ray.ang.data.repository.MainRepository
-import com.v2ray.ang.data.repository.MainServiceEvent
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
-import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.regex.PatternSyntaxException
 import javax.inject.Inject
 
-private const val PREFETCH_RADIUS = 1
-private const val PREFETCH_DELAY_MS = 32
-private const val SEARCH_DEBOUNCE_MS = 300
-private const val DELAY_REFRESH_INTERVAL_MS = 400
+private const val SEARCH_DEBOUNCE_MS = 300L
+private const val COUNT_SHARING_TIMEOUT_MS = 5_000L
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -49,46 +45,60 @@ class MainViewModel @Inject constructor(
     )
 ) {
 
-    private val cpu = Dispatchers.Default
-    private val serial = Dispatchers.IO.limitedParallelism(1)
+    private val query = MutableStateFlow("")
+    private val debouncedQuery = query.debounce(SEARCH_DEBOUNCE_MS).distinctUntilChanged()
 
-    private val serverFlows = ConcurrentHashMap<String, MutableStateFlow<List<ServerRowItem>>>()
-    private val countFlows = ConcurrentHashMap<String, MutableStateFlow<Int>>()
-    private val loadedGroups: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /**
+     * One cached Pager flow per group, so swiping back and forth in HorizontalPager does not
+     * rebuild the PagingSource. A new search term swaps the PagingSource, not the flow.
+     */
+    private val pagers = ConcurrentHashMap<String, Flow<PagingData<ServerRowItem>>>()
 
-    fun servers(groupId: String): StateFlow<List<ServerRowItem>> = mutableServers(groupId).asStateFlow()
-    fun serverCount(groupId: String): StateFlow<Int> = mutableCount(groupId).asStateFlow()
+    fun servers(groupId: String): Flow<PagingData<ServerRowItem>> =
+        pagers.computeIfAbsent(groupId) {
+            debouncedQuery
+                .flatMapLatest { repo.serverPager(groupId, it) }
+                .cachedIn(viewModelScope)
+        }
 
-    private fun mutableServers(groupId: String) = serverFlows.computeIfAbsent(groupId) { MutableStateFlow(emptyList()) }
-    private fun mutableCount(groupId: String) = countFlows.computeIfAbsent(groupId) { MutableStateFlow(0) }
-    private fun currentServers(): List<ServerRowItem> = mutableServers(state.selectedGroupId).value
+    private val counts: StateFlow<Map<String, Int>> =
+        debouncedQuery
+            .flatMapLatest { repo.observeCounts(it) }
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(COUNT_SHARING_TIMEOUT_MS),
+                emptyMap()
+            )
 
-    private var setupJob: Job? = null
-    private var prefetchJob: Job? = null
-    private var filterJob: Job? = null
-    private var delayJob: Job? = null
-    private val groupJobs = ConcurrentHashMap<String, Job>()
-    private val orderJobs = ConcurrentHashMap<String, Job>()
+    private val countFlows = ConcurrentHashMap<String, StateFlow<Int>>()
 
-    // Request registry. Owned by the main thread: every mutation happens in onAction or in the
-    // serviceEvents collector, both of which run on the ViewModel's main dispatcher.
+    fun serverCount(groupId: String): StateFlow<Int> =
+        countFlows.computeIfAbsent(groupId) {
+            counts.map { it[groupId] ?: 0 }
+                .distinctUntilChanged()
+                .stateIn(
+                    viewModelScope,
+                    SharingStarted.WhileSubscribed(COUNT_SHARING_TIMEOUT_MS),
+                    counts.value[groupId] ?: 0
+                )
+        }
+
     private var currentTestId: String? = null
     private var batchTestId: String? = null
     private var batchGroupId: String? = null
-    private val delayDirty = AtomicBoolean(false)
 
     private var initialized = false
     private val firstPageReady = CompletableDeferred<Unit>()
 
     init {
         observeServiceEvents()
-        rebuildGroups(invalidateCache = false, bootstrap = true)
+        observeGroups()
     }
 
     override fun onAction(action: MainAction) {
         when (action) {
             MainAction.Initialize -> initialize()
-            MainAction.RefreshGroups -> rebuildGroups(invalidateCache = true)
+            MainAction.RefreshGroups -> repo.refreshGroups()
             MainAction.ToggleService -> if (state.isRunning) platform(MainEvent.StopService) else startCore()
             MainAction.RestartService -> restartCore()
             MainAction.StatusBarClick -> when {
@@ -113,7 +123,7 @@ class MainViewModel @Inject constructor(
             is MainAction.SelectGroup -> selectGroup(action.groupId)
             is MainAction.SelectServer -> selectServer(action.guid)
             is MainAction.RemoveServer -> removeServer(action.guid)
-            is MainAction.MoveServer -> moveServer(action.groupId, action.from, action.to)
+            is MainAction.MoveServer -> moveServer(action)
             is MainAction.Search -> filterConfig(action.query)
             is MainAction.SetSearchActive -> setSearchActive(action.active)
             MainAction.LocateSelectedServer -> locateSelectedServer()
@@ -149,12 +159,40 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /** Subscription-table changes push new tabs; the selection is re-resolved on every emission. */
+    private fun observeGroups() = launch(onError = {}) {
+        repo.observeGroups().collect { groups ->
+            val validIds = groups.mapTo(HashSet()) { it.id }
+            pagers.keys.removeAll { it !in validIds }
+            countFlows.keys.removeAll { it !in validIds }
+            val selected = resolveSelectedGroup(groups)
+            setState {
+                copy(
+                    groups = groups,
+                    selectedGroupId = selected,
+                    selectedGuid = repo.selectedGuid(),
+                )
+            }
+            if (!firstPageReady.isCompleted) firstPageReady.complete(Unit)
+        }
+    }
+
+    private suspend fun resolveSelectedGroup(groups: List<GroupMapItem>): String {
+        val current = state.selectedGroupId
+        val resolved = when {
+            groups.isEmpty() -> ""
+            groups.any { it.id == current } -> current
+            else -> groups.first().id
+        }
+        if (resolved != current) repo.setSelectedGroupId(resolved)
+        return resolved
+    }
+
     private fun initialize() {
         if (initialized) return
         initialized = true
-        launch(context = serial, onError = {}) {
+        launch(onError = {}) {
             firstPageReady.await()
-            delay(PREFETCH_DELAY_MS)
             repo.prepare()
         }
     }
@@ -163,7 +201,7 @@ class MainViewModel @Inject constructor(
         val confirmRemove = repo.confirmRemove()
         val doubleColumn = repo.doubleColumnDisplay()
         setState { copy(confirmRemove = confirmRemove, doubleColumnDisplay = doubleColumn) }
-        if (result.refreshList) rebuildGroups(invalidateCache = true)
+        if (result.refreshList) repo.refreshGroups()
         if (result.restartService && state.isRunning) restartCore()
     }
 
@@ -215,30 +253,25 @@ class MainViewModel @Inject constructor(
             is MainServiceEvent.MeasureDelayResult -> onCurrentTestResult(event.requestId, event.result)
             is MainServiceEvent.MeasureDelayCanceled -> onCurrentTestCanceled(event.requestId)
             is MainServiceEvent.MeasureConfigNotify -> onBatchProgress(event.requestId, event.progress)
-            is MainServiceEvent.MeasureConfigSuccess -> onBatchServerTested(event.requestId)
-            is MainServiceEvent.MeasureConfigFinish -> onBatchFinished(event.requestId)
-            is MainServiceEvent.MeasureConfigCanceled -> onBatchCanceled(event.requestId)
+            // Row delays now arrive through the profile_stats PagingSource invalidation.
+            is MainServiceEvent.MeasureConfigSuccess -> Unit
+            is MainServiceEvent.MeasureConfigFinish -> releaseBatch(event.requestId)
+            is MainServiceEvent.MeasureConfigCanceled -> releaseBatch(event.requestId)
         }
     }
 
-    /**
-     * A running-state change kills the daemon that owns the pending current-server request, so the
-     * request is released here and the status bar falls back to the batch request state.
-     */
     private fun onRunningChanged(running: Boolean, keepTestingText: Boolean = false) {
         currentTestId = null
-        updateRunning(running, keepTestingText)
-    }
-
-    private fun updateRunning(running: Boolean, keepTestingText: Boolean = false) = setState {
-        copy(
-            isRunning = running,
-            status = when {
-                keepTestingText && isTesting -> status
-                running -> MainStatus.Connected
-                else -> MainStatus.Disconnected
-            },
-        )
+        setState {
+            copy(
+                isRunning = running,
+                status = when {
+                    keepTestingText && isTesting -> status
+                    running -> MainStatus.Connected
+                    else -> MainStatus.Disconnected
+                },
+            )
+        }
     }
 
     private fun newRequestId(): String = UUID.randomUUID().toString()
@@ -255,7 +288,6 @@ class MainViewModel @Inject constructor(
     private fun onCurrentTestResult(requestId: String, result: ConnectionTestResult) {
         if (requestId != currentTestId) return
         currentTestId = null
-        // A live batch owns the status bar; overwriting it here would make the bar flicker.
         if (batchTestId != null) return
         setState { copy(status = MainStatus.ConnectionTest(result)) }
     }
@@ -275,113 +307,11 @@ class MainViewModel @Inject constructor(
         setState { copy(status = if (isRunning) MainStatus.Connected else MainStatus.Disconnected) }
     }
 
-    private fun publish(groupId: String, rows: List<ServerRowItem>) {
-        val filtered = applyFilter(rows)
-        mutableServers(groupId).value = filtered
-        mutableCount(groupId).value = filtered.size
-    }
-
-    private fun publishCounts(counts: Map<String, Int>) {
-        if (state.searchQuery.isNotEmpty()) return
-        counts.forEach { (groupId, count) -> mutableCount(groupId).value = count }
-    }
-
-    private fun applyFilter(rows: List<ServerRowItem>): List<ServerRowItem> {
-        val key = state.searchQuery.trim()
-        if (key.isEmpty()) return rows
-        val regex = try { Regex(key, RegexOption.IGNORE_CASE) } catch (_: PatternSyntaxException) { return rows }
-        return rows.filter { row ->
-            row.remarks.matchesPattern(regex, key) ||
-            row.statistics.matchesPattern(regex, key) ||
-            row.typeDescription.matchesPattern(regex, key)
-        }
-    }
-
-    private suspend fun resolveSelectedGroup(groups: List<GroupMapItem>): String {
-        val current = state.selectedGroupId
-        val resolved = when {
-            groups.isEmpty() -> ""
-            groups.any { it.id == current } -> current
-            else -> groups.first().id
-        }
-        if (resolved != current) repo.setSelectedGroupId(resolved)
-        return resolved
-    }
-
-    private fun rebuildGroups(invalidateCache: Boolean, bootstrap: Boolean = false): Job {
-        setupJob?.cancel()
-        prefetchJob?.cancel()
-        val job = launch(onError = { LogUtil.e(AppConfig.TAG, "Failed to set up group tabs", it) }) {
-            try {
-                if (invalidateCache) repo.invalidate()
-                loadedGroups.clear()
-                val groups = repo.loadGroups()
-                val selected = resolveSelectedGroup(groups)
-                val validIds = groups.mapTo(HashSet()) { it.id }
-                serverFlows.keys.removeAll { it !in validIds }
-                countFlows.keys.removeAll { it !in validIds }
-                loadedGroups.removeAll { it !in validIds }
-                val selectedGuid = repo.selectedGuid()
-                setState { copy(groups = groups, selectedGroupId = selected, selectedGuid = selectedGuid) }
-                if (groups.isEmpty()) return@launch
-                publishCounts(repo.groupCounts())
-                loadGroup(selected, force = true, progressive = true)
-                if (!firstPageReady.isCompleted) firstPageReady.complete(Unit)
-                prefetch(groups, selected)
-            } finally {
-                if (bootstrap && !firstPageReady.isCompleted) firstPageReady.complete(Unit)
-            }
-        }
-        setupJob = job
-        return job
-    }
-
-    private suspend fun loadGroup(groupId: String, force: Boolean = false, progressive: Boolean = false) {
-        if (!force && groupId in loadedGroups) return
-        val rows = if (progressive) {
-            repo.loadServers(groupId, force) { partial -> publish(groupId, partial) }
-        } else {
-            repo.loadServers(groupId, force)
-        }
-        publish(groupId, rows)
-        loadedGroups.add(groupId)
-    }
-
-    private fun prefetch(groups: List<GroupMapItem>, selected: String) {
-        prefetchJob?.cancel()
-        val index = groups.indexOfFirst { it.id == selected }.coerceAtLeast(0)
-        val neighbours = buildList {
-            for (distance in 1..PREFETCH_RADIUS) {
-                groups.getOrNull(index + distance)?.let { add(it.id) }
-                groups.getOrNull(index - distance)?.let { add(it.id) }
-            }
-        }.filter { it !in loadedGroups }
-        if (neighbours.isEmpty()) return
-        prefetchJob = launch(context = serial, onError = {}) {
-            neighbours.forEach { groupId ->
-                currentCoroutineContext().ensureActive()
-                delay(PREFETCH_DELAY_MS)
-                loadGroup(groupId)
-            }
-        }
-    }
-
     private fun selectGroup(id: String) {
-        val groups = state.groups
-        if (groups.none { it.id == id }) return
-        if (state.selectedGroupId != id) {
-            setState { copy(selectedGroupId = id) }
-            launch(onError = {}) { repo.setSelectedGroupId(id) }
-        }
-        if (id in loadedGroups) {
-            prefetch(groups, id)
-            return
-        }
-        if (groupJobs[id]?.isActive == true) return
-        groupJobs[id] = launch(onError = { LogUtil.e(AppConfig.TAG, "Failed to load group: $id", it) }) {
-            loadGroup(id, progressive = true)
-            prefetch(groups, id)
-        }.also { job -> job.invokeOnCompletion { groupJobs.remove(id, job) } }
+        if (state.groups.none { it.id == id }) return
+        if (state.selectedGroupId == id) return
+        setState { copy(selectedGroupId = id) }
+        launch(onError = {}) { repo.setSelectedGroupId(id) }
     }
 
     private fun setSearchActive(active: Boolean) {
@@ -390,25 +320,11 @@ class MainViewModel @Inject constructor(
         if (!active) filterConfig("")
     }
 
-    private fun filterConfig(query: String) {
-        if (query == state.searchQuery) return
-        setState { copy(searchQuery = query) }
-        filterJob?.cancel()
-        filterJob = launch(context = cpu, onError = {}) {
-            delay(SEARCH_DEBOUNCE_MS)
-            repo.cachedServers().forEach { (groupId, rows) ->
-                currentCoroutineContext().ensureActive()
-                publish(groupId, rows)
-            }
-            if (state.searchQuery.isEmpty()) {
-                publishCounts(repo.groupCounts())
-                return@launch
-            }
-            state.groups.map { it.id }.filter { it !in loadedGroups }.forEach { groupId ->
-                currentCoroutineContext().ensureActive()
-                loadGroup(groupId)
-            }
-        }
+    /** Substring LIKE, not regex: filtering moved into SQL. */
+    private fun filterConfig(text: String) {
+        if (text == state.searchQuery) return
+        setState { copy(searchQuery = text) }
+        query.value = text
     }
 
     private fun selectServer(guid: String) {
@@ -420,15 +336,10 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private fun moveServer(groupId: String, from: Int, to: Int) {
-        val rows = mutableServers(groupId).value.toMutableList()
-        if (!rows.moveItem(from, to)) return
-        mutableServers(groupId).value = rows
-        val previous = orderJobs[groupId]
-        orderJobs[groupId] = launch(onError = {}) {
-            previous?.join()
-            withContext(NonCancellable) { repo.saveServerOrder(groupId, rows) }
-        }.also { job -> job.invokeOnCompletion { orderJobs.remove(groupId, job) } }
+    private fun moveServer(action: MainAction.MoveServer) = launch(onError = {}) {
+        withContext(NonCancellable) {
+            repo.moveServer(action.groupId, query.value, action.movedGuid, action.toIndex)
+        }
     }
 
     private fun removeServer(guid: String) {
@@ -438,49 +349,45 @@ class MainViewModel @Inject constructor(
         }
         launch(loading = true) {
             repo.removeServers(listOf(guid))
-            rebuildGroups(invalidateCache = false).join()
+            refreshSelection()
             toastSuccess()
         }
     }
 
     private fun removeAllServers() = launch(loading = true) {
-        val count = if (state.selectedGroupId.isEmpty() && state.searchQuery.isEmpty()) {
+        val groupId = state.selectedGroupId
+        val count = if (groupId.isEmpty() && state.searchQuery.isEmpty()) {
             repo.removeAllServers()
         } else {
-            repo.removeServers(currentServers().map { it.guid })
+            repo.removeServers(repo.guidsInScope(groupId, state.searchQuery))
         }
-        rebuildGroups(invalidateCache = false).join()
+        refreshSelection()
         toast(BaseText.of(R.string.title_del_config_count, count))
     }
 
     private fun removeDuplicateServers() = launch(loading = true) {
-        val count = repo.removeDuplicateServers(currentServers().map { it.guid })
-        rebuildGroups(invalidateCache = false).join()
+        val count = repo.removeDuplicateServers(state.selectedGroupId, state.searchQuery)
+        refreshSelection()
         toast(BaseText.of(R.string.title_del_duplicate_config_count, count))
     }
 
     private fun removeInvalidServers() = launch(loading = true) {
-        val visibleOnly = state.selectedGroupId.isNotEmpty() || state.searchQuery.isNotBlank()
-        val count = repo.removeInvalidServers(
-            if (visibleOnly) currentServers().map { it.guid } else null
-        )
-        rebuildGroups(invalidateCache = false).join()
+        val count = repo.removeInvalidServers(state.selectedGroupId, state.searchQuery)
+        refreshSelection()
         toast(BaseText.of(R.string.title_del_config_count, count))
     }
+
+    /** Deletions can repoint SELECTED_SERVER inside the DAO transaction. */
+    private fun refreshSelection() = setState { copy(selectedGuid = repo.selectedGuid()) }
 
     private fun sortByTestResults() = launch(loading = true) {
         val groups = if (state.selectedGroupId.isEmpty()) emptyList() else listOf(state.selectedGroupId)
         repo.sortByTestResults(groups)
-        rebuildGroups(invalidateCache = false).join()
         toastSuccess()
     }
 
     private fun exportAll() = launch(loading = true) {
-        val guids = if (state.selectedGroupId.isEmpty() && state.searchQuery.isEmpty()) {
-            repo.allGuids()
-        } else {
-            currentServers().map { it.guid }
-        }
+        val guids = repo.guidsInScope(state.selectedGroupId, state.searchQuery)
         val count = repo.exportToClipboard(guids)
         if (count > 0) toast(BaseText.of(R.string.title_export_config_count, count)) else toastError()
     }
@@ -489,11 +396,8 @@ class MainViewModel @Inject constructor(
         if (configText.isBlank()) { toastError(); return }
         val (count, countSub) = repo.importBatchConfig(configText, state.selectedGroupId)
         when {
-            count > 0 -> {
-                toast(BaseText.of(R.string.title_import_config_count, count))
-                rebuildGroups(invalidateCache = false)
-            }
-            countSub > 0 -> rebuildGroups(invalidateCache = false)
+            count > 0 -> toast(BaseText.of(R.string.title_import_config_count, count))
+            countSub > 0 -> Unit
             else -> toastError()
         }
     }
@@ -512,30 +416,26 @@ class MainViewModel @Inject constructor(
                 )
             )
         }
-        if (result.configCount > 0) {
-            rebuildGroups(invalidateCache = false).join()
-        }
+        refreshSelection()
     }
 
     private fun testAll(onlyTcp: Boolean) {
         val groupId = state.selectedGroupId
-        val rows = currentServers()
-        if (rows.isEmpty()) {
-            releaseBatch(batchTestId)
-            return
-        }
         val previousId = batchTestId
-        val targets = rows.map { it.guid }
-        val guids = if (state.searchQuery.isNotEmpty()) targets else emptyList()
         val requestId = newRequestId()
         batchTestId = requestId
         batchGroupId = groupId
-        delayJob?.cancel()
-        delayDirty.set(false)
         setState { copy(isTesting = true, status = MainStatus.Testing) }
-        launch(onError = { onBatchCanceled(requestId) }) {
+        launch(onError = { releaseBatch(requestId) }) {
+            val targets = repo.guidsInScope(groupId, state.searchQuery)
+            if (targets.isEmpty()) {
+                releaseBatch(requestId)
+                return@launch
+            }
             if (previousId != null) repo.cancelBatchTest(previousId)
             repo.clearTestResults(targets)
+            // An explicit guid list is only needed when the visible set is narrower than the group.
+            val guids = if (state.searchQuery.isNotEmpty()) targets else emptyList()
             repo.startBatchTest(requestId, groupId, guids, onlyTcp)
         }
     }
@@ -545,76 +445,36 @@ class MainViewModel @Inject constructor(
         setState { copy(status = MainStatus.TestProgress(progress)) }
     }
 
-    private fun onBatchServerTested(requestId: String) {
-        if (requestId != batchTestId) return
-        scheduleDelayRefresh(requestId, batchGroupId ?: state.selectedGroupId)
-    }
-
-    private fun onBatchFinished(requestId: String) {
-        val groupId = batchGroupId ?: state.selectedGroupId
-        if (!releaseBatch(requestId)) return
-        launch(onError = {}) {
-            repo.refreshDelays(groupId)?.let { publish(groupId, it) }
-        }
-    }
-
-    private fun onBatchCanceled(requestId: String) {
-        releaseBatch(requestId)
-    }
-
     private fun cancelTesting() {
         val batchId = batchTestId
         currentTestId = null
         releaseBatch(batchId)
-        launch(onError = {}) {
-            batchId?.let { repo.cancelBatchTest(it) }
-        }
+        launch(onError = {}) { batchId?.let { repo.cancelBatchTest(it) } }
     }
 
-    /** Unregisters [requestId] if it is still the current batch; returns false for stale ids. */
     private fun releaseBatch(requestId: String?): Boolean {
         if (requestId == null || requestId != batchTestId) return false
         batchTestId = null
         batchGroupId = null
-        delayJob?.cancel()
-        delayDirty.set(false)
         setState { copy(isTesting = false) }
         applyIdleStatus()
         return true
     }
 
-    private fun scheduleDelayRefresh(requestId: String, groupId: String) {
-        delayDirty.set(true)
-        if (delayJob?.isActive == true) return
-        delayJob = launch(onError = {}) {
-            while (delayDirty.getAndSet(false) && batchTestId == requestId) {
-                currentCoroutineContext().ensureActive()
-                repo.refreshDelays(groupId)?.let { publish(groupId, it) }
-                delay(DELAY_REFRESH_INTERVAL_MS)
-            }
-        }
-    }
-
+    /** The row index comes from SQL and honours the active search term. */
     private fun locateSelectedServer() = launch(onError = {}) {
         val guid = repo.selectedGuid() ?: return@launch
         val groups = state.groups
         if (groups.isEmpty()) return@launch
         val ownerId = repo.subscriptionIdOf(guid)
-        val groupIndex = groups.indexOfFirst { it.id.isNotEmpty() && it.id == ownerId }
-            .takeIf { it >= 0 } ?: groups.indexOfFirst { it.id.isEmpty() }
-        if (groupIndex < 0) { toastError(); return@launch }
-        val groupId = groups[groupIndex].id
-        loadGroup(groupId)
-        platform(MainEvent.LocateProfile(LocateTarget(serverGuid = guid, groupId = groupId)))
+        val groupId = groups.firstOrNull { it.id.isNotEmpty() && it.id == ownerId }?.id
+            ?: groups.firstOrNull { it.id.isEmpty() }?.id
+            ?: return@launch toastError()
+        val index = repo.indexOf(groupId, state.searchQuery, guid) ?: return@launch toastError()
+        platform(MainEvent.LocateProfile(LocateTarget(groupId = groupId, index = index)))
     }
 
     override fun onCleared() {
-        setupJob?.cancel()
-        prefetchJob?.cancel()
-        filterJob?.cancel()
-        delayJob?.cancel()
-        groupJobs.values.forEach { it.cancel() }
-        orderJobs.values.forEach { it.cancel() }
         currentTestId = null
         batchTestId = null
         batchGroupId = null

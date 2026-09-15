@@ -8,7 +8,15 @@ import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.core.content.ContextCompat
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.ProfileDao
+import com.v2ray.ang.data.ServerRowProjection
+import com.v2ray.ang.data.SettingsStore
+import com.v2ray.ang.data.SubscriptionDao
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.ConnectionTestResponse
 import com.v2ray.ang.dto.ConnectionTestResult
@@ -17,14 +25,12 @@ import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
-import com.v2ray.ang.data.entities.ProfileItem
-import com.v2ray.ang.data.entities.SubscriptionCache
-import com.v2ray.ang.data.SettingsStore
+import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
+import com.v2ray.ang.extension.normalizeLike
 import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.helper.MessageHelper
@@ -32,20 +38,16 @@ import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import java.io.Closeable
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
-
-private const val LOAD_CHUNK_SIZE = 60
 
 sealed interface MainServiceEvent {
     data object StateRunning : MainServiceEvent
@@ -63,6 +65,8 @@ sealed interface MainServiceEvent {
 
 open class MainRepository @Inject constructor(
     private val app: Application,
+    private val profileDao: ProfileDao,
+    private val subscriptionDao: SubscriptionDao,
     private val settings: SettingsStore,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io), Closeable {
@@ -129,6 +133,8 @@ open class MainRepository @Inject constructor(
             .onFailure { LogUtil.e(AppConfig.TAG, "Failed to unregister main service receiver", it) }
     }
 
+    // ---- Preferences: snapshot reads, stay synchronous ----
+
     open fun selectedGroupId(): String =
         settings.string(AppConfig.CACHE_SUBSCRIPTION_ID, "").orEmpty()
 
@@ -136,9 +142,12 @@ open class MainRepository @Inject constructor(
         settings.putString(AppConfig.CACHE_SUBSCRIPTION_ID, id)
     }
 
-    open fun selectedGuid(): String? = MmkvManager.getSelectServer()
+    open fun selectedGuid(): String? =
+        settings.string(SettingsStore.KEY_SELECTED_SERVER).nullIfBlank()
 
-    open suspend fun setSelectedGuid(guid: String) = withIO { MmkvManager.setSelectServer(guid) }
+    open suspend fun setSelectedGuid(guid: String) {
+        settings.putString(SettingsStore.KEY_SELECTED_SERVER, guid)
+    }
 
     open fun confirmRemove(): Boolean = settings.bool(AppConfig.PREF_CONFIRM_REMOVE, false)
     open fun doubleColumnDisplay(): Boolean = settings.bool(AppConfig.PREF_DOUBLE_COLUMN_DISPLAY, false)
@@ -146,193 +155,141 @@ open class MainRepository @Inject constructor(
     open fun isProxySharing(): Boolean = settings.bool(AppConfig.PREF_PROXY_SHARING)
     open fun promotionUrl(): String = "${Utils.decode(AppConfig.APP_PROMOTION_URL)}?t=${System.currentTimeMillis()}"
 
-    private fun isGroupAllDisplayEnabled(): Boolean =
-        settings.bool(AppConfig.PREF_GROUP_ALL_DISPLAY)
+    // ---- Groups ----
 
-    private val cache = mutableMapOf<String, List<ServerRowItem>>()
-    private val cacheMutex = Mutex()
-    private val loadMutexes = ConcurrentHashMap<String, Mutex>()
-    private val cacheEpoch = AtomicLong(0L)
+    /** Bumped when a preference that shapes the tab list changes; the subscription table drives the rest. */
+    private val groupRefresh = MutableStateFlow(0)
 
-    open suspend fun loadGroups(): List<GroupMapItem> = withIO {
-        val groups = buildList {
-            if (isGroupAllDisplayEnabled()) {
-                add(GroupMapItem(id = "", remarks = ""))
-            }
-            MmkvManager.decodeSubscriptions().forEach {
-                add(GroupMapItem(id = it.guid, remarks = it.subscription.remarks))
-            }
-        }
-        val validIds = groups.mapTo(HashSet()) { it.id }
-        cacheMutex.withLock { cache.keys.retainAll(validIds) }
-        loadMutexes.keys.removeAll { it !in validIds }
-        groups
+    open fun refreshGroups() {
+        groupRefresh.value += 1
     }
 
-    open suspend fun groupCounts(): Map<String, Int> = withIO {
-        buildMap {
-            if (isGroupAllDisplayEnabled()) put("", MmkvManager.decodeAllServerList().size)
-            MmkvManager.decodeSubsList().forEach {
-                put(it, MmkvManager.decodeServerList(it).size)
-            }
-        }
-    }
-
-    open suspend fun subscriptionIdOf(guid: String): String = withIO {
-        MmkvManager.decodeServerConfig(guid)?.subscriptionId.orEmpty()
-    }
-
-    open suspend fun loadServers(
-        groupId: String,
-        forceRefresh: Boolean = false,
-        onChunk: (suspend (List<ServerRowItem>) -> Unit)? = null
-    ): List<ServerRowItem> = withIO {
-        loadMutexes.computeIfAbsent(groupId) { Mutex() }.withLock {
-            val epoch = cacheEpoch.get()
-            if (!forceRefresh) {
-                cacheMutex.withLock { cache[groupId] }?.let { return@withLock it }
-            }
-            val guids = if (groupId.isEmpty()) MmkvManager.decodeAllServerList()
-            else MmkvManager.decodeServerList(groupId)
-
-            val badges = if (groupId.isEmpty()) subscriptionInitials() else emptyMap()
-            val rows = ArrayList<ServerRowItem>(guids.size)
-
-            guids.forEach { guid ->
-                currentCoroutineContext().ensureActive()
-                val profile = MmkvManager.decodeServerConfig(guid) ?: return@forEach
-                val info = MmkvManager.decodeServerAffiliationInfo(guid)
-                rows += ServerRowItem(
-                    guid = guid,
-                    remarks = profile.remarks,
-                    statistics = profile.description.nullIfBlank() ?: AngConfigManager.generateDescription(profile),
-                    typeDescription = protocolDescription(profile),
-                    subscriptionBadge = badges[profile.subscriptionId].orEmpty(),
-                    configType = profile.configType,
-                    testDelayMillis = info?.testDelayMillis ?: 0L
-                )
-                if (onChunk != null && rows.size % LOAD_CHUNK_SIZE == 0) {
-                    onChunk(ArrayList(rows))
+    open fun observeGroups(): Flow<List<GroupMapItem>> =
+        combine(subscriptionDao.observeAll(), groupRefresh) { subs, _ ->
+            buildList {
+                if (settings.bool(AppConfig.PREF_GROUP_ALL_DISPLAY)) {
+                    add(GroupMapItem(id = "", remarks = ""))
                 }
+                subs.forEach { add(GroupMapItem(id = it.guid, remarks = it.remarks)) }
             }
-            currentCoroutineContext().ensureActive()
-            val result = rows.toList()
-            if (cacheEpoch.get() == epoch) {
-                cacheMutex.withLock { cache[groupId] = result }
+        }.flowIO()
+
+    /** Includes the "All" bucket and empty subscriptions (count 0). */
+    open fun observeCounts(query: String): Flow<Map<String, Int>> {
+        val escaped = query.trim().normalizeLike()
+        return combine(
+            profileDao.observeCounts(escaped),
+            profileDao.observeTotalCount(escaped)
+        ) { perGroup, total ->
+            buildMap {
+                if (settings.bool(AppConfig.PREF_GROUP_ALL_DISPLAY)) put("", total)
+                perGroup.forEach { put(it.groupId, it.count) }
             }
-            result
+        }.flowIO()
+    }
+
+    // ---- Paging ----
+
+    /**
+     * The only list entry point. Display strings are assembled here, not in Composables.
+     * enablePlaceholders = true so LazyColumn knows the full itemCount and
+     * LocateSelectedServer can scroll into a not-yet-loaded region.
+     */
+    open fun serverPager(groupId: String, query: String): Flow<PagingData<ServerRowItem>> {
+        val escaped = query.trim().normalizeLike()
+        val showBadge = groupId.isEmpty()
+        return Pager(
+            config = PagingConfig(
+                pageSize = PAGE_SIZE,
+                initialLoadSize = INITIAL_LOAD_SIZE,
+                prefetchDistance = PREFETCH_DISTANCE,
+                enablePlaceholders = true,
+                jumpThreshold = JUMP_THRESHOLD
+            ),
+            pagingSourceFactory = { profileDao.pageServers(groupId, escaped) }
+        ).flow.map { paging -> paging.map { row -> row.toRowItem(showBadge) } }
+    }
+
+    private fun ServerRowProjection.toRowItem(showBadge: Boolean) = ServerRowItem(
+        guid = guid,
+        remarks = remarks,
+        statistics = description.nullIfBlank()
+            ?: AngConfigManager.generateDescription(server, serverPort),
+        typeDescription = protocolDescription(this),
+        subscriptionBadge = if (showBadge) subscriptionInitial.orEmpty() else "",
+        configType = configType,
+        testDelayMillis = testDelayMillis
+    )
+
+    // ---- Position queries ----
+
+    open suspend fun subscriptionIdOf(guid: String): String =
+        withIO { profileDao.subscriptionIdOf(guid).orEmpty() }
+
+    open suspend fun indexOf(groupId: String, query: String, guid: String): Int? =
+        withIO { profileDao.indexOf(groupId, query.trim().normalizeLike(), guid) }
+
+    open suspend fun guidsInScope(groupId: String, query: String): List<String> =
+        withIO { profileDao.guidsInScope(groupId, query.trim().normalizeLike()) }
+
+    /** Single-row UPDATE inside a transaction; no job chain needed on the caller side. */
+    open suspend fun moveServer(groupId: String, query: String, movedGuid: String, toIndex: Int) =
+        withIO {
+            profileDao.moveProfileToIndex(groupId, query.trim().normalizeLike(), movedGuid, toIndex)
+            syncSelectedSnapshot()
         }
-    }
 
-    open suspend fun refreshDelays(groupId: String): List<ServerRowItem>? = withIO {
-        val epoch = cacheEpoch.get()
-        val rows = cacheMutex.withLock { cache[groupId] } ?: return@withIO null
-        var changed = false
-        val updated = rows.map { row ->
-            currentCoroutineContext().ensureActive()
-            val info = MmkvManager.decodeServerAffiliationInfo(row.guid)
-            val millis = info?.testDelayMillis ?: 0L
-            if (millis == row.testDelayMillis) row
-            else {
-                changed = true
-                row.copy(testDelayMillis = millis)
-            }
-        }
-        if (!changed) return@withIO null
-        if (cacheEpoch.get() != epoch) return@withIO null
-        cacheMutex.withLock { cache[groupId] = updated }
-        updated
-    }
-
-    open suspend fun cachedServers(): Map<String, List<ServerRowItem>> =
-        cacheMutex.withLock { cache.toMap() }
-
-    open suspend fun invalidate(groupId: String? = null) {
-        cacheEpoch.incrementAndGet()
-        cacheMutex.withLock {
-            if (groupId == null) cache.clear() else cache.remove(groupId)
-        }
-    }
-
-    open suspend fun dropFromCache(guids: Collection<String>) {
-        if (guids.isEmpty()) return
-        cacheMutex.withLock {
-            val pruned = cache.mapValues { (_, rows) -> rows.filterNot { it.guid in guids } }
-            cache.putAll(pruned)
-        }
-    }
-
-    open suspend fun saveServerOrder(groupId: String, rows: List<ServerRowItem>) = withIO {
-        MmkvManager.encodeServerList(ArrayList(rows.map { it.guid }), groupId)
-        cacheMutex.withLock { cache[groupId] = rows }
-    }
-
-    open suspend fun allGuids(): List<String> = withIO {
-        MmkvManager.decodeAllServerList()
-    }
-
-    private fun subscriptionInitials(): Map<String, String> =
-        MmkvManager.decodeSubscriptions().associate { sub ->
-            sub.guid to sub.subscription.remarks.firstOrNull()?.uppercase().orEmpty()
-        }
+    // ---- Mutations ----
 
     open suspend fun removeServers(guids: List<String>): Int = withIO {
-        if (guids.isEmpty()) return@withIO 0
-        guids.groupBy { MmkvManager.decodeServerConfig(it)?.subscriptionId.orEmpty() }
-            .forEach { (subscriptionId, ids) ->
-                currentCoroutineContext().ensureActive()
-                MmkvManager.removeServers(ids, subscriptionId)
-            }
-        dropFromCache(guids)
-        guids.size
+        profileDao.deleteProfiles(guids).also { syncSelectedSnapshot() }
     }
 
     open suspend fun removeAllServers(): Int = withIO {
-        val count = MmkvManager.removeAllServer()
-        invalidate()
-        count
+        profileDao.deleteAll().also { syncSelectedSnapshot() }
     }
 
-    open suspend fun removeDuplicateServers(guids: List<String>): Int = withIO {
-        val seen = HashSet<ProfileItem>()
-        val duplicates = guids.filter { guid ->
-            currentCoroutineContext().ensureActive()
-            val profile = MmkvManager.decodeServerConfig(guid) ?: return@filter false
-            !profile.configType.isComplexType() && !seen.add(profile.duplicateIdentity())
-        }
-        removeServers(duplicates)
+    open suspend fun removeDuplicateServers(groupId: String, query: String): Int = withIO {
+        profileDao.backfillDedupeKeys(groupId)
+        val complex = EConfigType.entries.filter { it.isComplexType() }.map { it.value }
+        val targets = profileDao.duplicateGuids(groupId, query.trim().normalizeLike(), complex)
+        profileDao.deleteProfiles(targets).also { syncSelectedSnapshot() }
     }
 
-    open suspend fun removeInvalidServers(guids: List<String>?): Int = withIO {
-        val candidates = guids ?: MmkvManager.decodeAllServerList()
-        val invalid = candidates.filter { guid ->
-            currentCoroutineContext().ensureActive()
-            (MmkvManager.decodeServerAffiliationInfo(guid)?.testDelayMillis ?: 0L) < 0L
-        }
-        removeServers(invalid)
+    open suspend fun removeInvalidServers(groupId: String, query: String): Int = withIO {
+        val targets = profileDao.invalidGuids(groupId, query.trim().normalizeLike())
+        profileDao.deleteProfiles(targets).also { syncSelectedSnapshot() }
     }
 
     open suspend fun sortByTestResults(groupIds: List<String>) = withIO {
-        val targets = groupIds.ifEmpty { MmkvManager.decodeSubsList() }
-        targets.forEach { AngConfigManager.sortByTestResultsForSub(it) }
-        invalidate()
+        val targets = groupIds.ifEmpty { subscriptionDao.allGuids() }
+        targets.forEach { profileDao.sortByDelay(it) }
     }
 
-    open suspend fun importBatchConfig(text: String, groupId: String): Pair<Int, Int> = withIO {
-        AngConfigManager.importBatchConfig(text, groupId, true).also { invalidate() }
+    open suspend fun clearTestResults(guids: List<String>) = withIO {
+        guids.chunked(ProfileDao.SQLITE_VAR_LIMIT).forEach { profileDao.clearDelays(it) }
     }
+
+    /** ProfileDao repoints SELECTED_SERVER inside its own transactions; realign this process. */
+    private suspend fun syncSelectedSnapshot() {
+        settings.poke(SettingsStore.KEY_SELECTED_SERVER, profileDao.selectedGuid())
+    }
+
+    // ---- Import / subscription ----
+
+    open suspend fun importBatchConfig(text: String, groupId: String): Pair<Int, Int> =
+        withIO { AngConfigManager.importBatchConfig(text, groupId, true) }
 
     open suspend fun updateSubscriptions(groupId: String): SubscriptionUpdateResult = withIO {
-        val result = if (groupId.isEmpty()) {
+        if (groupId.isEmpty()) {
             AngConfigManager.updateConfigViaSubAll()
         } else {
-            val item = MmkvManager.decodeSubscription(groupId)
-                ?: return@withIO SubscriptionUpdateResult()
-            AngConfigManager.updateConfigViaSub(SubscriptionCache(groupId, item))
+            val item = subscriptionDao.find(groupId) ?: return@withIO SubscriptionUpdateResult()
+            AngConfigManager.updateConfigViaSub(item)
         }
-        if (result.configCount > 0) invalidate()
-        result
     }
+
+    // ---- Share / clipboard ----
 
     open suspend fun exportToClipboard(guids: List<String>): Int =
         withIO { AngConfigManager.shareNonCustomConfigsToClipboard(app, guids) }
@@ -358,6 +315,8 @@ open class MainRepository @Inject constructor(
             .getOrNull()
     }
 
+    // ---- Test service IPC ----
+
     open suspend fun startBatchTest(
         requestId: String,
         groupId: String,
@@ -377,23 +336,14 @@ open class MainRepository @Inject constructor(
     }
 
     /** An empty [requestId] cancels every batch request the service still owns. */
-    open suspend fun cancelBatchTest(requestId: String) = withIO {
-        sendCancelBatchTest(requestId)
-    }
+    open suspend fun cancelBatchTest(requestId: String) = withIO { sendCancelBatchTest(requestId) }
 
     private fun sendCancelBatchTest(requestId: String) =
         MessageHelper.sendMsg2TestService(
             app,
-            TestServiceMessage(
-                key = AppConfig.MSG_MEASURE_CONFIG_CANCEL,
-                requestId = requestId
-            )
+            TestServiceMessage(key = AppConfig.MSG_MEASURE_CONFIG_CANCEL, requestId = requestId)
         )
 
-    /**
-     * Sends one current-server test request. The ordered broadcast tells whether a daemon took it;
-     * an unhandled request is closed by the sender through the same cancel path the daemon uses.
-     */
     open suspend fun testCurrentServer(requestId: String) = withIO {
         MessageHelper.sendMsg2ServiceForResult(app, AppConfig.MSG_MEASURE_DELAY, requestId) { handled ->
             if (!handled) emitDelayCanceled(requestId)
@@ -405,24 +355,28 @@ open class MainRepository @Inject constructor(
         _serviceEvents.tryEmit(MainServiceEvent.MeasureDelayCanceled(requestId))
     }
 
-    open suspend fun clearTestResults(guids: List<String>) =
-        withIO { MmkvManager.clearAllTestDelayResults(guids) }
-
     open suspend fun prepare() = withIO {
         SettingsManager.initAssets(app, app.assets)
         SubscriptionUpdater.sync(app)
     }
+
+    private companion object {
+        const val PAGE_SIZE = 40
+        const val INITIAL_LOAD_SIZE = 80
+        const val PREFETCH_DISTANCE = 20
+        const val JUMP_THRESHOLD = 240
+    }
 }
 
-private fun protocolDescription(profile: ProfileItem): String {
-    if (profile.configType.isComplexType()) return profile.configType.name
-    val parts = mutableListOf(profile.configType.name)
-    profile.network?.let { net ->
+private fun protocolDescription(row: ServerRowProjection): String {
+    if (row.configType.isComplexType()) return row.configType.name
+    val parts = mutableListOf(row.configType.name)
+    row.network?.let { net ->
         if (net.isNotBlank() && !net.equals("tcp", ignoreCase = true)) parts += net
     }
-    profile.security?.let { sec ->
+    row.security?.let { sec ->
         if (sec.isNotBlank()) {
-            parts += if (profile.insecure == true && sec.equals("tls", ignoreCase = true)) "$sec insecure" else sec
+            parts += if (row.insecure == true && sec.equals("tls", ignoreCase = true)) "$sec insecure" else sec
         }
     }
     return parts.joinToString(" / ")

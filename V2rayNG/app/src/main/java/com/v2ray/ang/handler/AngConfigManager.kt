@@ -617,29 +617,41 @@ object AngConfigManager {
         return 1
     }
 
+    /**
+     * Builds the masked display string for a server address and port.
+     *
+     * @param server The server address, may be null or blank.
+     * @param port The server port, may be null or blank.
+     * @param prefixLimit Maximum length of the address prefix before the last separator.
+     * @return The masked description, or "" when both address and port are blank.
+     */
     fun generateDescription(
-        profile: ProfileItem,
-        prefixLimit: Int = 21
+        server: String?,
+        port: String?,
+        prefixLimit: Int = 21,
     ): String {
-         val server = profile.server
-         val port = profile.serverPort
-         if (server.isNullOrBlank() && port.isNullOrBlank()) return ""
+        if (server.isNullOrBlank() && port.isNullOrBlank()) return ""
 
         val isIPv6 = server?.contains(":") == true
         val separator = if (isIPv6) ":" else "."
 
-         val addrPart = server?.let {
+        val addrPart = server?.let {
             if (isIPv6) {
-                 it.split(":").take(2).joinToString(":", postfix = ":***")
+                it.split(":").take(2).joinToString(":", postfix = ":***")
             } else {
-                 it.split('.').dropLast(1).joinToString(".", postfix = ".***")
+                it.split('.').dropLast(1).joinToString(".", postfix = ".***")
             }
-         } ?: ""
+        } ?: ""
 
         val truncatedAddr = truncateByLastSeparator(addrPart, separator, prefixLimit)
 
         return "$truncatedAddr : ${port ?: ""}"
     }
+
+    fun generateDescription(
+        profile: ProfileItem,
+        prefixLimit: Int = 21,
+    ): String = generateDescription(profile.server, profile.serverPort, prefixLimit)
 
     private fun truncateByLastSeparator(
         addr: String,
