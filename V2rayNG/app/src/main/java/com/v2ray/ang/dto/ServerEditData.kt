@@ -7,6 +7,4 @@ data class ServerEditData(
     val isSelected: Boolean = false,
     val rawContent: String = "",
     val subscriptions: List<SubscriptionOption> = emptyList(),
-    val profileRemarks: List<String> = emptyList(),
-    val fallbackTags: List<String> = emptyList()
 )

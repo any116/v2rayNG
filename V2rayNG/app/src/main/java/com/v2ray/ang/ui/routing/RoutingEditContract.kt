@@ -1,6 +1,8 @@
 package com.v2ray.ang.ui.routing
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.paging.PagingData
 import com.v2ray.ang.AppConfig.TAG_PROXY
 import com.v2ray.ang.AppConfig.BUILTIN_OUTBOUND_TAGS
 import com.v2ray.ang.data.entities.RulesetItem
@@ -9,6 +11,9 @@ import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseUiState
+import com.v2ray.ang.ui.compose.DropdownOption
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 @Immutable
 data class RoutingForm(
@@ -29,11 +34,17 @@ enum class RoutingField { REMARKS, DOMAIN, IP, PROCESS, PROTOCOL, NETWORK, PORT,
 data class RoutingEditUiState(
     val ruleId: String = "",
     val form: RoutingForm = RoutingForm(),
-    val outboundOptions: List<String> = emptyList(),
     val canUseProcess: Boolean = false,
 ) : BaseUiState {
     val isEdit: Boolean get() = ruleId.isNotEmpty()
 }
+
+@Stable
+class RoutingEditSlices(
+    val outboundTags: Flow<PagingData<DropdownOption>>,
+    val query: StateFlow<String>,
+    val onQueryChange: (String) -> Unit,
+)
 
 sealed interface RoutingEditAction : BaseAction {
     data class UpdateRemarks(val value: String) : RoutingEditAction

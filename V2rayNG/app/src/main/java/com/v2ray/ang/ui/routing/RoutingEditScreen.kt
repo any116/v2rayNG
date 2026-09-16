@@ -26,16 +26,21 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.compose.AppTheme
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.DeleteConfirmDialog
+import com.v2ray.ang.ui.compose.DropdownOption
 import com.v2ray.ang.ui.compose.FormDropdownField
+import com.v2ray.ang.ui.compose.FormPagedDropdownField
 import com.v2ray.ang.ui.compose.FormTextField
 import com.v2ray.ang.ui.compose.NavigationBarsSpacer
 import com.v2ray.ang.ui.compose.SettingsSwitchItem
 import com.v2ray.ang.ui.compose.StringOptions
+import com.v2ray.ang.ui.compose.rememberPreviewDropdownItems
 import com.v2ray.ang.ui.compose.verticalScrollbar
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -68,6 +73,9 @@ fun RoutingEditScreen(
     val onAction = remember(viewModel) { viewModel::onAction }
     val callbacks = remember(onAction) { RoutingFieldCallbacks(onAction) }
 
+    val outboundItems = viewModel.slices.outboundTags.collectAsLazyPagingItems()
+    val query by viewModel.slices.query.collectAsStateWithLifecycle()
+
     val isEditFlow = remember(viewModel) {
         viewModel.uiState.map { it.isEdit }.distinctUntilChanged()
     }
@@ -97,6 +105,9 @@ fun RoutingEditScreen(
         RoutingEditForm(
             state = state,
             callbacks = callbacks,
+            outboundItems = outboundItems,
+            query = query,
+            onQueryChange = viewModel.slices.onQueryChange,
             onAction = onAction,
             modifier = Modifier.fillMaxSize().imePadding(),
         )
@@ -146,12 +157,14 @@ private fun RoutingEditTopBar(
 private fun RoutingEditForm(
     state: RoutingEditUiState,
     callbacks: RoutingFieldCallbacks,
+    outboundItems: LazyPagingItems<DropdownOption>,
+    query: String,
+    onQueryChange: (String) -> Unit,
     onAction: (RoutingEditAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
     val form = state.form
-    val outboundOptions = remember(state.outboundOptions) { StringOptions(state.outboundOptions) }
 
     Column(
         modifier = modifier
@@ -218,14 +231,16 @@ private fun RoutingEditForm(
             options = RoutingNetworkOptions,
             onValueChange = callbacks[RoutingField.NETWORK],
         )
-        FormDropdownField(
+        FormPagedDropdownField(
             label = stringResource(R.string.routing_settings_outbound_tag),
             placeholder = stringResource(
                 R.string.routing_settings_outbound_tag_hint,
                 stringResource(R.string.server_lab_remarks),
             ),
             value = form.outboundTag,
-            options = outboundOptions,
+            items = outboundItems,
+            query = query,
+            onQueryChange = onQueryChange,
             onValueChange = callbacks[RoutingField.OUTBOUND],
             editable = true,
         )
@@ -244,10 +259,12 @@ private fun PreviewRoutingEditForm() {
             state = RoutingEditUiState(
                 ruleId = "preview",
                 form = RoutingForm(remarks = "Preview", domain = "geosite:google"),
-                outboundOptions = listOf("proxy", "direct"),
                 canUseProcess = true,
             ),
             callbacks = RoutingFieldCallbacks {},
+            outboundItems = rememberPreviewDropdownItems(listOf("proxy", "direct")),
+            query = "",
+            onQueryChange = {},
             onAction = {},
         )
     }

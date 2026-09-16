@@ -1,6 +1,8 @@
 package com.v2ray.ang.ui.subscription
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
+import androidx.paging.cachedIn
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.data.entities.SubscriptionItem
@@ -14,6 +16,11 @@ import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import javax.inject.Inject
 
 @HiltViewModel
@@ -25,6 +32,18 @@ class SubEditViewModel @Inject constructor(
 ) {
 
     private val saver = EditFormSaver(handle, KEY_SAVED)
+
+    private val profileQuery = MutableStateFlow("")
+
+    val slices = SubEditSlices(
+        profileRemarks = profileQuery
+            .debounce(SEARCH_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .flatMapLatest { repo.profileRemarkPager(it) }
+            .cachedIn(viewModelScope),
+        query = profileQuery.asStateFlow(),
+        onQueryChange = { profileQuery.value = it },
+    )
 
     private var initial: SubscriptionItem? = null
     private var loadFailed = false
@@ -53,7 +72,6 @@ class SubEditViewModel @Inject constructor(
             copy(
                 form = if (saver.dirty) form else data.item.toSubEditForm(),
                 confirmRemove = data.confirmRemove,
-                profileOptions = data.profileOptions,
             )
         }
     }
@@ -122,5 +140,6 @@ class SubEditViewModel @Inject constructor(
     private companion object {
         const val KEY_SAVED = "sub_edit_saved_state"
         const val KEY_FORM = "form"
+        const val SEARCH_DEBOUNCE_MS = 300L
     }
 }

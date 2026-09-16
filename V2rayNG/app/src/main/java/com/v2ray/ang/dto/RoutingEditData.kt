@@ -4,6 +4,5 @@ import com.v2ray.ang.data.entities.RulesetItem
 
 data class RoutingEditData(
     val ruleset: RulesetItem?,
-    val canUseProcess: Boolean,
-    val outboundOptions: List<String>
+    val canUseProcess: Boolean
 )

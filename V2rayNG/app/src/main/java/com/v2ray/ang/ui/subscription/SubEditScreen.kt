@@ -25,16 +25,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.compose.AppTheme
 import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.DeleteConfirmDialog
-import com.v2ray.ang.ui.compose.FormDropdownField
+import com.v2ray.ang.ui.compose.DropdownOption
+import com.v2ray.ang.ui.compose.FormPagedDropdownField
 import com.v2ray.ang.ui.compose.FormTextField
 import com.v2ray.ang.ui.compose.NavigationBarsSpacer
 import com.v2ray.ang.ui.compose.SettingsSwitchItem
-import com.v2ray.ang.ui.compose.StringOptions
+import com.v2ray.ang.ui.compose.rememberPreviewDropdownItems
 import com.v2ray.ang.ui.compose.verticalScrollbar
 
 private val FormVerticalPad = 8.dp
@@ -79,6 +83,9 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
     val callbacks = remember(onAction) { SubFieldCallbacks(onAction) }
     val host = remember(onAction) { SubEditHost(onAction) }
 
+    val profileItems = viewModel.slices.profileRemarks.collectAsLazyPagingItems()
+    val query by viewModel.slices.query.collectAsStateWithLifecycle()
+
     BackHandler { onAction(SubEditAction.Back) }
 
     BaseScreen(
@@ -92,7 +99,9 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
 
         SubEditFields(
             form = state.form,
-            profileOptions = state.profileOptions,
+            profileItems = profileItems,
+            query = query,
+            onQueryChange = viewModel.slices.onQueryChange,
             callbacks = callbacks,
             modifier = Modifier.fillMaxSize().imePadding()
         )
@@ -137,12 +146,13 @@ private fun SubEditTopBar(
 @Composable
 private fun SubEditFields(
     form: SubEditForm,
-    profileOptions: List<String>,
+    profileItems: LazyPagingItems<DropdownOption>,
+    query: String,
+    onQueryChange: (String) -> Unit,
     callbacks: SubFieldCallbacks,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    val options = remember(profileOptions) { StringOptions(profileOptions) }
 
     Column(
         modifier = modifier
@@ -196,20 +206,24 @@ private fun SubEditFields(
             checked = form.allowInsecureUrl,
             onCheckedChange = callbacks[SubFlag.ALLOW_INSECURE_URL]
         )
-        FormDropdownField(
+        FormPagedDropdownField(
             label = stringResource(R.string.sub_setting_pre_profile),
             placeholder = stringResource(R.string.sub_setting_pre_profile_tip),
             value = form.prevProfile,
-            options = options,
+            items = profileItems,
+            query = query,
+            onQueryChange = onQueryChange,
             onValueChange = callbacks[SubField.PREV_PROFILE],
             editable = true,
             supportingText = stringResource(R.string.sub_setting_entry_proxy_tip)
         )
-        FormDropdownField(
+        FormPagedDropdownField(
             label = stringResource(R.string.sub_setting_next_profile),
             placeholder = stringResource(R.string.sub_setting_pre_profile_tip),
             value = form.nextProfile,
-            options = options,
+            items = profileItems,
+            query = query,
+            onQueryChange = onQueryChange,
             onValueChange = callbacks[SubField.NEXT_PROFILE],
             editable = true,
             supportingText = stringResource(R.string.sub_setting_exit_proxy_tip)
@@ -230,7 +244,9 @@ private fun SubEditFieldsPreview() = AppTheme {
             autoUpdate = true,
             updateInterval = "1440"
         ),
-        profileOptions = listOf("direct", "proxy"),
+        profileItems = rememberPreviewDropdownItems(listOf("direct", "proxy")),
+        query = "",
+        onQueryChange = {},
         callbacks = SubFieldCallbacks({})
     )
 }

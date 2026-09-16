@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.server
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.paging.cachedIn
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.data.entities.ProfileItem
@@ -17,9 +18,13 @@ import com.v2ray.ang.ui.compose.ToastType
 import com.v2ray.ang.util.JsonUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
@@ -38,6 +43,26 @@ class ServerEditViewModel @Inject constructor(
         .map { it.header }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), state.header)
+
+    private val chainQuery = MutableStateFlow("")
+    private val tagQuery = MutableStateFlow("")
+
+    val slices = ServerSlices(
+        chainCandidates = chainQuery
+            .debounce(SEARCH_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .flatMapLatest { repository.chainCandidatePager(it) }
+            .cachedIn(viewModelScope),
+        fallbackTags = tagQuery
+            .debounce(SEARCH_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .flatMapLatest { repository.fallbackTagPager(it) }
+            .cachedIn(viewModelScope),
+        chainQuery = chainQuery.asStateFlow(),
+        tagQuery = tagQuery.asStateFlow(),
+        onChainQueryChange = { chainQuery.value = it },
+        onTagQueryChange = { tagQuery.value = it },
+    )
 
     private var initialProfile: ProfileItem = ProfileItem.create(state.configType)
     private var loadFailed = false
@@ -74,12 +99,7 @@ class ServerEditViewModel @Inject constructor(
         initialProfile = data.profile ?: ProfileItem.create(configType)
 
         val options = when (configType) {
-            EConfigType.POLICYGROUP -> ServerOptions(
-                subscriptions = data.subscriptions,
-                fallbackTags = data.fallbackTags,
-            )
-
-            EConfigType.PROXYCHAIN -> ServerOptions(profileRemarks = data.profileRemarks)
+            EConfigType.POLICYGROUP -> ServerOptions(subscriptions = data.subscriptions)
             else -> ServerOptions()
         }
         val form = when {
@@ -360,6 +380,7 @@ class ServerEditViewModel @Inject constructor(
         private const val KEY_SAVED = "server_edit_saved_state"
         private const val KEY_FORM = "form"
         private const val KEY_RAW = "raw"
+        private const val SEARCH_DEBOUNCE_MS = 300L
 
         private fun initialState(handle: SavedStateHandle): ServerUiState {
             val typeValue = handle.get<Int>(AppRoute.EXTRA_TYPE) ?: EConfigType.VMESS.value

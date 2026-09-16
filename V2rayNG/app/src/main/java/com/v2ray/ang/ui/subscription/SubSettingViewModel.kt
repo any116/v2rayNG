@@ -2,7 +2,7 @@ package com.v2ray.ang.ui.subscription
 
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.SubUpdateOptions
-import com.v2ray.ang.data.entities.SubscriptionCache
+import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.data.repository.SubRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
@@ -24,7 +24,7 @@ class SubSettingViewModel @Inject constructor(
     SubUiState(confirmRemove = repo.confirmRemove())
 ) {
 
-    private var subscriptions: List<SubscriptionCache> = emptyList()
+    private var subscriptions: List<SubscriptionItem> = emptyList()
     private var persistedOptions = SubUpdateOptions()
     private var changed = false
     private var finishing = false
@@ -109,12 +109,11 @@ class SubSettingViewModel @Inject constructor(
     private fun toggleEnabled(subId: String, enabled: Boolean) {
         val index = subscriptions.indexOfFirst { it.guid == subId }
         if (index < 0) return
-        val current = subscriptions[index].subscription
+        val current = subscriptions[index]
         if (current.enabled == enabled) return
 
-        val item = current.copy().also { it.enabled = enabled }
-        subscriptions = subscriptions.toMutableList()
-            .also { it[index] = SubscriptionCache(subId, item) }
+        val item = current.copy(enabled = enabled)
+        subscriptions = subscriptions.toMutableList().also { it[index] = item }
         val rows = subscriptions.toSubRows()
         setState { copy(subscriptions = rows) }
         changed = true

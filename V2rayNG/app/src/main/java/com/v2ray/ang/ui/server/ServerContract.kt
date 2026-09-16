@@ -23,8 +23,6 @@ data class ChainMember(val id: String = UUID.randomUUID().toString(), val remark
 @Immutable
 data class ServerOptions(
     val subscriptions: List<SubscriptionOption> = emptyList(),
-    val profileRemarks: List<String> = emptyList(),
-    val fallbackTags: List<String> = emptyList(),
 )
 
 @Immutable
