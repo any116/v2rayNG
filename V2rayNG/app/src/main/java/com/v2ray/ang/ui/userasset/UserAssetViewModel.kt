@@ -37,7 +37,15 @@ class UserAssetViewModel @Inject constructor(
     val downloadProgress: StateFlow<AssetDownloadProgress?> = _downloadProgress.asStateFlow()
 
     init {
-        refresh()
+        setState { copy(geoSources = repo.geoSources(), geoSource = repo.geoSource()) }
+        observeAssets()
+    }
+
+    /** Room drives the list; there is no manual reload any more. */
+    private fun observeAssets() = launch(onError = { toastError() }) {
+        repo.observeAssets().collect { files ->
+            setState { copy(assets = files.toAssetRows()) }
+        }
     }
 
     override fun onAction(action: UserAssetAction) {
@@ -63,36 +71,17 @@ class UserAssetViewModel @Inject constructor(
             UserAssetAction.DialogConfirm -> confirmDialog()
             UserAssetAction.DialogDismiss -> setState { copy(dialog = null) }
 
-            is UserAssetAction.ResultReceived -> if (action.result.isOk) {
-                changed = true
-                refresh()
-            }
+            is UserAssetAction.ResultReceived -> if (action.result.isOk) changed = true
         }
     }
 
-    // ===== Loading =====
-
-    private fun refresh() = launch(loading = true) { reload() }
-
-    private suspend fun reload() {
-        val snapshot = repo.loadSnapshot()
-        val rows = snapshot.files.toAssetRows()
-        setState {
-            copy(
-                assets = rows,
-                geoSources = snapshot.geoSources,
-                geoSource = snapshot.geoSource
-            )
-        }
-    }
+    // ===== Geo source =====
 
     private fun selectGeoSource(value: String) {
         if (value == state.geoSource) return
-        launch(loading = true) {
-            repo.setGeoSource(value)
-            changed = true
-            reload()
-        }
+        setState { copy(geoSource = value) }
+        changed = true
+        launch(loading = true) { repo.setGeoSource(value) }
     }
 
     // ===== Import =====
@@ -101,7 +90,6 @@ class UserAssetViewModel @Inject constructor(
         when (repo.importFile(uri)) {
             AssetImportResult.SUCCESS -> {
                 changed = true
-                reload()
                 toastSuccess()
             }
 
@@ -139,7 +127,6 @@ class UserAssetViewModel @Inject constructor(
     private fun remove(guid: String, remarks: String) = launch(loading = true) {
         repo.removeAssetWithFile(guid, remarks)
         changed = true
-        reload()
         toastSuccess()
     }
 
@@ -161,7 +148,6 @@ class UserAssetViewModel @Inject constructor(
         } else {
             toastError()
         }
-        reload()
     }
 
     // ===== Finishing =====
