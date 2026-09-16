@@ -5,10 +5,12 @@ import com.v2ray.ang.data.entities.SettingsEntry
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
@@ -23,6 +25,10 @@ import javax.inject.Singleton
  * first. Writes are suspend and poke the local snapshot immediately. Cross process consistency
  * is eventual: other processes catch up through the settings table invalidation. Paths that
  * need a strong guarantee (core startup) call refresh() explicitly as their first step.
+ *
+ * Callers that need the snapshot but cannot assume refresh() has already completed (UI startup
+ * gate, first-time consumers) suspend on awaitReady() instead of racing the bootstrap coroutine
+ * and reading defaults.
  */
 @Singleton
 class SettingsStore @Inject constructor(
@@ -34,28 +40,40 @@ class SettingsStore @Inject constructor(
     private val snapshot = ConcurrentHashMap<String, String>()
     private val ready = AtomicBoolean(false)
 
+    /** Completed by the first successful refresh(); awaitReady() suspends on it. */
+    private val readySignal = CompletableDeferred<Unit>()
+
     /** Owns fire and forget writes issued from non suspend call sites. */
     private val writeScope = CoroutineScope(SupervisorJob() + io)
 
     val isReady: Boolean get() = ready.get()
 
+    /**
+     * Suspends until the snapshot has been populated at least once.
+     */
+    suspend fun awaitReady() = readySignal.await()
+
     suspend fun refresh() {
         val rows = dao.all()
         val fresh = HashMap<String, String>(rows.size)
         rows.forEach { row -> row.value?.let { fresh[row.key] = it } }
-        snapshot.keys.retainAll(fresh.keys)
         snapshot.putAll(fresh)
+        snapshot.keys.retainAll(fresh.keys)
         ready.set(true)
-    }
-
-    /** Keeps this process' snapshot aligned with writes made by any other process. */
-    fun observe(scope: CoroutineScope): Job = scope.launch(io) {
-        db.invalidationTracker.createFlow(TABLE, emitInitialState = false).collect { refresh() }
+        readySignal.complete(Unit)
     }
 
     /**
-     * Writes the coded defaults for keys that are absent or blank. Replaces
-     * SettingsManager.ensureDefaultSettings(); call it once, right after refresh().
+     * Keeps this process' snapshot aligned with writes made by any other process.
+     */
+    fun observe(scope: CoroutineScope): Job = scope.launch(io) {
+        db.invalidationTracker.createFlow(TABLE, emitInitialState = false)
+            .conflate()
+            .collect { refresh() }
+    }
+
+    /**
+     * Writes the coded defaults for keys that are absent or blank.
      */
     suspend fun seedDefaults() {
         val missing = SettingsDefaults.ENTRIES.filter { read(it.key).isNullOrBlank() }

@@ -8,16 +8,19 @@ import androidx.paging.filter
 import androidx.paging.insertHeaderItem
 import androidx.paging.map
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.data.ProfileDao
+import com.v2ray.ang.data.RoutingDao
+import com.v2ray.ang.data.SettingsStore
+import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.RoutingEditData
 import com.v2ray.ang.dto.RoutingRuleRow
-import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.dto.toRuleRows
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.RoutingType
 import com.v2ray.ang.extension.normalizeLike
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.compose.DropdownOption
 import com.v2ray.ang.util.JsonUtil
@@ -33,6 +36,8 @@ import javax.inject.Inject
 open class RoutingRepository @Inject constructor(
     private val app: Application,
     private val profileDao: ProfileDao,
+    private val routingDao: RoutingDao,
+    private val settings: SettingsStore,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io) {
 
@@ -81,44 +86,42 @@ open class RoutingRepository @Inject constructor(
 
     // ----- Insert / update / remove by id (atomic) -----
 
+    /**
+     * New rules land at the top of the list, matching the previous "list.add(0, item)" position.
+     * The DAO has no minSortOrder() reader, so the current minimum is read from all() and the new
+     * row is placed one SORT_STEP below it.
+     */
     open suspend fun insertRule(item: RulesetItem): String = runIO("") {
-        val list = repairedRulesets().toMutableList()
         if (item.id.isEmpty()) item.id = UUID.randomUUID().toString()
-        list.add(0, item)
-        withContext(NonCancellable) { MmkvManager.encodeRoutingRulesets(ArrayList(list)) }
+        val minSort = routingDao.all().minOfOrNull { it.sortOrder } ?: 0L
+        routingDao.upsert(item.copy(sortOrder = minSort - ProfileItem.SORT_STEP))
         item.id
     }
 
     open suspend fun updateRule(item: RulesetItem): Boolean = runIO(false) {
-        val list = repairedRulesets().toMutableList()
-        val index = list.indexOfFirst { it.id == item.id }
-        if (index < 0) return@runIO false
-        list[index] = item
-        withContext(NonCancellable) { MmkvManager.encodeRoutingRulesets(ArrayList(list)) }
+        if (routingDao.find(item.id) == null) return@runIO false
+        routingDao.upsert(item)
         true
     }
 
     open suspend fun removeRule(ruleId: String): Boolean = runIO(false) {
-        val list = repairedRulesets().toMutableList()
-        if (!list.removeAll { it.id == ruleId }) return@runIO false
-        withContext(NonCancellable) { MmkvManager.encodeRoutingRulesets(ArrayList(list)) }
+        if (routingDao.find(ruleId) == null) return@runIO false
+        routingDao.delete(ruleId)
         true
     }
 
     open suspend fun saveOrder(list: List<RulesetItem>) = runIO(Unit) {
-        withContext(NonCancellable) { MmkvManager.encodeRoutingRulesets(ArrayList(list)) }
+        routingDao.saveOrder(list.map { it.id })
     }
 
     // ----- Domain strategy -----
 
     open suspend fun getDomainStrategy(): String = runIO("") {
-        MmkvManager.decodeSettingsString(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY).orEmpty()
+        Prefs.string(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY).orEmpty()
     }
 
     open suspend fun setDomainStrategy(value: String) = runIO(Unit) {
-        withContext(NonCancellable) {
-            MmkvManager.encodeSettings(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY, value)
-        }
+        settings.putString(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY, value)
     }
 
     // ----- Preset / import / export -----
@@ -135,30 +138,36 @@ open class RoutingRepository @Inject constructor(
     open suspend fun readClipboard(): String = runIO("") { Utils.getClipboard(app) }
 
     open suspend fun exportToClipboard(): Boolean = runIO(false) {
-        val json = MmkvManager.decodeRoutingRulesets()
-            ?.takeIf { it.isNotEmpty() }
-            ?.let(JsonUtil::toJson)
-            ?: return@runIO false
-        Utils.setClipboard(app, json)
+        val list = routingDao.all()
+        if (list.isEmpty()) return@runIO false
+        Utils.setClipboard(app, JsonUtil.toJson(list))
         true
     }
 
     // ----- Internals -----
 
-    /** Reads the rulesets, giving every item a unique id */
+    /**
+     * Reads the rulesets, giving every item a unique id.
+     *
+     * Room's primary key already forbids duplicate ids, so in practice only a blank id can reach
+     * the repair branch. The seen-set is kept so a row that somehow slips through does not
+     * silently share a key with another item.
+     */
     private suspend fun repairedRulesets(): List<RulesetItem> {
-        val list = MmkvManager.decodeRoutingRulesets()?.toMutableList() ?: mutableListOf()
-        var patched = false
+        val list = routingDao.all().toMutableList()
         val seen = HashSet<String>(list.size)
+        val toReinsert = mutableListOf<RulesetItem>()
         list.forEach { item ->
             if (item.id.isEmpty() || !seen.add(item.id)) {
                 item.id = UUID.randomUUID().toString()
                 seen.add(item.id)
-                patched = true
+                toReinsert.add(item)
             }
         }
-        if (patched) {
-            withContext(NonCancellable) { MmkvManager.encodeRoutingRulesets(ArrayList(list)) }
+        if (toReinsert.isNotEmpty()) {
+            withContext(NonCancellable) {
+                toReinsert.forEach { routingDao.upsert(it) }
+            }
         }
         return list
     }

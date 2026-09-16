@@ -2,6 +2,9 @@ package com.v2ray.ang.di
 
 import android.app.Application
 import androidx.room3.Room
+import androidx.room3.useReaderConnection
+import androidx.room3.useWriterConnection
+import androidx.sqlite.SQLiteStatement
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.AppDatabase
@@ -21,6 +24,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import javax.inject.Singleton
 
@@ -30,7 +36,7 @@ object DatabaseModule {
 
     /**
      * Every process (UI, :daemon, :tasks, :bg) builds its own Application and its own Hilt
-     * graph, so each holds its own instance. enableMultiInstanceInvalidation() is what makes one
+     * graph, each holds its own instance. enableMultiInstanceInvalidation() is what makes one
      * process' write invalidate another's Flow / PagingSource, replacing MMKV's
      * MULTI_PROCESS_MODE. It must be enabled in EVERY process: enabling it on one side only is
      * the same as not enabling it.
@@ -40,6 +46,7 @@ object DatabaseModule {
     fun provideDatabase(
         app: Application,
         @IoDispatcher io: CoroutineDispatcher,
+        @ApplicationScope appScope: CoroutineScope,
     ): AppDatabase {
         val build = {
             Room.databaseBuilder<AppDatabase>(app, AppDatabase.NAME)
@@ -50,31 +57,55 @@ object DatabaseModule {
                         val staged = BackupRepository.pendingSnapshotFile(app)
                         if (staged.isFile) {
                             // A restored legacy archive staged its snapshot here before the
-                            // process restarted. Consume it once; if deserialization fails,
-                            // fall through to an empty snapshot rather than crashing the
-                            // first process that opens the database.
-                            val snapshot = runCatching {
-                                JsonUtil.fromJsonSafe(staged.readText(), LegacySnapshot::class.java)
-                            }.getOrNull()
+                            // process restarted. Consume it once.
+                            val json = staged.readText()
                             staged.delete()
-                            snapshot ?: LegacySnapshot.EMPTY
+                            JsonUtil.fromJsonSafe(json, LegacySnapshot::class.java)
+                                ?: error("Pending legacy snapshot failed to deserialize")
                         } else {
-                            // First-time creation on an existing install: import from MMKV.
-                            MmkvLegacyReader().readAll()
+                            MmkvLegacyReader(app).readAll()
                         }
                     }
                 )
                 .enableMultiInstanceInvalidation()
                 .build()
         }
-        return runCatching { build() }.getOrElse { error ->
-            // Replaces MMKV's onMMKVCRCCheckFail / onMMKVFileLengthError. The corrupt file is
-            // renamed rather than deleted so the user can still export it for diagnosis; this is
-            // a net loss of capability compared to MMKV's partial recovery and is recorded as
-            // such in the migration document.
+
+        // build() only constructs the wrapper.
+        if (!app.getDatabasePath(AppDatabase.NAME).exists()) return build()
+
+        val db = runCatching { build() }.getOrElse { error ->
+            LogUtil.e(AppConfig.TAG, "Building the database wrapper failed", error)
+            quarantine(app)
+            return build()
+        }
+
+        return runCatching {
+            runBlocking(io) {
+                db.useReaderConnection<Int> { conn ->
+                    conn.usePrepared("PRAGMA user_version") { st ->
+                        if (st.step()) st.getInt(0) else 0
+                    }
+                }
+            }
+            db
+        }.getOrElse { error ->
             LogUtil.e(AppConfig.TAG, "Opening the database failed; quarantining the file", error)
+            runCatching { db.close() }
             quarantine(app)
             build()
+        }.also { opened ->
+            appScope.launch {
+                runCatching {
+                    opened.useWriterConnection<Unit> { conn ->
+                        conn.usePrepared("PRAGMA wal_checkpoint(TRUNCATE)") { st ->
+                            st.step()
+                        }
+                    }
+                }.onFailure {
+                    LogUtil.w(AppConfig.TAG, "Post-open WAL checkpoint skipped", it)
+                }
+            }
         }
     }
 

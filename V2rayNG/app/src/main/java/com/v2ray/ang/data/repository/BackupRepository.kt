@@ -1,13 +1,16 @@
 package com.v2ray.ang.data.repository
 
+import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import androidx.room3.useWriterConnection
+import androidx.sqlite.SQLiteStatement
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
+import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.data.AppDatabase
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.entities.WebDavConfig
@@ -15,6 +18,7 @@ import com.v2ray.ang.data.legacy.LegacySnapshot
 import com.v2ray.ang.data.legacy.MmkvLegacyReader
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.WebDavManager
+import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.ui.main.MainActivity
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
@@ -65,8 +69,7 @@ open class BackupRepository @Inject constructor(
     // ---- pack ----
 
     /**
-     * Checkpoints the WAL into the main file, then copies the main file only. -wal and -shm are
-     * runtime artefacts; shipping them makes a cross-device restore worse, not better.
+     * Produces a self-consistent copy of the database with VACUUM INTO, then zips it.
      */
     open suspend fun packToCache(): File? = runIO(null) {
         val dir = prepareWorkDir()
@@ -75,15 +78,21 @@ open class BackupRepository @Inject constructor(
         val zip = File(dir, "$folder$ZIP_SUFFIX")
         try {
             dumpDir.mkdirs()
-            checkpoint()
+            val target = File(dumpDir, AppDatabase.NAME)
+            target.delete()  // VACUUM INTO refuses to overwrite
 
-            val source = app.getDatabasePath(AppDatabase.NAME)
-            if (!source.isFile) {
-                LogUtil.w(AppConfig.TAG, "Backup aborted: no database file to dump")
+            db.useWriterConnection<Unit> { conn ->
+                conn.usePrepared("VACUUM INTO ?") { st ->
+                    st.bindText(1, target.absolutePath)
+                    st.step()
+                }
+            }
+
+            if (!target.isFile || target.length() == 0L) {
+                LogUtil.w(AppConfig.TAG, "Backup aborted: VACUUM INTO produced no file")
                 zip.delete()
                 return@runIO null
             }
-            source.copyTo(File(dumpDir, AppDatabase.NAME), overwrite = true)
 
             if (!ZipUtil.zipFromFolder(dumpDir.absolutePath, zip.absolutePath)) {
                 LogUtil.w(AppConfig.TAG, "Backup aborted: zipping ${dumpDir.name} failed")
@@ -95,10 +104,6 @@ open class BackupRepository @Inject constructor(
         } finally {
             dumpDir.deleteRecursively()
         }
-    }
-
-    private suspend fun checkpoint() = db.useWriterConnection { connection ->
-        connection.usePrepared("PRAGMA wal_checkpoint(TRUNCATE)") { it.step() }
     }
 
     open suspend fun exportTo(zip: File, target: Uri): Boolean = runIO(false) {
@@ -128,10 +133,6 @@ open class BackupRepository @Inject constructor(
      *   - new: contains v2rayng.db, which simply replaces the current file
      *   - old: contains only an MMKV directory, which is read into a LegacySnapshot, staged, and
      *     replayed through the SAME LegacyImporter path as the first-time import
-     *
-     * The process always restarts afterwards. A closed RoomDatabase cannot be reused (Room 3.0.2
-     * and later throw IllegalStateException on use after close), so asking the user to restart
-     * manually guarantees a crash whenever they decline.
      */
     open suspend fun restore(zip: File): Boolean = runIO(false) {
         val target = File(prepareWorkDir(), "$UNPACK_PREFIX${unique()}")
@@ -145,6 +146,8 @@ open class BackupRepository @Inject constructor(
             val legacyDir = findLegacyMmkvDir(target)
             val dbPath = app.getDatabasePath(AppDatabase.NAME)
 
+            stopSiblingProcesses()
+
             when {
                 incoming.isFile -> {
                     db.close()
@@ -153,7 +156,10 @@ open class BackupRepository @Inject constructor(
                 }
 
                 legacyDir != null -> {
-                    val snapshot = MmkvLegacyReader(rootDir = legacyDir.absolutePath).readAll()
+                    val snapshot = MmkvLegacyReader(
+                        context = app,
+                        rootDir = legacyDir.absolutePath,
+                    ).readAll()
                     if (snapshot.isEmpty) {
                         LogUtil.w(AppConfig.TAG, "Restore aborted: legacy archive carried no data")
                         return@runIO false
@@ -178,9 +184,28 @@ open class BackupRepository @Inject constructor(
     }
 
     /**
-     * A restored legacy snapshot has to survive the process restart, because it is consumed by
-     * the database create callback in whichever process opens the file next. It is serialised
-     * into files/ rather than cache/ so the platform cannot evict it in between.
+     * Asks the core service to shut down and then kills every sibling process owned by the same
+     * UID (:daemon, :bg, :tasks).
+     */
+    private fun stopSiblingProcesses() {
+        LauncherManager.stopService(app)
+        MessageHelper.sendMsg2Service(app, AppConfig.MSG_STATE_STOP, "")
+
+        runCatching { Thread.sleep(SERVICE_STOP_GRACE_MS) }
+
+        val am = app.getSystemService(ActivityManager::class.java) ?: return
+        val selfPid = android.os.Process.myPid()
+        val selfUid = android.os.Process.myUid()
+        runCatching {
+            am.runningAppProcesses
+                ?.filter { it.uid == selfUid && it.pid != selfPid }
+                ?.forEach { android.os.Process.killProcess(it.pid) }
+        }.onFailure { LogUtil.w(AppConfig.TAG, "Failed to kill sibling processes", it) }
+    }
+
+    /**
+     * A restored legacy snapshot has to survive the process restart, it consumed by
+     * the database create callback in whichever process opens the file next.
      */
     private fun stagePendingSnapshot(snapshot: LegacySnapshot) {
         pendingSnapshotFile(app).writeText(JsonUtil.toJson(snapshot))
@@ -191,7 +216,6 @@ open class BackupRepository @Inject constructor(
         File("${dbPath.path}-shm").delete()
     }
 
-    /** MMKV stores live in a directory containing a MAIN file; the archive layout may nest it. */
     private fun findLegacyMmkvDir(root: File): File? {
         if (File(root, LEGACY_PROBE_FILE).isFile) return root
         return root.walkTopDown().maxDepth(3)
@@ -211,7 +235,7 @@ open class BackupRepository @Inject constructor(
             android.os.SystemClock.elapsedRealtime() + RESTART_DELAY_MS,
             pending,
         )
-        Runtime.getRuntime().exit(0)
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     // ---- WebDAV transfer ----
@@ -257,6 +281,7 @@ open class BackupRepository @Inject constructor(
         private const val LEGACY_PROBE_FILE = "MAIN"
         private const val RESTART_REQUEST_CODE = 0x5265
         private const val RESTART_DELAY_MS = 400L
+        private const val SERVICE_STOP_GRACE_MS = 600L
         private const val PENDING_SNAPSHOT = "pending_legacy_snapshot.json"
 
         fun pendingSnapshotFile(app: Application): File = File(app.filesDir, PENDING_SNAPSHOT)

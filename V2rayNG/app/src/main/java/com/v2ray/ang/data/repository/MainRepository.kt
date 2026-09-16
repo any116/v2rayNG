@@ -45,9 +45,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
-import java.io.Closeable
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import javax.inject.Singleton
 
 sealed interface MainServiceEvent {
     data object StateRunning : MainServiceEvent
@@ -55,6 +55,8 @@ sealed interface MainServiceEvent {
     data object StateStartSuccess : MainServiceEvent
     data class StateStartFailure(val errorMessage: String) : MainServiceEvent
     data object StateStopSuccess : MainServiceEvent
+    /** Non-fatal warning from the service. Currently only allow-insecure without a pin. */
+    data object WarnInsecure : MainServiceEvent
     data class MeasureDelayResult(val requestId: String, val result: ConnectionTestResult) : MainServiceEvent
     data class MeasureDelayCanceled(val requestId: String) : MainServiceEvent
     data class MeasureConfigSuccess(val requestId: String) : MainServiceEvent
@@ -63,15 +65,21 @@ sealed interface MainServiceEvent {
     data class MeasureConfigCanceled(val requestId: String) : MainServiceEvent
 }
 
+/**
+ * @Singleton because it owns a process-wide broadcast registration and a shared event flow. An
+ * unscoped instance would register a second receiver every time it is injected and leak the
+ * first one, and the extra buffer would split service events between two subscribers.
+ */
+@Singleton
 open class MainRepository @Inject constructor(
     private val app: Application,
     private val profileDao: ProfileDao,
     private val subscriptionDao: SubscriptionDao,
     private val settings: SettingsStore,
     @IoDispatcher io: CoroutineDispatcher
-) : BaseRepository(io), Closeable {
+) : BaseRepository(io) {
 
-    private val closed = AtomicBoolean(false)
+    private val receiverRegistered = AtomicBoolean(false)
 
     private val _serviceEvents = MutableSharedFlow<MainServiceEvent>(
         replay = 0,
@@ -91,6 +99,7 @@ open class MainRepository @Inject constructor(
                 AppConfig.MSG_STATE_START_FAILURE ->
                     MainServiceEvent.StateStartFailure(content.orEmpty())
                 AppConfig.MSG_STATE_STOP_SUCCESS -> MainServiceEvent.StateStopSuccess
+                AppConfig.MSG_WARN_INSECURE -> MainServiceEvent.WarnInsecure
                 AppConfig.MSG_MEASURE_DELAY_RESULT -> data
                     .serializable<ConnectionTestResponse>("content")
                     ?.let { MainServiceEvent.MeasureDelayResult(it.requestId, it.result) }
@@ -115,23 +124,18 @@ open class MainRepository @Inject constructor(
     }
 
     init {
-        ContextCompat.registerReceiver(
-            app, serviceReceiver,
-            IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY),
-            Utils.receiverFlags()
-        )
-        MessageHelper.sendMsg2Service(app, AppConfig.MSG_REGISTER_CLIENT, "")
+        if (receiverRegistered.compareAndSet(false, true)) {
+            ContextCompat.registerReceiver(
+                app, serviceReceiver,
+                IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY),
+                Utils.receiverFlags()
+            )
+            MessageHelper.sendMsg2Service(app, AppConfig.MSG_REGISTER_CLIENT, "")
+        }
     }
 
-    override fun close() {
-        if (!closed.compareAndSet(false, true)) return
-        runCatching { sendCancelBatchTest("") }
-            .onFailure { LogUtil.e(AppConfig.TAG, "Failed to cancel batch test on close", it) }
-        runCatching { MessageHelper.sendMsg2Service(app, AppConfig.MSG_UNREGISTER_CLIENT, "") }
-            .onFailure { LogUtil.e(AppConfig.TAG, "Failed to unregister service client", it) }
-        runCatching { app.unregisterReceiver(serviceReceiver) }
-            .onFailure { LogUtil.e(AppConfig.TAG, "Failed to unregister main service receiver", it) }
-    }
+    /** Suspends until the settings snapshot is ready for the calling process. */
+    open suspend fun awaitReady() = settings.awaitReady()
 
     // ---- Preferences: snapshot reads, stay synchronous ----
 
@@ -351,7 +355,6 @@ open class MainRepository @Inject constructor(
     }
 
     private fun emitDelayCanceled(requestId: String) {
-        if (closed.get()) return
         _serviceEvents.tryEmit(MainServiceEvent.MeasureDelayCanceled(requestId))
     }
 

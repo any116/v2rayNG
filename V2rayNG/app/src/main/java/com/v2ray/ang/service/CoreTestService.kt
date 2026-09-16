@@ -9,22 +9,35 @@ import androidx.core.app.NotificationCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.di.IoDispatcher
+import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
-import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.AppLocaleManager
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class CoreTestService : Service() {
+
+    @Inject
+    @IoDispatcher
+    lateinit var io: CoroutineDispatcher
 
     /**
      * One unit of work, tagged with the request that owns it. Removal from [units] is the atomic
@@ -36,6 +49,11 @@ class CoreTestService : Service() {
 
     private val units: MutableSet<BatchUnit> =
         Collections.newSetFromMap(ConcurrentHashMap<BatchUnit, Boolean>())
+
+    private val serviceScope by lazy { CoroutineScope(SupervisorJob() + io) }
+    private val resultWriter by lazy {
+        TestResultWriter(dao = PlatformDependencies.profileDao(this), scope = serviceScope)
+    }
 
     override fun attachBaseContext(newBase: Context?) {
         super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
@@ -62,6 +80,12 @@ class CoreTestService : Service() {
     override fun onCreate() {
         super.onCreate()
         CoreNativeManager.initCoreEnv(this)
+        // This service can run in the daemon process, whose snapshot may not be warm yet.
+        serviceScope.launch {
+            runCatching { PlatformDependencies.settingsStore(this@CoreTestService).refresh() }
+                .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: preference refresh failed", it) }
+        }
+        resultWriter.start()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -70,6 +94,10 @@ class CoreTestService : Service() {
     override fun onDestroy() {
         LogUtil.i(AppConfig.TAG, "CoreTestService destroyed, cancelling ${units.size} units")
         cancelUnits(units.toList())
+        // Bounded loss on the cancel path only: at most one flush window. The normal finish path
+        // always flushes before reporting.
+        serviceScope.launch { resultWriter.stop() }
+        serviceScope.cancel()
         NotificationHelper.stopForeground(this)
         super.onDestroy()
     }
@@ -109,26 +137,32 @@ class CoreTestService : Service() {
         // and reported, never dropped.
         cancelUnits(units.toList())
 
-        val guids = when {
-            message.serverGuids.isNotEmpty() -> message.serverGuids
-            message.subscriptionId.isNotEmpty() -> MmkvManager.decodeServerList(message.subscriptionId)
-            else -> MmkvManager.decodeAllServerList()
-        }
-        if (guids.isEmpty()) {
-            sendCanceled(requestId)
-            stopIfIdle(startId)
-            return
-        }
+        serviceScope.launch {
+            val dao = PlatformDependencies.profileDao(this@CoreTestService)
+            // subscriptionId = '' resolves to the whole visible set, which is what the previous
+            // decodeAllServerList() branch produced.
+            val guids = message.serverGuids.ifEmpty {
+                runCatching { dao.guidsInScope(message.subscriptionId, "") }
+                    .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: failed to load targets", it) }
+                    .getOrDefault(emptyList())
+            }
+            if (guids.isEmpty()) {
+                sendCanceled(requestId)
+                stopIfIdle(startId)
+                return@launch
+            }
 
-        val unit = BatchUnit(requestId, message.subscriptionId)
-        unit.worker = RealPingWorkerService(
-            context = this,
-            guids = guids,
-            onlyTcp = message.onlyTcp,
-            onEvent = { event -> handleWorkerEvent(event, unit) }
-        )
-        units.add(unit)
-        unit.worker.start()
+            val unit = BatchUnit(requestId, message.subscriptionId)
+            unit.worker = RealPingWorkerService(
+                context = this@CoreTestService,
+                profileDao = dao,
+                guids = guids,
+                onlyTcp = message.onlyTcp,
+                onEvent = { event -> handleWorkerEvent(event, unit) }
+            )
+            units.add(unit)
+            unit.worker.start()
+        }
     }
 
     private fun handleWorkerEvent(event: RealPingEvent, unit: BatchUnit) {
@@ -145,7 +179,8 @@ class CoreTestService : Service() {
             }
 
             is RealPingEvent.Result -> {
-                MmkvManager.encodeServerTestDelayMillis(event.guid, event.delayMillis)
+                // Buffered, not written: one transaction per window instead of one per result.
+                resultWriter.record(event.guid, event.delayMillis)
                 if (unit !in units) return
                 sendNotify(AppConfig.MSG_MEASURE_CONFIG_SUCCESS, unit.requestId, event.guid)
             }
@@ -153,9 +188,13 @@ class CoreTestService : Service() {
             RealPingEvent.Finish -> {
                 // Losing the claim means the unit was already cancelled; do not also finish it.
                 if (!units.remove(unit)) return
-                applyPostProcessing(unit.subscriptionId)
-                sendNotify(AppConfig.MSG_MEASURE_CONFIG_FINISH, unit.requestId)
-                stopIfIdle()
+                serviceScope.launch {
+                    // Must complete before post-processing: sorting reads the delays just written.
+                    resultWriter.flush()
+                    applyPostProcessing(unit.subscriptionId)
+                    sendNotify(AppConfig.MSG_MEASURE_CONFIG_FINISH, unit.requestId)
+                    stopIfIdle()
+                }
             }
         }
     }
@@ -182,12 +221,12 @@ class CoreTestService : Service() {
         }
     }
 
-    private fun applyPostProcessing(subscriptionId: String) {
+    private suspend fun applyPostProcessing(subscriptionId: String) {
         if (subscriptionId.isEmpty()) return
-        if (Prefs.bool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
+        if (Prefs.bool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST)) {
             AngConfigManager.removeInvalidServer(subscriptionId)
         }
-        if (Prefs.string(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)) {
+        if (Prefs.bool(AppConfig.PREF_AUTO_SORT_AFTER_TEST)) {
             AngConfigManager.sortByTestResultsForSub(subscriptionId)
         }
     }

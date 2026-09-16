@@ -176,7 +176,13 @@ interface ProfileDao {
     @Query("SELECT * FROM profiles WHERE guid = :guid")
     suspend fun findByGuid(guid: String): ProfileItem?
 
-    @Query("SELECT * FROM profiles WHERE remarks = :remarks LIMIT 1")
+    /**
+     * Routing outbound tags, proxy chain nodes and policy-group fallback tags are all resolved
+     * by remark. Duplicate remarks are common in subscriptions, so the ORDER BY is not
+     * cosmetic: without it the row SQLite happens to return first is unspecified, and the
+     * core config would drift between launches.
+     */
+    @Query("SELECT * FROM profiles WHERE remarks = :remarks ORDER BY sortOrder, guid LIMIT 1")
     suspend fun findByRemarks(remarks: String): ProfileItem?
 
     @Query(
@@ -209,6 +215,21 @@ interface ProfileDao {
 
     @Query("SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId ORDER BY sortOrder, guid")
     suspend fun guidsInGroup(subscriptionId: String): List<String>
+
+    /**
+     * Profiles of one scope, complex types excluded. Replaces the pre-Room
+     * decodeAllServerList() + per-guid decode loop used for POLICYGROUP resolution, which walked
+     * the entire table. subscriptionId = '' means "all groups".
+     */
+    @Query(
+        """
+        SELECT * FROM profiles
+         WHERE (:subscriptionId = '' OR subscriptionId = :subscriptionId)
+           AND configType NOT IN (:complexTypes)
+         ORDER BY sortOrder, guid
+        """
+    )
+    suspend fun profilesOfScope(subscriptionId: String, complexTypes: List<Int>): List<ProfileItem>
 
     @Query(
         """
@@ -633,8 +654,22 @@ interface SubscriptionDao {
     @Query("SELECT value FROM settings WHERE key = 'SELECTED_SERVER'")
     suspend fun selectedGuid(): String?
 
+    @Query("INSERT OR REPLACE INTO settings(key, value, kind) VALUES ('SELECTED_SERVER', :guid, 's')")
+    suspend fun putSelectedGuid(guid: String)
+
     @Query("DELETE FROM settings WHERE key = 'SELECTED_SERVER'")
     suspend fun clearSelectedGuid()
+
+    /** Lowest-priority profile after this subscription was removed, in global list order. */
+    @Query(
+        """
+        SELECT p.guid FROM profiles AS p
+          LEFT JOIN subscriptions AS s ON s.guid = p.subscriptionId
+         ORDER BY IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid
+         LIMIT 1
+        """
+    )
+    suspend fun firstProfileGuid(): String?
 
     @Transaction
     suspend fun insertAtEnd(item: SubscriptionItem) {
@@ -650,17 +685,21 @@ interface SubscriptionDao {
     /**
      * Replaces SettingsManager.removeSubscriptionWithDefault: drops the subscription and its
      * profiles (stats/raw included), then re-creates a Default subscription if none remain.
+     *
+     * Selection handling mirrors ProfileDao.deleteProfiles: repoint rather than clear, so
+     * deleting a subscription does not leave the user with "no server selected".
      */
     @Transaction
     suspend fun removeWithDefault(guid: String, defaultRemarks: String) {
         val guids = profileGuidsOf(guid)
-        if (selectedGuid() in guids) clearSelectedGuid()
+        val hadSelection = selectedGuid() in guids
         guids.chunked(ProfileDao.SQLITE_VAR_LIMIT).forEach {
             deleteStatsOf(it)
             deleteRawsOf(it)
         }
         deleteProfilesOf(guid)
         deleteRow(guid)
+
         if (count() == 0) {
             upsert(
                 SubscriptionItem(
@@ -669,6 +708,11 @@ interface SubscriptionDao {
                     remarks = defaultRemarks,
                 )
             )
+        }
+
+        if (hadSelection) {
+            val fallback = firstProfileGuid()
+            if (fallback.isNullOrBlank()) clearSelectedGuid() else putSelectedGuid(fallback)
         }
     }
 }

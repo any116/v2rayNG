@@ -1,14 +1,15 @@
 package com.v2ray.ang.data.repository
 
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.TaskerProfile
 import com.v2ray.ang.handler.AngConfigManager
-import com.v2ray.ang.handler.MmkvManager
 import kotlinx.coroutines.CoroutineDispatcher
 import javax.inject.Inject
 
 open class ShortcutRepository @Inject constructor(
+    private val profileDao: ProfileDao,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io) {
 
@@ -33,8 +34,8 @@ open class ShortcutRepository @Inject constructor(
      * All stored profiles, in list order.
      */
     open suspend fun loadTaskerProfiles(): List<TaskerProfile> = withIO {
-        MmkvManager.decodeAllServerList().mapNotNull { guid ->
-            MmkvManager.decodeServerConfig(guid)?.let { config ->
+        profileDao.allGuidsInOrder().mapNotNull { guid ->
+            profileDao.findByGuid(guid)?.let { config ->
                 TaskerProfile(guid = guid, remarks = config.remarks)
             }
         }

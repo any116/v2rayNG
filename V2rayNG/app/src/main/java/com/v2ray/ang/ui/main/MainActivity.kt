@@ -8,6 +8,11 @@ import android.view.KeyEvent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.extension.delay
@@ -35,10 +40,19 @@ class MainActivity : BaseHelperActivity() {
     }
 
     @Composable
-    override fun ScreenContent() = MainScreen(
-        viewModel = viewModel,
-        onPlatformEvent = ::handlePlatformEvent,
-    )
+    override fun ScreenContent() {
+        var ready by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            viewModel.awaitReady()
+            ready = true
+        }
+        if (ready) {
+            MainScreen(
+                viewModel = viewModel,
+                onPlatformEvent = ::handlePlatformEvent,
+            )
+        }
+    }
 
     private fun handlePlatformEvent(event: MainEvent): Boolean = when (event) {
         is MainEvent.StartService -> {

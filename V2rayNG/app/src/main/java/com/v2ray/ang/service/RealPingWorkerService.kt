@@ -3,11 +3,11 @@ package com.v2ray.ang.service
 import android.content.Context
 import com.v2ray.ang.core.CoreConfigManager
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.isNotNullEmpty
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SpeedtestManager
 import kotlinx.coroutines.CancellationException
@@ -27,9 +27,9 @@ internal object RealPingExecutionLimiter {
     private val customConfigMutex = Mutex()
 
     suspend fun <T> run(configType: EConfigType, block: () -> T): T {
-        // Custom profiles bypass speed-test trimming and start complete Xray configs.
-        // Parallel teardown can abort the native probe process, so serialize their
-        // JNI measurements globally across batches.
+        // Custom profiles bypass speed-test trimming and start complete Xray configs. Parallel
+        // teardown can abort the native probe process, so serialize their JNI measurements
+        // globally across batches.
         return if (configType == EConfigType.CUSTOM) {
             customConfigMutex.withLock { block() }
         } else {
@@ -39,11 +39,12 @@ internal object RealPingExecutionLimiter {
 }
 
 /**
- * Worker that runs a batch of real-ping tests independently.
- * Each batch owns its own CoroutineScope/dispatcher and can be cancelled separately.
+ * Runs one batch of real-ping tests. Each batch owns its scope/dispatcher and can be cancelled
+ * independently.
  */
 class RealPingWorkerService(
     private val context: Context,
+    private val profileDao: ProfileDao,
     private val guids: List<String>,
     private val onlyTcp: Boolean = false,
     private val onEvent: (RealPingEvent) -> Unit = {}
@@ -107,7 +108,7 @@ class RealPingWorkerService(
     private suspend fun startRealPing(guid: String): Long {
         val retFailure = -1L
 
-        val config = MmkvManager.decodeServerConfig(guid) ?: return retFailure
+        val config = profileDao.findByGuid(guid) ?: return retFailure
         if (!config.configType.isComplexType()
             && config.configType != EConfigType.HYSTERIA2
             && config.configType != EConfigType.WIREGUARD
@@ -117,8 +118,7 @@ class RealPingWorkerService(
         ) {
             val url = config.server.orEmpty()
             val port = config.serverPort.orEmpty().toInt()
-            val tcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
-            if (tcpTime <= -1L) {
+            if (SpeedtestManager.socketConnectTime(url, port, 1000) <= -1L) {
                 return retFailure
             }
         }
@@ -132,10 +132,10 @@ class RealPingWorkerService(
         }
     }
 
-    private fun startTcping(guid: String): Long {
+    private suspend fun startTcping(guid: String): Long {
         val retFailure = -1L
 
-        val config = MmkvManager.decodeServerConfig(guid) ?: return retFailure
+        val config = profileDao.findByGuid(guid) ?: return retFailure
         if (!config.configType.isComplexType()
             && config.configType != EConfigType.HYSTERIA2
             && config.configType != EConfigType.WIREGUARD
@@ -143,11 +143,11 @@ class RealPingWorkerService(
             && config.server.isNotNullEmpty()
             && config.serverPort?.toIntOrNull() != null
         ) {
-            val url = config.server.orEmpty()
-            val port = config.serverPort.orEmpty().toInt()
-            val tcpTime = SpeedtestManager.socketConnectTime(url, port, 1000)
-
-            return tcpTime
+            return SpeedtestManager.socketConnectTime(
+                config.server.orEmpty(),
+                config.serverPort.orEmpty().toInt(),
+                1000
+            )
         }
 
         return retFailure

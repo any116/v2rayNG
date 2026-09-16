@@ -7,19 +7,15 @@ import android.os.UserManager
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.data.Prefs
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.util.LogUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class BootReceiver : BroadcastReceiver() {
-    /**
-     * This method is called when the BroadcastReceiver is receiving an Intent broadcast.
-     * It handles BOOT_COMPLETED, LOCKED_BOOT_COMPLETED, and MY_PACKAGE_REPLACED.
-     * If the conditions are met, it starts the V2Ray service.
-     *
-     * @param context The Context in which the receiver is running.
-     * @param intent The Intent being received.
-     */
+
     override fun onReceive(context: Context?, intent: Intent?) {
         val action = intent?.action ?: return
         if (context == null) return
@@ -28,9 +24,7 @@ class BootReceiver : BroadcastReceiver() {
 
         when (action) {
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                // Continue
-            }
+            Intent.ACTION_MY_PACKAGE_REPLACED -> Unit
 
             Intent.ACTION_LOCKED_BOOT_COMPLETED -> {
                 val userManager = context.getSystemService(Context.USER_SERVICE) as? UserManager
@@ -51,13 +45,21 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        if (MmkvManager.getSelectServer().isNullOrEmpty()) {
-            LogUtil.w(AppConfig.TAG, "BootReceiver: No server selected")
-            return
-        }
-
+        // No profile read here: the daemon resolves the selection and reports a missing one through
+        // MSG_STATE_START_FAILURE. Starting the foreground service first also keeps this process
+        // alive for the subscription sync below.
         LogUtil.i(AppConfig.TAG, "BootReceiver: Starting V2Ray service")
         LauncherManager.startService(context)
-        SubscriptionUpdater.sync(context)
+
+        val pendingResult = goAsync()
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            try {
+                SubscriptionUpdater.sync(context)
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "BootReceiver: subscription sync failed", e)
+            } finally {
+                pendingResult.finish()
+            }
+        }
     }
 }

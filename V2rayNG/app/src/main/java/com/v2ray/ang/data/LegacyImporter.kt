@@ -2,7 +2,6 @@ package com.v2ray.ang.data
 
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
-import androidx.sqlite.execSQL
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileItem
@@ -22,6 +21,12 @@ import com.v2ray.ang.util.JsonUtil
  *     few thousand SHA-256 digests plus Gson serialisation inside the create transaction is a
  *     measurable ANR risk on the first process to open the database
  * Orphan cleanup belongs to ProfileDao.cleanupOrphans(), not here.
+ *
+ * Deliberately does NOT run PRAGMA wal_checkpoint here: this function is called from
+ * RoomDatabase.Callback.onCreate, which Room wraps in the create transaction. A checkpoint
+ * needs the WAL write lock and cannot complete inside an active transaction, so it would only
+ * return busy or fail and take the whole create transaction down with it. The checkpoint is
+ * performed by DatabaseModule after the database has been opened.
  */
 internal object LegacyImporter {
 
@@ -97,8 +102,6 @@ internal object LegacyImporter {
             ProfileItem.DEDUPE_ALGO_VERSION.toString(),
             SettingsStore.KIND_INT,
         )
-
-        connection.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
     }
 
     private suspend fun insertSubscription(

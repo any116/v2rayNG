@@ -5,7 +5,6 @@ import androidx.room3.ColumnTypeConverters
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import androidx.sqlite.SQLiteConnection
-import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.ProfileRaw
@@ -16,7 +15,6 @@ import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.data.legacy.LegacySnapshot
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.util.JsonUtil
-import com.v2ray.ang.util.LogUtil
 
 object DbConverters {
 
@@ -64,20 +62,14 @@ abstract class AppDatabase : RoomDatabase() {
 }
 
 /**
- * One-shot MMKV -> Room migration, executed only while creating v1. Room's user_version is the
- * idempotency marker, and onCreate runs inside the create transaction, so either the database
- * and the data both exist or neither does.
- *
- * MMKV data is deliberately NOT deleted: it is the rollback path.
+ * One-shot MMKV -> Room migration, executed only while creating v1.
  */
 internal class LegacyImportCallback(
     private val snapshotProvider: suspend () -> LegacySnapshot,
 ) : RoomDatabase.Callback() {
 
     override suspend fun onCreate(connection: SQLiteConnection) {
-        val snapshot = runCatching { snapshotProvider() }
-            .onFailure { LogUtil.e(AppConfig.TAG, "Legacy read failed; creating an empty database", it) }
-            .getOrDefault(LegacySnapshot.EMPTY)
+        val snapshot = snapshotProvider()
         LegacyImporter.importInto(connection, snapshot)
     }
 }

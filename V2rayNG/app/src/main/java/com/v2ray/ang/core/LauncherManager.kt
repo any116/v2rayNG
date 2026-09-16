@@ -6,10 +6,8 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.extension.isComplexType
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.extension.toast
-import com.v2ray.ang.extension.toastError
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.root.RootManager
@@ -17,42 +15,21 @@ import com.v2ray.ang.service.CoreProxyOnlyService
 import com.v2ray.ang.service.CoreRootService
 import com.v2ray.ang.service.CoreVpnService
 import com.v2ray.ang.util.LogUtil
-import com.v2ray.ang.util.Utils
 
 object LauncherManager {
 
-    fun startServiceFromToggle(context: Context): Boolean {
-        if (MmkvManager.getSelectServer().isNullOrEmpty()) {
-            context.toast(R.string.app_tile_first_use)
-            return false
-        }
-        try {
-            startContextService(context)
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "LauncherManager: ${e.message}", e)
-            context.toast(e.message ?: e.javaClass.simpleName)
-            return false
-        }
-        return true
-    }
+    /** Guid requested for adoption at startup; persisted by the service, not by the receiver. */
+    const val EXTRA_SELECTED_GUID = "launcher_selected_guid"
+
+    fun startServiceFromToggle(context: Context): Boolean =
+        startContextService(context, null)
 
     fun startService(context: Context, guid: String? = null) {
         LogUtil.i(AppConfig.TAG, "LauncherManager: startService from ${context::class.java.simpleName}")
-
-        if (guid != null) {
-            MmkvManager.setSelectServer(guid)
-        }
-
-        try {
-            startContextService(context)
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "LauncherManager: ${e.message}", e)
-            context.toast(e.message ?: e.javaClass.simpleName)
-        }
+        startContextService(context, guid)
     }
 
     fun stopService(context: Context) {
-        //context.toast(R.string.toast_services_stop)
         MessageHelper.sendMsg2Service(context, AppConfig.MSG_STATE_STOP, "")
     }
 
@@ -68,39 +45,18 @@ object LauncherManager {
         }
     }
 
-    @Throws(Exception::class)
-    private fun startContextService(context: Context) {
-        // Note: isRunning check is removed here to avoid loading Native libraries in the UI process.
-        // The check is performed in CoreServiceManager when the service starts in the daemon process.
-
-        val guid = MmkvManager.getSelectServer()
-            ?: run {
-                LogUtil.e(AppConfig.TAG, "LauncherManager: No server selected")
-                error(context.getString(R.string.app_tile_first_use))
-            }
-
-        val config = MmkvManager.decodeServerConfig(guid)
-            ?: run {
-                LogUtil.e(AppConfig.TAG, "LauncherManager: Failed to decode server config")
-                error(context.getString(R.string.toast_config_file_invalid))
-            }
-
-        if (!config.configType.isComplexType()
-            && !Utils.isValidUrl(config.server)
-            && !Utils.isPureIpAddress(config.server.orEmpty())
-        ) {
-            LogUtil.e(AppConfig.TAG, "LauncherManager: Invalid server configuration")
-            error(context.getString(R.string.toast_config_file_invalid))
-        }
-
-        SettingsManager.refreshRuntimeSocksPort()
-
-        if (config.insecure == true && config.pinnedCA256.isNullOrEmpty()) {
-            context.toastError(R.string.toast_allow_insecure_deprecated)
-            Utils.setClipboard(context, context.getString(R.string.toast_allow_insecure_deprecated))
-        }
-
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING)) {
+    /**
+     * Validates only what lives in the preference snapshot, then starts the service.
+     *
+     * Profile-dependent validation (a selection exists, the profile parses, the address is
+     * usable, the allow-insecure warning) moved into the service-side startup sequence: those
+     * checks need the database, and a receiver must not touch it. Failures now reach the user as
+     * MSG_STATE_START_FAILURE, and the insecure warning travels as MSG_WARN_INSECURE.
+     *
+     * @return true when the start request was handed to the system.
+     */
+    private fun startContextService(context: Context, guid: String?): Boolean {
+        if (Prefs.bool(AppConfig.PREF_PROXY_SHARING)) {
             context.toast(R.string.toast_warning_pref_proxysharing_short)
         } else {
             context.toast(R.string.toast_services_start)
@@ -109,7 +65,8 @@ object LauncherManager {
         val isRootMode = SettingsManager.isRootMode()
         if (isRootMode && !RootManager.isRootAvailable()) {
             LogUtil.e(AppConfig.TAG, "LauncherManager: root mode requires root but none available")
-            error(context.getString(R.string.toast_root_required))
+            context.toast(R.string.toast_root_required)
+            return false
         }
 
         val intent = if (isRootMode) {
@@ -121,21 +78,25 @@ object LauncherManager {
         } else {
             LogUtil.i(AppConfig.TAG, "LauncherManager: Starting Proxy service")
             Intent(context.applicationContext, CoreProxyOnlyService::class.java)
+        }.apply {
+            guid?.takeIf { it.isNotBlank() }?.let { putExtra(EXTRA_SELECTED_GUID, it) }
         }
 
-        try {
+        return try {
             ContextCompat.startForegroundService(context, intent)
+            true
         } catch (e: SecurityException) {
             LogUtil.e(AppConfig.TAG, "LauncherManager: Missing permission to start foreground service", e)
-            throw IllegalStateException(e.message ?: e.javaClass.simpleName, e)
+            context.toast(e.message ?: e.javaClass.simpleName)
+            false
         } catch (e: RuntimeException) {
+            LogUtil.e(AppConfig.TAG, "LauncherManager: ${e.message}", e)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                 e.javaClass.name == "android.app.ForegroundServiceStartNotAllowedException"
             ) {
-                LogUtil.e(AppConfig.TAG, "LauncherManager: Foreground service start not allowed", e)
-                throw IllegalStateException(e.message ?: e.javaClass.simpleName, e)
+                context.toast(e.message ?: e.javaClass.simpleName)
             }
-            throw e
+            false
         }
     }
 }

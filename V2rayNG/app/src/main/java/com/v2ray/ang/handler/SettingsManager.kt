@@ -7,26 +7,21 @@ import android.text.TextUtils
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.AppConfig.ANG_PACKAGE
-import com.v2ray.ang.AppConfig.DEFAULT_SUBSCRIPTION_ID
 import com.v2ray.ang.AppConfig.GEOIP_PRIVATE
 import com.v2ray.ang.AppConfig.GEOSITE_PRIVATE
 import com.v2ray.ang.AppConfig.TAG_DIRECT
 import com.v2ray.ang.AppConfig.VPN
 import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.data.RoutingDao
+import com.v2ray.ang.data.SubscriptionDao
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
-import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.dto.V2rayConfig
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.RoutingType
 import com.v2ray.ang.enums.VpnInterfaceAddressConfig
-import com.v2ray.ang.handler.MmkvManager.decodeAllServerList
-import com.v2ray.ang.handler.MmkvManager.decodeServerConfig
-import com.v2ray.ang.handler.MmkvManager.decodeSubsList
-import com.v2ray.ang.handler.MmkvManager.encodeSubscription
-import com.v2ray.ang.handler.MmkvManager.removeSubscription
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
@@ -37,11 +32,26 @@ import kotlin.random.Random
 
 object SettingsManager {
 
+    private const val DEFAULT_SUBSCRIPTION_REMARKS = "Default"
+
     @Volatile
     private var runtimeSocksPort: Int? = null
 
-    private val routingDao: RoutingDao
-        get() = PlatformDependencies.routingDao(AngApplication.application)
+    /**
+     * by lazy: every accessor goes through EntryPointAccessors.fromApplication, which resolves
+     * the Hilt graph on each call.
+     */
+    private val profileDao: ProfileDao by lazy {
+        PlatformDependencies.profileDao(AngApplication.application)
+    }
+
+    private val subscriptionDao: SubscriptionDao by lazy {
+        PlatformDependencies.subscriptionDao(AngApplication.application)
+    }
+
+    private val routingDao: RoutingDao by lazy {
+        PlatformDependencies.routingDao(AngApplication.application)
+    }
 
     // ---------------- routing rulesets ----------------
 
@@ -124,10 +134,10 @@ object SettingsManager {
             "2" -> return false
         }
 
-        val guid = MmkvManager.getSelectServer() ?: return false
-        val config = decodeServerConfig(guid) ?: return false
+        val guid = profileDao.selectedGuid() ?: return false
+        val config = profileDao.findByGuid(guid) ?: return false
         if (config.configType == EConfigType.CUSTOM) {
-            val raw = MmkvManager.decodeServerRaw(guid) ?: return false
+            val raw = profileDao.raw(guid) ?: return false
             val v2rayConfig = JsonUtil.fromJsonSafe(raw, V2rayConfig::class.java)
             return v2rayConfig?.routing?.rules
                 ?.filter { it.outboundTag == TAG_DIRECT }
@@ -145,54 +155,58 @@ object SettingsManager {
             }
     }
 
-    // ---------------- profiles (still MMKV backed until PR 6/8) ----------------
-
-    fun getServerViaRemarks(remarks: String?): ProfileItem? {
-        if (remarks.isNullOrEmpty()) return null
-        return decodeAllServerList()
-            .mapNotNull { guid -> decodeServerConfig(guid) }
-            .firstOrNull { it.remarks == remarks }
-    }
-
-    fun getProfileRemarks(excludeConfigTypes: Set<EConfigType> = setOf(EConfigType.CUSTOM)): List<String> {
-        return decodeAllServerList()
-            .asSequence()
-            .mapNotNull { guid -> decodeServerConfig(guid) }
-            .filter { profile -> profile.configType !in excludeConfigTypes }
-            .map { it.remarks.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .toList()
-    }
+    // ---------------- profiles ----------------
 
     /**
-     * Removes a subscription, recreating the default one when nothing is left so that ungrouped
-     * profiles still have a home.
+     * Routing outbound tags and proxy chain nodes are referenced by remark, so this is an
+     * indexed single row lookup now instead of decoding every payload in the store.
      */
-    fun removeSubscriptionWithDefault(subid: String) {
-        SubscriptionUpdater.cancelOne(subId = subid)
-        removeSubscription(subid)
+    suspend fun getServerViaRemarks(remarks: String?): ProfileItem? {
+        if (remarks.isNullOrEmpty()) return null
+        return profileDao.findByRemarks(remarks)
+    }
 
-        if (decodeSubsList().isNotEmpty()) return
-        encodeSubscription(DEFAULT_SUBSCRIPTION_ID, SubscriptionItem(remarks = "Default"))
+    suspend fun getProfileRemarks(
+        excludeConfigTypes: Set<EConfigType> = setOf(EConfigType.CUSTOM)
+    ): List<String> = profileDao.remarks(excludeConfigTypes.map { it.value })
+
+    /**
+     * Cancelling the worker stays outside the transaction: WorkManager writes to its own
+     * database and must not be rolled back by a profile transaction failure.
+     */
+    suspend fun removeSubscriptionWithDefault(subid: String) {
+        SubscriptionUpdater.cancelOne(subId = subid)
+        subscriptionDao.removeWithDefault(subid, DEFAULT_SUBSCRIPTION_REMARKS)
     }
 
     // ---------------- ports ----------------
 
     fun getSocksPort(): Int {
         val port = if (isDynamicSocksPort()) {
-            runtimeSocksPort ?: refreshRuntimeSocksPort()
+            // Process-local value first (just set by this process on core start). Fall back to
+            // the persisted value written by whichever process last started the core, then to a
+            // fresh draw. UI-side HTTP requests must target the same port the daemon listens on,
+            // and that only works because the port is stored instead of being process-local.
+            runtimeSocksPort
+                ?: Prefs.int(AppConfig.CACHE_RUNTIME_SOCKS_PORT, 0).takeIf { it > 0 }
+                ?: refreshRuntimeSocksPort()
         } else {
             Utils.parseInt(Prefs.string(AppConfig.PREF_SOCKS_PORT), AppConfig.PORT_SOCKS.toInt())
         }
         return port ?: AppConfig.PORT_SOCKS.toInt()
     }
 
+    /**
+     * Called once per core launch from CoreStartup. Persists the value so sibling processes
+     * converge on the same port.
+     */
     @Synchronized
     fun refreshRuntimeSocksPort(): Int? {
         if (isDynamicSocksPort()) {
-            runtimeSocksPort = Random.nextInt(10000, 65535)
-            return runtimeSocksPort
+            val port = Random.nextInt(10000, 65535)
+            runtimeSocksPort = port
+            Prefs.setInt(AppConfig.CACHE_RUNTIME_SOCKS_PORT, port)
+            return port
         }
         return null
     }

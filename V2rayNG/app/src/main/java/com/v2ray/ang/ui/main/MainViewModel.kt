@@ -95,6 +95,9 @@ class MainViewModel @Inject constructor(
         observeGroups()
     }
 
+    /** Delegates to MainRepository: suspends until the settings snapshot is ready. */
+    suspend fun awaitReady() = repo.awaitReady()
+
     override fun onAction(action: MainAction) {
         when (action) {
             MainAction.Initialize -> initialize()
@@ -161,6 +164,7 @@ class MainViewModel @Inject constructor(
 
     /** Subscription-table changes push new tabs; the selection is re-resolved on every emission. */
     private fun observeGroups() = launch(onError = {}) {
+        repo.awaitReady()
         repo.observeGroups().collect { groups ->
             val validIds = groups.mapTo(HashSet()) { it.id }
             pagers.keys.removeAll { it !in validIds }
@@ -250,6 +254,7 @@ class MainViewModel @Inject constructor(
                 onRunningChanged(false)
             }
             MainServiceEvent.StateStopSuccess -> onRunningChanged(false)
+            MainServiceEvent.WarnInsecure -> toastError(R.string.toast_allow_insecure_deprecated)
             is MainServiceEvent.MeasureDelayResult -> onCurrentTestResult(event.requestId, event.result)
             is MainServiceEvent.MeasureDelayCanceled -> onCurrentTestCanceled(event.requestId)
             is MainServiceEvent.MeasureConfigNotify -> onBatchProgress(event.requestId, event.progress)
@@ -478,7 +483,6 @@ class MainViewModel @Inject constructor(
         currentTestId = null
         batchTestId = null
         batchGroupId = null
-        repo.close()
         super.onCleared()
     }
 }

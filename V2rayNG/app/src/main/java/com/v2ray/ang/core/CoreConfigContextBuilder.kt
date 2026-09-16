@@ -2,161 +2,166 @@ package com.v2ray.ang.core
 
 import android.content.Context
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.dto.CoreConfigContext
+import com.v2ray.ang.data.ProfileDao
+import com.v2ray.ang.data.RoutingDao
+import com.v2ray.ang.data.SubscriptionDao
 import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.RulesetItem
+import com.v2ray.ang.di.PlatformDependencies
+import com.v2ray.ang.dto.CoreConfigContext
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.isNotNullEmpty
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 
 /**
- * Build runtime context from the selected profile.
- *
- * All outbound type analysis is completed here for both the selected profile
- * and routing targets. Custom profiles are returned immediately without
- * entering the normal analysis flow.
+ * Builds the runtime context for the selected profile, resolving the primary outbound and every
+ * routing target up front. All reads are suspend: the caller runs inside the core startup
+ * sequence, never on the main thread.
  */
 object CoreConfigContextBuilder {
 
-    /**
-     * Load one profile and produce a fully analyzed context.
-     *
-     * Null is returned only when the selected profile cannot be loaded.
-     */
-    fun build(context: Context, guid: String): CoreConfigContext? {
-        val config = MmkvManager.decodeServerConfig(guid) ?: return null
+    private val complexTypeValues: List<Int>
+        get() = EConfigType.entries.filter { it.isComplexType() }.map { it.value }
 
-        // CUSTOM: return immediately — CoreConfigManager handles this path on its own.
+    /**
+     * Returns null only when the selected profile cannot be loaded.
+     */
+    suspend fun build(context: Context, guid: String): CoreConfigContext? {
+        val profileDao = PlatformDependencies.profileDao(context)
+        val config = profileDao.findByGuid(guid) ?: return null
+
+        // CUSTOM is handled entirely by CoreConfigManager.
         if (config.configType == EConfigType.CUSTOM) {
             return CoreConfigContext(context = context, guid = guid, isCustom = true)
         }
 
-        // Step 1: Resolve the main outbound (always tag = TAG_PROXY).
-        val primaryResolvedOutbound = resolveOutbound(AppConfig.TAG_PROXY, config) ?: run {
-            LogUtil.e(AppConfig.TAG, "Failed to resolve main outbound for '${config.remarks}'")
-            return null
-        }
+        val scope = ConfigScope(context)
+        // Loaded once, consumed by both the routing-outbound resolver and the DTO.
+        val routingRulesets = scope.routingDao.all()
 
-        // Step 2: Resolve all non-builtin routing outbound tags.
-        val routingResolvedOutbounds = resolveRoutingOutbounds()
+        val primaryResolvedOutbound = resolveOutbound(scope, AppConfig.TAG_PROXY, config)
+            ?: run {
+                LogUtil.e(AppConfig.TAG, "Failed to resolve main outbound for '${config.remarks}'")
+                return null
+            }
+        val routingResolvedOutbounds = resolveRoutingOutbounds(scope, routingRulesets)
         val resolvedOutbounds = listOf(primaryResolvedOutbound) + routingResolvedOutbounds
-        val fallbackResolvedOutbounds = resolveFallbackOutbounds(resolvedOutbounds)
-        val routingDomainRules = collectRoutingDomainRulesForDns()
+        val fallbackResolvedOutbounds = resolveFallbackOutbounds(scope, resolvedOutbounds)
+        val routingDomainRules = collectRoutingDomainRulesForDns(routingRulesets)
 
         return CoreConfigContext(
             context = context,
             guid = guid,
             resolvedOutbounds = resolvedOutbounds + fallbackResolvedOutbounds,
             routingDomainRules = routingDomainRules,
+            routingRulesets = routingRulesets,
         )
     }
 
-    /**
-     * Resolve one outbound target into a normalized outbound entry.
-     *
-     * Custom profiles are ignored at this stage and produce no entry.
-     */
-    private fun resolveOutbound(tag: String, profile: ProfileItem): CoreConfigContext.ResolvedOutbound? {
-        if (profile.configType == EConfigType.CUSTOM) {
-            return null
-        }
+    /** Per-build handle on the DAOs, so the private resolvers stay free of Context plumbing. */
+    private class ConfigScope(context: Context) {
+        val profileDao: ProfileDao = PlatformDependencies.profileDao(context)
+        val subscriptionDao: SubscriptionDao = PlatformDependencies.subscriptionDao(context)
+        val routingDao: RoutingDao = PlatformDependencies.routingDao(context)
+        val complexTypes: List<Int> = complexTypeValues
+    }
 
-        val (resolvedProfiles, resolvedType) = when (profile.configType) {
+    /**
+     * Resolves one outbound target. CUSTOM yields no entry.
+     */
+    private suspend fun resolveOutbound(
+        scope: ConfigScope,
+        tag: String,
+        config: ProfileItem,
+    ): CoreConfigContext.ResolvedOutbound? {
+        if (config.configType == EConfigType.CUSTOM) return null
+
+        val (resolvedProfiles, resolvedType) = when (config.configType) {
             EConfigType.POLICYGROUP -> Pair(
-                resolvePolicyGroupProfiles(profile),
+                resolvePolicyGroupProfiles(config, scope),
                 CoreResolvedType.POLICYGROUP,
             )
 
             EConfigType.PROXYCHAIN -> {
-                val chainProfiles = resolveProxyChainProfiles(profile)
-                val type = if (chainProfiles.size <= 1) CoreResolvedType.NORMAL else CoreResolvedType.PROXYCHAIN
-                Pair(chainProfiles, type)
+                val chain = resolveProxyChainProfiles(config, scope)
+                Pair(chain, if (chain.size <= 1) CoreResolvedType.NORMAL else CoreResolvedType.PROXYCHAIN)
             }
 
             else -> {
-                val chainProfiles = resolveProxyChainProfilesFromGroup(profile)
-                val type = if (chainProfiles.size <= 1) CoreResolvedType.NORMAL else CoreResolvedType.PROXYCHAIN
-                Pair(chainProfiles, type)
+                val chain = resolveProxyChainProfilesFromGroup(config, scope)
+                Pair(chain, if (chain.size <= 1) CoreResolvedType.NORMAL else CoreResolvedType.PROXYCHAIN)
             }
         }
 
         return CoreConfigContext.ResolvedOutbound(
             tag = tag,
-            profile = profile,
+            profile = config,
             resolvedProfiles = resolvedProfiles,
             resolvedType = resolvedType,
         )
     }
 
     /**
-     * Collect and resolve non-builtin routing targets from enabled rules.
-     *
-     * Invalid or empty targets are skipped and handled by fallback logic later.
+     * Non-builtin routing targets from enabled rules. Missing or unusable targets are skipped and
+     * handled by the fallback logic.
      */
-    private fun resolveRoutingOutbounds(): List<CoreConfigContext.ResolvedOutbound> {
-        val rulesetItems = MmkvManager.decodeRoutingRulesets() ?: return emptyList()
+    private suspend fun resolveRoutingOutbounds(
+        scope: ConfigScope,
+        rulesetItems: List<RulesetItem>,
+    ): List<CoreConfigContext.ResolvedOutbound> {
         val resolvedOutbounds = mutableListOf<CoreConfigContext.ResolvedOutbound>()
         val processedTags = mutableSetOf<String>()
 
-        try {
-            rulesetItems
-                .filter { it.enabled }
-                .mapNotNull { it.outboundTag.takeIf { tag -> tag.isNotBlank() } }
-                .filter { tag -> tag !in AppConfig.BUILTIN_OUTBOUND_TAGS }
-                .distinct()
-                .forEach { tag ->
-                    if (tag in processedTags) {
-                        return@forEach
-                    }
-                    processedTags.add(tag)
+        val candidateTags = rulesetItems
+            .filter { it.enabled }
+            .mapNotNull { it.outboundTag.takeIf { tag -> tag.isNotBlank() } }
+            .filter { tag -> tag !in AppConfig.BUILTIN_OUTBOUND_TAGS }
+            .distinct()
 
-                    try {
-                        val profile = SettingsManager.getServerViaRemarks(tag) ?: run {
-                            LogUtil.w(AppConfig.TAG, "Routing tag '$tag' has no matching profile — will fall back to proxy at routing time")
-                            return@forEach
-                        }
-                        val resolvedOutbound = resolveOutbound(tag, profile) ?: run {
-                            LogUtil.w(AppConfig.TAG, "Cannot use CUSTOM profile as routing outbound for tag '$tag', skipping")
-                            return@forEach
-                        }
-                        if (resolvedOutbound.resolvedProfiles.isEmpty()) {
-                            LogUtil.w(AppConfig.TAG, "Routing outbound '$tag' resolved to empty list, skipping")
-                            return@forEach
-                        }
-                        resolvedOutbounds.add(resolvedOutbound)
-                        LogUtil.d(AppConfig.TAG, "Resolved routing outbound: tag='$tag', type='${resolvedOutbound.resolvedType}', profiles=${resolvedOutbound.resolvedProfiles.size}")
-                    } catch (e: Exception) {
-                        LogUtil.e(AppConfig.TAG, "Failed to resolve routing outbound for tag '$tag', skipping", e)
-                    }
+        for (tag in candidateTags) {
+            if (!processedTags.add(tag)) continue
+            try {
+                val profile = SettingsManager.getServerViaRemarks(tag) ?: run {
+                    LogUtil.w(AppConfig.TAG, "Routing tag '$tag' has no matching profile — falling back to proxy at routing time")
+                    continue
                 }
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to resolve routing outbounds from rulesets", e)
+                val resolvedOutbound = resolveOutbound(scope, tag, profile) ?: run {
+                    LogUtil.w(AppConfig.TAG, "Cannot use CUSTOM profile as routing outbound for tag '$tag', skipping")
+                    continue
+                }
+                if (resolvedOutbound.resolvedProfiles.isEmpty()) {
+                    LogUtil.w(AppConfig.TAG, "Routing outbound '$tag' resolved to empty list, skipping")
+                    continue
+                }
+                resolvedOutbounds.add(resolvedOutbound)
+                LogUtil.d(
+                    AppConfig.TAG,
+                    "Resolved routing outbound: tag='$tag', type='${resolvedOutbound.resolvedType}', profiles=${resolvedOutbound.resolvedProfiles.size}"
+                )
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "Failed to resolve routing outbound for tag '$tag', skipping", e)
+            }
         }
 
         return resolvedOutbounds
     }
 
-    private fun resolvePolicyGroupProfiles(config: ProfileItem): List<ProfileItem> {
-        try {
-            val serverList = MmkvManager.decodeAllServerList()
-            return serverList
+    private suspend fun resolvePolicyGroupProfiles(config: ProfileItem, scope: ConfigScope): List<ProfileItem> {
+        return try {
+            // Must pass the policy group's TARGET subscription (policyGroupSubscriptionId),
+            // not config.subscriptionId which is where the group node itself lives.
+            val targetSubId = config.policyGroupSubscriptionId.orEmpty()
+            val filter = config.policyGroupFilter
+            scope.profileDao.profilesOfScope(targetSubId, scope.complexTypes)
                 .asSequence()
-                .mapNotNull { id -> MmkvManager.decodeServerConfig(id) }
+                .filter { it.server.isNotNullEmpty() }
+                .filter { Utils.isPureIpAddress(it.server!!) || Utils.isValidUrl(it.server!!) }
                 .filter { profile ->
-                    val subscriptionId = config.policyGroupSubscriptionId
-                    if (subscriptionId.isNullOrBlank()) {
-                        true
-                    } else {
-                        profile.subscriptionId == subscriptionId
-                    }
-                }
-                .filter { profile ->
-                    val filter = config.policyGroupFilter
                     if (filter.isNullOrBlank()) {
                         true
                     } else {
@@ -167,107 +172,111 @@ object CoreConfigContextBuilder {
                         }
                     }
                 }
-                .filter { it.server.isNotNullEmpty() }
-                .filter { Utils.isPureIpAddress(it.server!!) || Utils.isValidUrl(it.server!!) }
-                .filter { !it.configType.isComplexType() }
                 .toList()
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to resolve policy group profiles for '${config.remarks}'", e)
-            return listOf(config)
-        }
-    }
-
-    private fun resolveProxyChainProfiles(config: ProfileItem): List<ProfileItem> {
-        if (config.proxyChainProfiles.isNullOrBlank()) {
-            return listOf(config)
-        }
-
-        try {
-            return config.proxyChainProfiles.orEmpty().split(",")
-                .asSequence()
-                .mapNotNull { remark -> SettingsManager.getServerViaRemarks(remark) }
-                .filter { it.server.isNotNullEmpty() }
-                .filter { Utils.isPureIpAddress(it.server!!) || Utils.isValidUrl(it.server!!) }
-                .filter { !it.configType.isComplexType() }
-                .toList()
-                .reversed()
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to resolve proxy chain profiles for '${config.remarks}'", e)
-            return listOf(config)
+            listOf(config)
         }
     }
 
     /**
-     * Resolve chain nodes from subscription neighbors in order: next, current, prev.
-     *
-     * When no chain is available, return a single-node result.
+     * Chain nodes listed explicitly on the profile, in the stored order, reversed so the first
+     * hop ends up last.
      */
-    private fun resolveProxyChainProfilesFromGroup(config: ProfileItem): List<ProfileItem> {
-        if (config.subscriptionId.isEmpty()) {
-            return listOf(config)
-        }
+    private suspend fun resolveProxyChainProfiles(config: ProfileItem, scope: ConfigScope): List<ProfileItem> {
+        val chain = config.proxyChainProfiles
+        if (chain.isNullOrBlank()) return listOf(config)
 
-        try {
-            val subItem = MmkvManager.decodeSubscription(config.subscriptionId) ?: return listOf(config)
+        return try {
+            val resolved = mutableListOf<ProfileItem>()
+            for (remark in chain.split(",")) {
+                val profile = SettingsManager.getServerViaRemarks(remark) ?: continue
+                if (!profile.server.isNotNullEmpty()) continue
+                if (!(Utils.isPureIpAddress(profile.server!!) || Utils.isValidUrl(profile.server!!))) continue
+                if (profile.configType.isComplexType()) continue
+                resolved.add(profile)
+            }
+            resolved.reversed()
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to resolve proxy chain profiles for '${config.remarks}'", e)
+            listOf(config)
+        }
+    }
+
+    /**
+     * Chain nodes taken from the subscription neighbours, in order: next, current, prev.
+     */
+    private suspend fun resolveProxyChainProfilesFromGroup(config: ProfileItem, scope: ConfigScope): List<ProfileItem> {
+        if (config.subscriptionId.isEmpty()) return listOf(config)
+
+        return try {
+            val subItem = scope.subscriptionDao.find(config.subscriptionId) ?: return listOf(config)
             val resolved = mutableListOf<ProfileItem>()
             SettingsManager.getServerViaRemarks(subItem.nextProfile)?.let { resolved.add(it) }
             resolved.add(config)
             SettingsManager.getServerViaRemarks(subItem.prevProfile)?.let { resolved.add(it) }
-            return resolved
+            resolved
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to resolve proxy chain from group for '${config.remarks}'", e)
-            return listOf(config)
+            listOf(config)
         }
     }
 
     /**
-     * Collect enabled routing domain rules in original order for DNS segmentation.
-     *
-     * outbounds are normalized into three tags only: proxy / direct / block.
+     * Enabled domain rules in original order, outbound normalized to proxy / direct / block.
      */
-    private fun collectRoutingDomainRulesForDns(): List<CoreConfigContext.RoutingDomainRule> {
-        val rulesetItems = MmkvManager.decodeRoutingRulesets() ?: return emptyList()
+    private fun collectRoutingDomainRulesForDns(
+        rulesetItems: List<RulesetItem>,
+    ): List<CoreConfigContext.RoutingDomainRule> {
         val result = mutableListOf<CoreConfigContext.RoutingDomainRule>()
-
         rulesetItems
-            .asSequence()
             .filter { it.enabled }
             .filter { !it.domain.isNullOrEmpty() }
             .forEach { rule ->
-                val normalizedOutboundTag = when (rule.outboundTag) {
-                    AppConfig.TAG_DIRECT -> AppConfig.TAG_DIRECT
-                    AppConfig.TAG_BLOCKED -> AppConfig.TAG_BLOCKED
-                    else -> AppConfig.TAG_PROXY
-                }
                 result.add(
                     CoreConfigContext.RoutingDomainRule(
                         domain = rule.domain.orEmpty(),
-                        outboundTag = normalizedOutboundTag
+                        outboundTag = when (rule.outboundTag) {
+                            AppConfig.TAG_DIRECT -> AppConfig.TAG_DIRECT
+                            AppConfig.TAG_BLOCKED -> AppConfig.TAG_BLOCKED
+                            else -> AppConfig.TAG_PROXY
+                        }
                     )
                 )
             }
-
         return result
     }
 
     /**
-     * Resolve and collect fallback outbounds from all POLICYGROUP nodes.
+     * Fallback outbounds of POLICYGROUP nodes. Must not overlap resolved or builtin tags.
      *
-     * Fallback targets must not overlap with already resolved tags or builtin tags.
+     * Suspend work runs in an explicit loop — see the note at the top of the file.
      */
-    private fun resolveFallbackOutbounds(resolvedOutbounds: List<CoreConfigContext.ResolvedOutbound>): List<CoreConfigContext.ResolvedOutbound> {
-        return resolvedOutbounds
+    private suspend fun resolveFallbackOutbounds(
+        scope: ConfigScope,
+        resolvedOutbounds: List<CoreConfigContext.ResolvedOutbound>,
+    ): List<CoreConfigContext.ResolvedOutbound> {
+        val candidateTags = resolvedOutbounds
             .asSequence()
             .filter { it.resolvedType == CoreResolvedType.POLICYGROUP }
-            .filter { BalancerStrategyType.from(it.profile.policyGroupType).supportsObservatory && it.profile.policyGroupTestOutbounds != false }
-            .mapNotNull { it.profile.policyGroupFallbackTag }
-            .filter { it !in AppConfig.BUILTIN_OUTBOUND_TAGS && resolvedOutbounds.none { outbound -> outbound.tag == it } }
-            .distinct()
-            .mapNotNull { tag ->
-                SettingsManager.getServerViaRemarks(tag)
-                    ?.takeUnless { it.configType == EConfigType.CUSTOM || it.configType == EConfigType.POLICYGROUP }
-                    ?.let { resolveOutbound(tag, it) }
+            .filter {
+                BalancerStrategyType.from(it.profile.policyGroupType).supportsObservatory &&
+                    it.profile.policyGroupTestOutbounds != false
             }
+            .mapNotNull { it.profile.policyGroupFallbackTag }
+            .filter { it !in AppConfig.BUILTIN_OUTBOUND_TAGS && resolvedOutbounds.none { ob -> ob.tag == it } }
+            .distinct()
             .toList()
+
+        val result = mutableListOf<CoreConfigContext.ResolvedOutbound>()
+        for (tag in candidateTags) {
+            val profile = SettingsManager.getServerViaRemarks(tag) ?: continue
+            if (profile.configType == EConfigType.CUSTOM || profile.configType == EConfigType.POLICYGROUP) {
+                continue
+            }
+            val resolved = resolveOutbound(scope, tag, profile) ?: continue
+            result.add(resolved)
+        }
+        return result
     }
 }

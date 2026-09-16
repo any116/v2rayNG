@@ -1,6 +1,7 @@
 package com.v2ray.ang.handler
 
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.dto.CertSha256Request
 import com.v2ray.ang.dto.CertSha256Result
 import com.v2ray.ang.data.entities.ProfileItem
@@ -65,7 +66,7 @@ object CertificateFingerprintManager {
     private fun resolveDialAddress(server: String): String {
         if (Utils.isPureIpAddress(server) || !Utils.isDomainName(server)) return server
 
-        val preferIpv6 = MmkvManager.decodeSettingsBool(AppConfig.PREF_PREFER_IPV6, false)
+        val preferIpv6 = Prefs.bool(AppConfig.PREF_PREFER_IPV6, false)
         return HttpUtil.resolveHostToIP(server, preferIpv6)
             ?.firstOrNull()
             ?.takeIf { it.isNotBlank() }

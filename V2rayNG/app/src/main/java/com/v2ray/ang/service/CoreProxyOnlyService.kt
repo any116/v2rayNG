@@ -7,29 +7,38 @@ import android.os.IBinder
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.core.CoreServiceManager
+import com.v2ray.ang.core.CoreStartup
+import com.v2ray.ang.core.LauncherManager
+import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.util.LogUtil
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.lang.ref.SoftReference
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class CoreProxyOnlyService : Service(), ServiceControl {
-    /**
-     * Initializes the service.
-     */
+
+    @Inject
+    @IoDispatcher
+    lateinit var io: CoroutineDispatcher
+
+    private val serviceScope by lazy { CoroutineScope(SupervisorJob() + io) }
+
     override fun onCreate() {
         super.onCreate()
         LogUtil.i(AppConfig.TAG, "StartCore-Proxy: Service created")
         CoreServiceManager.serviceControl = SoftReference(this)
     }
 
-    /**
-     * Handles the start command for the service.
-     * @param intent The intent.
-     * @param flags The flags.
-     * @param startId The start ID.
-     * @return The start mode.
-     */
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Before any database access, same reason as the VPN service.
         NotificationManager.ensureForeground()
         LogUtil.i(AppConfig.TAG, "StartCore-Proxy: Service command received")
 
@@ -38,69 +47,42 @@ class CoreProxyOnlyService : Service(), ServiceControl {
             return START_STICKY
         }
 
-        if (!CoreServiceManager.startCoreLoop(null)) {
-            LogUtil.e(AppConfig.TAG, "StartCore-Proxy: Failed to start core loop")
-            stopSelf()
-            return START_NOT_STICKY
+        val requestedGuid = intent?.getStringExtra(LauncherManager.EXTRA_SELECTED_GUID)
+        serviceScope.launch {
+            CoreStartup.refreshPreferences(this@CoreProxyOnlyService)
+            if (!requestedGuid.isNullOrBlank()) {
+                CoreServiceManager.adoptSelectedGuid(this@CoreProxyOnlyService, requestedGuid)
+            }
+            if (!CoreServiceManager.startCoreLoop(null)) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Proxy: Failed to start core loop")
+                stopSelf()
+            }
         }
 
         return START_STICKY
     }
 
-    /**
-     * Destroys the service.
-     */
     override fun onDestroy() {
         super.onDestroy()
         CoreServiceManager.stopCoreLoop()
+        serviceScope.cancel()
     }
 
-    /**
-     * Gets the service instance.
-     * @return The service instance.
-     */
-    override fun getService(): Service {
-        return this
-    }
+    override fun getService(): Service = this
 
-    /**
-     * Starts the service.
-     */
     override fun startService() {
         // do nothing
     }
 
-    /**
-     * Stops the service.
-     */
     override fun stopService() {
         stopSelf()
     }
 
-    /**
-     * Protects the VPN socket.
-     * @param socket The socket to protect.
-     * @return True if the socket is protected, false otherwise.
-     */
-    override fun vpnProtect(socket: Int): Boolean {
-        return true
-    }
+    override fun vpnProtect(socket: Int): Boolean = true
 
-    /**
-     * Binds the service.
-     * @param intent The intent.
-     * @return The binder.
-     */
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
-    }
+    override fun onBind(intent: Intent?): IBinder? = null
 
-    /**
-     * Attaches the base context to the service.
-     * @param newBase The new base context.
-     */
     override fun attachBaseContext(newBase: Context?) {
-        val context = newBase?.let(AppLocaleManager::localizedContext)
-        super.attachBaseContext(context)
+        super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
     }
 }
