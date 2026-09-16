@@ -1,25 +1,38 @@
 package com.v2ray.ang.data.repository
 
 import android.app.Application
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.filter
+import androidx.paging.insertHeaderItem
+import androidx.paging.map
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.RoutingEditData
 import com.v2ray.ang.dto.RoutingRuleRow
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.dto.toRuleRows
+import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.RoutingType
+import com.v2ray.ang.extension.normalizeLike
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
+import com.v2ray.ang.ui.compose.DropdownOption
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
 
 open class RoutingRepository @Inject constructor(
     private val app: Application,
+    private val profileDao: ProfileDao,
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io) {
 
@@ -42,8 +55,28 @@ open class RoutingRepository @Inject constructor(
         RoutingEditData(
             ruleset = if (ruleId.isEmpty()) null else repairedRulesets().find { it.id == ruleId },
             canUseProcess = SettingsManager.canUseProcessRouting(),
-            outboundOptions = buildOutboundOptions(),
         )
+    }
+
+    open fun outboundTagPager(query: String): Flow<PagingData<DropdownOption>> = Pager(
+        config = PagingConfig(
+            pageSize = 40,
+            initialLoadSize = 80,
+            prefetchDistance = 20,
+            enablePlaceholders = false,
+        ),
+        pagingSourceFactory = { profileDao.pageRemarks(OUTBOUND_EXCLUDED, query.trim().normalizeLike()) }
+    ).flow.map { data ->
+        var out = data
+            .filter { it.remarks !in AppConfig.BUILTIN_OUTBOUND_TAGS }
+            .map { DropdownOption(it.remarks, DropdownOption.Source.PROFILE) }
+        AppConfig.BUILTIN_OUTBOUND_TAGS
+            .filter { query.isBlank() || it.contains(query.trim(), ignoreCase = true) }
+            .reversed()
+            .forEach { tag ->
+                out = out.insertHeaderItem(item = DropdownOption(tag, DropdownOption.Source.BUILTIN))
+            }
+        out
     }
 
     // ----- Insert / update / remove by id (atomic) -----
@@ -130,14 +163,7 @@ open class RoutingRepository @Inject constructor(
         return list
     }
 
-    private fun buildOutboundOptions(): List<String> {
-        val builtin = AppConfig.BUILTIN_OUTBOUND_TAGS.toList()
-        val remarks = SettingsManager.getProfileRemarks()
-            .asSequence()
-            .filterNot { it in builtin }
-            .distinct()
-            .sortedWith(String.CASE_INSENSITIVE_ORDER)
-            .toList()
-        return builtin + remarks
+    private companion object {
+        val OUTBOUND_EXCLUDED: List<Int> = listOf(EConfigType.CUSTOM.value)
     }
 }

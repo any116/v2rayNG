@@ -4,6 +4,5 @@ import com.v2ray.ang.data.entities.SubscriptionItem
 
 data class SubEditData(
     val item: SubscriptionItem?,
-    val confirmRemove: Boolean,
-    val profileOptions: List<String>
+    val confirmRemove: Boolean
 )

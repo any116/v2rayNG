@@ -31,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.ui.base.BaseScreen
@@ -38,7 +39,6 @@ import com.v2ray.ang.ui.compose.AppTopBar
 import com.v2ray.ang.ui.compose.DeleteConfirmDialog
 import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
 import com.v2ray.ang.ui.compose.NavigationBarsSpacer
-import com.v2ray.ang.ui.compose.StringOptions
 import com.v2ray.ang.ui.compose.verticalScrollbar
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.collectLatest
@@ -50,6 +50,12 @@ private val ChainMemberFabOffsetY = (-28).dp
 fun ServerEditScreen(viewModel: ServerEditViewModel) {
     val header by viewModel.header.collectAsStateWithLifecycle()
     var pendingDialog by rememberSaveable { mutableStateOf<ServerDialog?>(null) }
+
+    val slices = viewModel.slices
+    val chainCandidates = slices.chainCandidates.collectAsLazyPagingItems()
+    val fallbackTags = slices.fallbackTags.collectAsLazyPagingItems()
+    val chainQuery by slices.chainQuery.collectAsStateWithLifecycle()
+    val tagQuery by slices.tagQuery.collectAsStateWithLifecycle()
 
     val editorState = remember { mutableStateOf<TextFieldState?>(null) }
     val onAction: (ServerAction) -> Unit = remember(viewModel) {
@@ -94,6 +100,12 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
             options = state.options,
             isFetchingCert = state.isFetchingCert,
             rawContent = rawContent,
+            chainCandidates = chainCandidates,
+            fallbackTags = fallbackTags,
+            chainQuery = chainQuery,
+            tagQuery = tagQuery,
+            onChainQueryChange = slices.onChainQueryChange,
+            onTagQueryChange = slices.onTagQueryChange,
             onAction = onAction,
             modifier = Modifier
                 .fillMaxSize()
@@ -233,6 +245,12 @@ private fun ServerEditContent(
     options: ServerOptions,
     isFetchingCert: Boolean,
     rawContent: TextFieldState,
+    chainCandidates: LazyPagingItems<DropdownOption>,
+    fallbackTags: LazyPagingItems<DropdownOption>,
+    chainQuery: String,
+    tagQuery: String,
+    onChainQueryChange: (String) -> Unit,
+    onTagQueryChange: (String) -> Unit,
     onAction: (ServerAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -251,7 +269,9 @@ private fun ServerEditContent(
                 ProxyChainForm(
                     remarks = form.remarks,
                     members = form.chainMembers,
-                    candidates = StringOptions(options.profileRemarks),
+                    candidates = chainCandidates,
+                    chainQuery = chainQuery,
+                    onChainQueryChange = onChainQueryChange,
                     onAction = onAction,
                     modifier = Modifier.weight(1f),
                     contentPadding = NavigationBarsBottomPadding(extra = 64.dp)
@@ -267,7 +287,14 @@ private fun ServerEditContent(
                         .verticalScroll(scrollState)
                         .padding(top = 8.dp),
                 ) {
-                    PolicyGroupForm(form = form, options = options, onAction = onAction)
+                    PolicyGroupForm(
+                        form = form,
+                        options = options,
+                        fallbackTags = fallbackTags,
+                        tagQuery = tagQuery,
+                        onTagQueryChange = onTagQueryChange,
+                        onAction = onAction,
+                    )
                     NavigationBarsSpacer()
                 }
             }

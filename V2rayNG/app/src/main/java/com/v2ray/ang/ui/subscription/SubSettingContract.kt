@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.v2ray.ang.dto.SubUpdateOptions
-import com.v2ray.ang.data.entities.SubscriptionCache
+import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseResult
@@ -77,13 +77,13 @@ class SubRowCallbacks(
     val onToggle: (String, Boolean) -> Unit
 )
 
-fun List<SubscriptionCache>.toSubRows(): List<SubRow> = map { cache ->
+fun List<SubscriptionItem>.toSubRows(): List<SubRow> = map { item ->
     SubRow(
-        guid = cache.guid,
-        remarks = cache.subscription.remarks,
-        url = cache.subscription.url,
-        lastUpdatedText = Utils.formatTimestamp(cache.subscription.lastUpdated),
-        enabled = cache.subscription.enabled
+        guid = item.guid,
+        remarks = item.remarks,
+        url = item.url,
+        lastUpdatedText = Utils.formatTimestamp(item.lastUpdated),
+        enabled = item.enabled
     )
 }
 

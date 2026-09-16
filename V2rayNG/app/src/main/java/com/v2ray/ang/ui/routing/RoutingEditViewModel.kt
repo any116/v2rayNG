@@ -1,6 +1,8 @@
 package com.v2ray.ang.ui.routing
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewModelScope
+import androidx.paging.cachedIn
 import com.v2ray.ang.R
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.data.repository.RoutingRepository
@@ -11,6 +13,11 @@ import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.util.JsonUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import javax.inject.Inject
 
 @HiltViewModel
@@ -22,6 +29,18 @@ class RoutingEditViewModel @Inject constructor(
 ) {
 
     private val saver = EditFormSaver(handle, KEY_SAVED)
+
+    private val outboundQuery = MutableStateFlow("")
+
+    val slices = RoutingEditSlices(
+        outboundTags = outboundQuery
+            .debounce(SEARCH_DEBOUNCE_MS)
+            .distinctUntilChanged()
+            .flatMapLatest { repo.outboundTagPager(it) }
+            .cachedIn(viewModelScope),
+        query = outboundQuery.asStateFlow(),
+        onQueryChange = { outboundQuery.value = it },
+    )
 
     private var initial: RulesetItem? = null
     private var loadFailed = false
@@ -50,7 +69,6 @@ class RoutingEditViewModel @Inject constructor(
             copy(
                 form = if (saver.dirty) form else data.ruleset.toRoutingForm(),
                 canUseProcess = data.canUseProcess,
-                outboundOptions = data.outboundOptions,
             )
         }
     }
@@ -155,5 +173,6 @@ class RoutingEditViewModel @Inject constructor(
     private companion object {
         const val KEY_SAVED = "routing_edit_saved_state"
         const val KEY_FORM = "form"
+        const val SEARCH_DEBOUNCE_MS = 300L
     }
 }

@@ -29,13 +29,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.paging.compose.LazyPagingItems
 import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
+import com.v2ray.ang.ui.compose.DropdownOption
 import com.v2ray.ang.ui.compose.FormDropdownField
+import com.v2ray.ang.ui.compose.FormPagedDropdownField
 import com.v2ray.ang.ui.compose.FormTextField
 import com.v2ray.ang.ui.compose.ReorderableListItem
 import com.v2ray.ang.ui.compose.SettingsSwitchItem
@@ -406,6 +409,9 @@ private fun StreamSecurityFields(
 internal fun PolicyGroupForm(
     form: ServerForm,
     options: ServerOptions,
+    fallbackTags: LazyPagingItems<DropdownOption>,
+    tagQuery: String,
+    onTagQueryChange: (String) -> Unit,
     onAction: (ServerAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -469,12 +475,15 @@ internal fun PolicyGroupForm(
                 },
             )
             if (form.groupTestOutbounds) {
-                val fallbackOptions = remember(options.fallbackTags) {
-                    StringOptions(options.fallbackTags)
-                }
-                ServerDropdownField(
-                    R.string.title_policy_group_fallback, ServerField.GROUP_FALLBACK_TAG,
-                    form.groupFallbackTag, fallbackOptions, onAction,
+                FormPagedDropdownField(
+                    label = stringResource(R.string.title_policy_group_fallback),
+                    value = form.groupFallbackTag,
+                    items = fallbackTags,
+                    query = tagQuery,
+                    onQueryChange = onTagQueryChange,
+                    onValueChange = {
+                        onAction(ServerAction.TextChanged(ServerField.GROUP_FALLBACK_TAG, it))
+                    },
                     editable = true,
                 )
             }
@@ -486,7 +495,9 @@ internal fun PolicyGroupForm(
 internal fun ProxyChainForm(
     remarks: String,
     members: List<ChainMember>,
-    candidates: StringOptions,
+    candidates: LazyPagingItems<DropdownOption>,
+    chainQuery: String,
+    onChainQueryChange: (String) -> Unit,
     onAction: (ServerAction) -> Unit,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
@@ -532,7 +543,9 @@ internal fun ProxyChainForm(
                     ChainMemberRow(
                         ordinal = index + 1,
                         member = member,
-                        options = candidates,
+                        candidates = candidates,
+                        chainQuery = chainQuery,
+                        onChainQueryChange = onChainQueryChange,
                         isDragging = isDragging,
                         onAction = onAction,
                     )
@@ -546,7 +559,9 @@ internal fun ProxyChainForm(
 private fun ChainMemberRow(
     ordinal: Int,
     member: ChainMember,
-    options: StringOptions,
+    candidates: LazyPagingItems<DropdownOption>,
+    chainQuery: String,
+    onChainQueryChange: (String) -> Unit,
     isDragging: Boolean,
     onAction: (ServerAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -564,11 +579,13 @@ private fun ChainMemberRow(
                 .padding(start = ServerDimens.ContentHorizontal)
                 .width(ServerDimens.ChainIndexWidth),
         )
-        FormDropdownField(
+        FormPagedDropdownField(
             label = stringResource(R.string.server_lab_remarks),
             placeholder = stringResource(R.string.server_proxy_chain_member_unselected),
             value = member.remarks,
-            options = options,
+            items = candidates,
+            query = chainQuery,
+            onQueryChange = onChainQueryChange,
             onValueChange = { onAction(ServerAction.ChainMemberChanged(member.id, it)) },
             editable = true,
             modifier = Modifier.weight(1f),

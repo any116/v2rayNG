@@ -1,10 +1,15 @@
 package com.v2ray.ang.ui.subscription
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.paging.PagingData
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.extension.toLongEx
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseUiState
+import com.v2ray.ang.ui.compose.DropdownOption
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 
 @Immutable
 data class SubEditForm(
@@ -42,11 +47,17 @@ enum class SubFlag {
 data class SubEditUiState(
     val subId: String = "",
     val form: SubEditForm = SubEditForm(),
-    val profileOptions: List<String> = emptyList(),
     val confirmRemove: Boolean = false
 ) : BaseUiState {
     val isEdit: Boolean get() = subId.isNotEmpty()
 }
+
+@Stable
+class SubEditSlices(
+    val profileRemarks: Flow<PagingData<DropdownOption>>,
+    val query: StateFlow<String>,
+    val onQueryChange: (String) -> Unit,
+)
 
 sealed interface SubEditAction : BaseAction {
     data class TextChanged(val field: SubField, val value: String) : SubEditAction
