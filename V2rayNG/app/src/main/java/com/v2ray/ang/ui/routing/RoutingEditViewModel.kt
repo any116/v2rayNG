@@ -15,8 +15,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import javax.inject.Inject
 
@@ -34,8 +32,6 @@ class RoutingEditViewModel @Inject constructor(
 
     val slices = RoutingEditSlices(
         outboundTags = outboundQuery
-            .debounce(SEARCH_DEBOUNCE_MS)
-            .distinctUntilChanged()
             .flatMapLatest { repo.outboundTagPager(it) }
             .cachedIn(viewModelScope),
         query = outboundQuery.asStateFlow(),
@@ -173,6 +169,5 @@ class RoutingEditViewModel @Inject constructor(
     private companion object {
         const val KEY_SAVED = "routing_edit_saved_state"
         const val KEY_FORM = "form"
-        const val SEARCH_DEBOUNCE_MS = 300L
     }
 }

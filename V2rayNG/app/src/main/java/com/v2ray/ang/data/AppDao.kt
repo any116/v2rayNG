@@ -43,13 +43,7 @@ data class RemarkRow(val remarks: String)
 
 data class SortAnchor(val guid: String, val sortOrder: Long)
 
-/**
- * Single source of truth for list ordering. pageServers / indexOf / neighboursAt /
- * allGuidsInOrder must stay character-identical, and ProfilePagingTest asserts that they
- * agree index by index.
- */
-internal const val SERVER_ORDER =
-    "IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid"
+data class DefaultGroupRepair(val createdDefault: Boolean, val adoptedProfiles: Int)
 
 @Dao
 @DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)
@@ -80,25 +74,27 @@ interface ProfileDao {
                 OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
                 OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
                 OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-         ORDER BY IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid
+         ORDER BY p.groupSortOrder, p.sortOrder, p.guid
         """
     )
     fun pageServers(subscriptionId: String, query: String): PagingSource<Int, ServerRowProjection>
 
     // ---- Counts: drives the group tab badges ----
-    // Driven from subscriptions via a correlated subquery so an EMPTY group still yields
-    // count = 0. GROUP BY p.subscriptionId would drop empty groups.
+    // LEFT JOIN rather than a correlated subquery per subscription: the previous shape was
+    // O(groups x profiles) with three LIKEs each, re-evaluated on every invalidation. The
+    // LIKEs must live in ON, not WHERE, or the LEFT JOIN degrades into an INNER JOIN and
+    // empty groups disappear.
     @Query(
         """
-        SELECT s.guid AS groupId,
-               (SELECT COUNT(*) FROM profiles AS p
-                 WHERE p.subscriptionId = s.guid
-                   AND (:query = ''
-                        OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                        OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                        OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-               ) AS count
+        SELECT s.guid AS groupId, COUNT(p.guid) AS count
           FROM subscriptions AS s
+          LEFT JOIN profiles AS p
+            ON p.subscriptionId = s.guid
+           AND (:query = ''
+                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
+                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
+                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
+         GROUP BY s.guid
         UNION ALL
         SELECT p.subscriptionId AS groupId, COUNT(*) AS count
           FROM profiles AS p
@@ -131,10 +127,9 @@ interface ProfileDao {
         SELECT rn - 1 FROM (
             SELECT p.guid AS g,
                    ROW_NUMBER() OVER (
-                       ORDER BY IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid
+                       ORDER BY p.groupSortOrder, p.sortOrder, p.guid
                    ) AS rn
               FROM profiles AS p
-              LEFT JOIN subscriptions AS s ON s.guid = p.subscriptionId
              WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
                AND (:query = ''
                     OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
@@ -153,14 +148,13 @@ interface ProfileDao {
     @Query(
         """
         SELECT p.guid FROM profiles AS p
-          LEFT JOIN subscriptions AS s ON s.guid = p.subscriptionId
          WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
            AND p.guid <> :excludeGuid
            AND (:query = ''
                 OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
                 OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
                 OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-         ORDER BY IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid
+         ORDER BY p.groupSortOrder, p.sortOrder, p.guid
          LIMIT 2 OFFSET :offset
         """
     )
@@ -176,7 +170,13 @@ interface ProfileDao {
     @Query("SELECT * FROM profiles WHERE guid = :guid")
     suspend fun findByGuid(guid: String): ProfileItem?
 
-    @Query("SELECT * FROM profiles WHERE remarks = :remarks LIMIT 1")
+    /**
+     * Routing outbound tags, proxy chain nodes and policy-group fallback tags are all resolved
+     * by remark. Duplicate remarks are common in subscriptions, so the ORDER BY is not
+     * cosmetic: without it the row SQLite happens to return first is unspecified, and the
+     * core config would drift between launches.
+     */
+    @Query("SELECT * FROM profiles WHERE remarks = :remarks ORDER BY sortOrder, guid LIMIT 1")
     suspend fun findByRemarks(remarks: String): ProfileItem?
 
     @Query(
@@ -207,29 +207,40 @@ interface ProfileDao {
     )
     fun pageRemarks(excludeTypes: List<Int>, query: String): PagingSource<Int, RemarkRow>
 
-    @Query("SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId ORDER BY sortOrder, guid")
+    @Query(
+        "SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId " +
+            "ORDER BY groupSortOrder, sortOrder, guid"
+    )
     suspend fun guidsInGroup(subscriptionId: String): List<String>
 
+    /**
+     * Profiles of one scope, complex types excluded. Replaces the pre-Room
+     * decodeAllServerList() + per-guid decode loop used for POLICYGROUP resolution, which walked
+     * the entire table. subscriptionId = '' means "all groups".
+     */
     @Query(
         """
-        SELECT p.guid FROM profiles AS p
-          LEFT JOIN subscriptions AS s ON s.guid = p.subscriptionId
-         ORDER BY IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid
+        SELECT * FROM profiles
+         WHERE (:subscriptionId = '' OR subscriptionId = :subscriptionId)
+           AND configType NOT IN (:complexTypes)
+         ORDER BY groupSortOrder, sortOrder, guid
         """
     )
+    suspend fun profilesOfScope(subscriptionId: String, complexTypes: List<Int>): List<ProfileItem>
+
+    @Query("SELECT guid FROM profiles ORDER BY groupSortOrder, sortOrder, guid")
     suspend fun allGuidsInOrder(): List<String>
 
     /** Guids of the currently visible set, in list order. Backs export / batch test / scoped delete. */
     @Query(
         """
         SELECT p.guid FROM profiles AS p
-          LEFT JOIN subscriptions AS s ON s.guid = p.subscriptionId
          WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
            AND (:query = ''
                 OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
                 OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
                 OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-         ORDER BY IFNULL(s.sortOrder, 9223372036854775807), p.sortOrder, p.guid
+         ORDER BY p.groupSortOrder, p.sortOrder, p.guid
         """
     )
     suspend fun guidsInScope(subscriptionId: String, query: String): List<String>
@@ -314,33 +325,47 @@ interface ProfileDao {
         setSortOrder(movedGuid, target)
     }
 
-    @Transaction
-    suspend fun renormalize(subscriptionId: String) {
-        guidsInGroup(subscriptionId).forEachIndexed { index, guid ->
-            setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP)
-        }
-    }
-
-    /** Untested or failed entries (delay <= 0) sink to the bottom. */
+    /**
+     * Single-statement renumbering.
+     */
     @Query(
         """
-        SELECT p.guid FROM profiles AS p
-          LEFT JOIN profile_stats AS st ON st.guid = p.guid
-         WHERE p.subscriptionId = :subscriptionId
-         ORDER BY CASE WHEN IFNULL(st.testDelayMillis, 0) <= 0
-                       THEN 9223372036854775807
-                       ELSE st.testDelayMillis END,
-                  p.sortOrder, p.guid
+        UPDATE profiles SET sortOrder = (
+            SELECT rn FROM (
+                SELECT guid AS g,
+                       ROW_NUMBER() OVER (
+                           ORDER BY groupSortOrder, sortOrder, guid
+                       ) * 1024 AS rn
+                  FROM profiles
+                 WHERE subscriptionId = :subscriptionId
+            ) WHERE g = profiles.guid
+        ) WHERE subscriptionId = :subscriptionId
         """
     )
-    suspend fun guidsByDelay(subscriptionId: String): List<String>
+    suspend fun renormalize(subscriptionId: String)
 
-    @Transaction
-    suspend fun sortByDelay(subscriptionId: String) {
-        guidsByDelay(subscriptionId).forEachIndexed { index, guid ->
-            setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP)
-        }
-    }
+    /**
+     * Single-statement re-sort by test delay.
+     */
+    @Query(
+        """
+        UPDATE profiles SET sortOrder = (
+            SELECT new_sort FROM (
+                SELECT p.guid AS g,
+                       ROW_NUMBER() OVER (
+                           ORDER BY CASE WHEN IFNULL(st.testDelayMillis, 0) <= 0
+                                         THEN 9223372036854775807
+                                         ELSE st.testDelayMillis END,
+                                    p.groupSortOrder, p.sortOrder, p.guid
+                       ) * 1024 AS new_sort
+                  FROM profiles p
+                  LEFT JOIN profile_stats st ON st.guid = p.guid
+                 WHERE p.subscriptionId = :subscriptionId
+            ) WHERE g = profiles.guid
+        ) WHERE subscriptionId = :subscriptionId
+        """
+    )
+    suspend fun sortByDelay(subscriptionId: String)
 
     // ---- Deletion: all three tables together ----
 
@@ -524,9 +549,6 @@ interface ProfileDao {
      *
      * Replacement matching compares duplicateIdentity() objects directly instead of hashing
      * every incoming profile: both sides are already in memory, so SHA-256 would be pure cost.
-     *
-     * renormalize() at the end keeps sortOrder positive and dense; repeated appends would
-     * otherwise drift and make the table hard to read while debugging.
      */
     @Transaction
     suspend fun replaceGroup(
@@ -562,7 +584,6 @@ interface ProfileDao {
             }
         )
         raws.forEach { putRaw(it) }
-        renormalize(subscriptionId)
 
         if (replacement != null) {
             writeSelectedGuid(replacement)
@@ -600,6 +621,9 @@ interface SubscriptionDao {
     @Query("SELECT IFNULL(MAX(sortOrder), 0) FROM subscriptions")
     suspend fun maxSortOrder(): Long
 
+    @Query("SELECT IFNULL(MIN(sortOrder), 0) FROM subscriptions")
+    suspend fun minSortOrder(): Long
+
     @Query("SELECT COUNT(*) FROM subscriptions")
     suspend fun count(): Int
 
@@ -621,20 +645,33 @@ interface SubscriptionDao {
     @Query("SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId")
     suspend fun profileGuidsOf(subscriptionId: String): List<String>
 
-    @Query("DELETE FROM profiles      WHERE subscriptionId = :subscriptionId")
+    @Query("DELETE FROM profiles WHERE subscriptionId = :subscriptionId")
     suspend fun deleteProfilesOf(subscriptionId: String)
 
     @Query("DELETE FROM profile_stats WHERE guid IN (:guids)")
     suspend fun deleteStatsOf(guids: List<String>)
 
-    @Query("DELETE FROM profile_raw   WHERE guid IN (:guids)")
+    @Query("DELETE FROM profile_raw WHERE guid IN (:guids)")
     suspend fun deleteRawsOf(guids: List<String>)
+
+    @Query("SELECT COUNT(*) FROM profiles WHERE subscriptionId NOT IN (SELECT guid FROM subscriptions)")
+    suspend fun orphanProfileCount(): Int
+
+    @Query("UPDATE profiles SET subscriptionId = :target WHERE subscriptionId NOT IN (SELECT guid FROM subscriptions)")
+    suspend fun adoptOrphanProfiles(target: String)
 
     @Query("SELECT value FROM settings WHERE key = 'SELECTED_SERVER'")
     suspend fun selectedGuid(): String?
 
+    @Query("INSERT OR REPLACE INTO settings(key, value, kind) VALUES ('SELECTED_SERVER', :guid, 's')")
+    suspend fun putSelectedGuid(guid: String)
+
     @Query("DELETE FROM settings WHERE key = 'SELECTED_SERVER'")
     suspend fun clearSelectedGuid()
+
+    /** Lowest-priority profile after this subscription was removed, in global list order. */
+    @Query("SELECT guid FROM profiles ORDER BY groupSortOrder, sortOrder, guid LIMIT 1")
+    suspend fun firstProfileGuid(): String?
 
     @Transaction
     suspend fun insertAtEnd(item: SubscriptionItem) {
@@ -647,28 +684,57 @@ interface SubscriptionDao {
         guids.forEachIndexed { index, guid -> setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP) }
     }
 
-    /**
-     * Replaces SettingsManager.removeSubscriptionWithDefault: drops the subscription and its
-     * profiles (stats/raw included), then re-creates a Default subscription if none remain.
-     */
+    @Transaction
+    suspend fun ensureDefault(defaultRemarks: String): DefaultGroupRepair =
+        repairDefault(defaultRemarks, force = false)
+
+    @Transaction
+    suspend fun ensureDefaultForced(defaultRemarks: String): DefaultGroupRepair =
+        repairDefault(defaultRemarks, force = true)
+
+    @Transaction
+    suspend fun repairDefault(defaultRemarks: String, force: Boolean): DefaultGroupRepair {
+        var exists = find(AppConfig.DEFAULT_SUBSCRIPTION_ID) != null
+        val orphans = orphanProfileCount()
+        val created = !exists && (force || orphans > 0 || count() == 0)
+        if (created) {
+            val head = if (count() == 0) {
+                ProfileItem.SORT_STEP
+            } else {
+                minSortOrder() - ProfileItem.SORT_STEP
+            }
+            upsert(
+                SubscriptionItem(
+                    guid = AppConfig.DEFAULT_SUBSCRIPTION_ID,
+                    sortOrder = head,
+                    remarks = defaultRemarks,
+                )
+            )
+            exists = true
+        }
+        val adopted = if (exists && orphans > 0) {
+            adoptOrphanProfiles(AppConfig.DEFAULT_SUBSCRIPTION_ID)
+            orphans
+        } else {
+            0
+        }
+        return DefaultGroupRepair(createdDefault = created, adoptedProfiles = adopted)
+    }
+
     @Transaction
     suspend fun removeWithDefault(guid: String, defaultRemarks: String) {
         val guids = profileGuidsOf(guid)
-        if (selectedGuid() in guids) clearSelectedGuid()
+        val hadSelection = selectedGuid() in guids
         guids.chunked(ProfileDao.SQLITE_VAR_LIMIT).forEach {
             deleteStatsOf(it)
             deleteRawsOf(it)
         }
         deleteProfilesOf(guid)
         deleteRow(guid)
-        if (count() == 0) {
-            upsert(
-                SubscriptionItem(
-                    guid = AppConfig.DEFAULT_SUBSCRIPTION_ID,
-                    sortOrder = ProfileItem.SORT_STEP,
-                    remarks = defaultRemarks,
-                )
-            )
+        ensureDefault(defaultRemarks)
+        if (hadSelection) {
+            val fallback = firstProfileGuid()
+            if (fallback.isNullOrBlank()) clearSelectedGuid() else putSelectedGuid(fallback)
         }
     }
 }

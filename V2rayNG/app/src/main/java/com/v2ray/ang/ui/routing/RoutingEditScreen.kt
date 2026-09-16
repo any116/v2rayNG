@@ -242,7 +242,6 @@ private fun RoutingEditForm(
             query = query,
             onQueryChange = onQueryChange,
             onValueChange = callbacks[RoutingField.OUTBOUND],
-            editable = true,
         )
         Spacer(modifier = Modifier.height(BottomSpacerHeight))
         NavigationBarsSpacer()

@@ -13,11 +13,18 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.enums.Language
 import com.v2ray.ang.util.LogUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 
 /**
  * Keeps the legacy in-app language preference synchronized with Android's per-app locale APIs.
  */
 object AppLocaleManager {
+
+    // Scope for bridging suspend functions to synchronous lifecycle/UI callbacks.
+    private val scope: CoroutineScope = MainScope()
 
     fun initialize(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -30,15 +37,18 @@ object AppLocaleManager {
     /** Completes the one-time handoff after AppCompat has attached the activity context. */
     fun onActivityCreated(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Api33.completeMigration(context)
+            scope.launch { Api33.completeMigration(context) }
         } else {
-            syncLegacyPreference(AppCompatDelegate.getApplicationLocales().get(0)?.toLanguageTag())
+            scope.launch {
+                syncLegacyPreference(AppCompatDelegate.getApplicationLocales().get(0)?.toLanguageTag())
+            }
         }
     }
 
     fun setApplicationLanguage(languageCode: String) {
         val language = Language.fromCode(languageCode)
-        persistLegacyPreference(language)
+        // Persist in background after snapshot is ready; UI locale takes effect immediately.
+        scope.launch { persistLegacyPreference(language) }
         AppCompatDelegate.setApplicationLocales(language.toLocaleList())
     }
 
@@ -66,38 +76,38 @@ object AppLocaleManager {
                 AppCompatDelegate.setApplicationLocales(legacyLanguage.toLocaleList())
             }
         } else {
-            syncLegacyPreference(storedLocales.get(0)?.toLanguageTag())
+            scope.launch {
+                syncLegacyPreference(storedLocales.get(0)?.toLanguageTag())
+            }
         }
     }
 
     private fun storedLanguage(): Language =
         Language.fromCode(Prefs.string(AppConfig.PREF_LANGUAGE) ?: Language.AUTO.code)
 
-    private fun syncLegacyPreference(languageTag: String?) {
+    private suspend fun syncLegacyPreference(languageTag: String?) {
         persistLegacyPreference(Language.fromLanguageTag(languageTag))
     }
 
-    private fun persistLegacyPreference(language: Language) {
-        // An unready snapshot reads as absent, which resolves to AUTO. Persisting that would
-        // destroy the real preference, so skip the write instead.
-        if (!Prefs.isReady) {
-            LogUtil.w(AppConfig.TAG, "Skipped locale write, settings snapshot not ready")
-            return
-        }
+    private suspend fun persistLegacyPreference(language: Language) {
+        Prefs.awaitReady()
         if (Prefs.string(AppConfig.PREF_LANGUAGE) == language.code) return
-        Prefs.setString(AppConfig.PREF_LANGUAGE, language.code)
+        Prefs.putString(AppConfig.PREF_LANGUAGE, language.code)
         SettingsChangeManager.notifySettingChanged(AppConfig.PREF_LANGUAGE)
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     private object Api33 {
+
         fun prepareMigration(context: Context) {
             if (Prefs.bool(AppConfig.PREF_APP_LOCALE_MIGRATED, false)) return
 
             val localeManager = context.getSystemService(LocaleManager::class.java)
             val applicationLocales = localeManager.applicationLocales
             if (!applicationLocales.isEmpty) {
-                syncLegacyPreference(applicationLocales.get(0)?.toLanguageTag())
+                scope.launch {
+                    syncLegacyPreference(applicationLocales.get(0)?.toLanguageTag())
+                }
                 return
             }
 
@@ -110,7 +120,7 @@ object AppLocaleManager {
             }
         }
 
-        fun completeMigration(context: Context) {
+        suspend fun completeMigration(context: Context) {
             val localeManager = context.getSystemService(LocaleManager::class.java)
             if (!Prefs.bool(AppConfig.PREF_APP_LOCALE_MIGRATED, false)) {
                 val frameworkLanguage = Language.fromLanguageTag(

@@ -25,7 +25,6 @@ internal object SettingKinds {
         AppConfig.PREF_FAKE_DNS_ENABLED,
         AppConfig.PREF_APPEND_HTTP_PROXY,
         AppConfig.PREF_MUX_ENABLED,
-        AppConfig.PREF_MUX_XUDP_QUIC,
         AppConfig.PREF_FRAGMENT_ENABLED,
         AppConfig.PREF_SPEED_ENABLED,
         AppConfig.PREF_CONFIRM_REMOVE,

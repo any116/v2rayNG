@@ -2,7 +2,7 @@ package com.v2ray.ang.root
 
 import android.content.Context
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.data.Prefs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -24,7 +24,7 @@ object RootLanSharing {
      * short-circuits before touching root state.
      */
     fun startClientSharing(context: Context): Boolean {
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_ROOT_LAN_SHARING) && RootManager.cachedRoot()) {
+        if (Prefs.bool(AppConfig.PREF_ROOT_LAN_SHARING, false) && RootManager.cachedRoot()) {
             if (lanShareJob != null) return false
 
             lanSharingStarted = true

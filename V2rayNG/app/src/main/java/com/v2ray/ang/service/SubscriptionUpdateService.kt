@@ -7,15 +7,16 @@ import android.os.IBinder
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
+import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.IoDispatcher
+import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.dto.RealPingEvent
 import com.v2ray.ang.dto.SubscriptionUpdateMessage
-import com.v2ray.ang.data.entities.SubscriptionCache
 import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.AppLocaleManager
-import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -23,6 +24,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -58,6 +61,15 @@ class SubscriptionUpdateService : Service() {
 
     private val updateSemaphore = Semaphore(2)
 
+    private val writerScope: CoroutineScope by lazy { CoroutineScope(io + SupervisorJob()) }
+
+    private val resultWriter: TestResultWriter by lazy {
+        TestResultWriter(
+            dao = PlatformDependencies.profileDao(this),
+            scope = writerScope,
+        ).also { it.start() }
+    }
+
     override fun onCreate() {
         super.onCreate()
         CoreNativeManager.initCoreEnv(this)
@@ -70,6 +82,13 @@ class SubscriptionUpdateService : Service() {
         val snapshot = ArrayList(activeWorkers)
         snapshot.forEach { it.cancel() }
         activeWorkers.clear()
+        CoroutineScope(io).launch {
+            try {
+                resultWriter.stop()
+            } finally {
+                writerScope.cancel()
+            }
+        }
         serviceJob.cancel()
         NotificationHelper.stopForeground(this)
         NotificationHelper.cancel(NotificationChannelType.SUBSCRIPTION_UPDATE, this)
@@ -127,12 +146,10 @@ class SubscriptionUpdateService : Service() {
     }
 
     private suspend fun updateSingle(subId: String, forcedUpdate: Boolean) {
-        val subItem = MmkvManager.decodeSubscription(subId) ?: return
+        val subItem = PlatformDependencies.subscriptionDao(this).find(subId) ?: return
         if (!subItem.enabled || subItem.url.isEmpty()) {
             return
         }
-
-        val sub = SubscriptionCache(subId, subItem)
 
         LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: Updating ${subItem.remarks}")
         showNotification(
@@ -141,14 +158,14 @@ class SubscriptionUpdateService : Service() {
             content = getString(R.string.subscription_update_updating, subItem.remarks)
         )
 
-        if (forcedUpdate || MmkvManager.decodeSettingsBool(AppConfig.PREF_UPDATE_SUBSCRIPTION, false)) {
-            AngConfigManager.updateConfigViaSub(sub)
+        if (forcedUpdate || Prefs.bool(AppConfig.PREF_UPDATE_SUBSCRIPTION, false)) {
+            AngConfigManager.updateConfigViaSub(subItem)
         }
 
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_TEST_AFTER_UPDATE_SUBSCRIPTION, false)) {
-            testSubscriptionServers(sub)
+        if (Prefs.bool(AppConfig.PREF_AUTO_TEST_AFTER_UPDATE_SUBSCRIPTION, false)) {
+            testSubscriptionServers(subItem)
 
-            if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
+            if (Prefs.bool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
                 LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: removing invalid servers for ${subItem.remarks}")
                 showNotification(
                     context = this,
@@ -157,7 +174,7 @@ class SubscriptionUpdateService : Service() {
                 )
                 AngConfigManager.removeInvalidServer(subId)
             }
-            if (MmkvManager.decodeSettingsBool(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)) {
+            if (Prefs.bool(AppConfig.PREF_AUTO_SORT_AFTER_TEST, false)) {
                 LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: sorting servers for ${subItem.remarks}")
                 showNotification(
                     context = this,
@@ -171,24 +188,26 @@ class SubscriptionUpdateService : Service() {
         LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: Finished ${subItem.remarks}")
     }
 
-    private suspend fun testSubscriptionServers(sub: SubscriptionCache) {
+    private suspend fun testSubscriptionServers(sub: SubscriptionItem) {
         val subId = sub.guid
-        LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: starting test phase for ${sub.subscription.remarks}")
+        LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: starting test phase for ${sub.remarks}")
         showNotification(
             context = this,
             titleResId = R.string.title_real_ping_all_server,
-            content = sub.subscription.remarks
+            content = sub.remarks
         )
 
-        val guids = MmkvManager.decodeServerList(subId)
+        val profileDao = PlatformDependencies.profileDao(this)
+        val guids = profileDao.guidsInGroup(subId)
         if (guids.isNotEmpty()) {
             val deferred = CompletableDeferred<Unit>()
             lateinit var worker: RealPingWorkerService
             worker = RealPingWorkerService(
                 context = this,
+                profileDao = profileDao,
                 guids = guids,
                 onEvent = { event ->
-                    handleWorkerEvent(event, sub.subscription.remarks) {
+                    handleWorkerEvent(event, sub.remarks) {
                         activeWorkers.remove(worker)
                         deferred.complete(Unit)
                     }
@@ -197,7 +216,8 @@ class SubscriptionUpdateService : Service() {
             activeWorkers.add(worker)
             worker.start()
             deferred.await()
-            LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: test phase finished for ${sub.subscription.remarks}")
+            resultWriter.flush()
+            LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: test phase finished for ${sub.remarks}")
         }
     }
 
@@ -218,7 +238,7 @@ class SubscriptionUpdateService : Service() {
             }
 
             is RealPingEvent.Result -> {
-                MmkvManager.encodeServerTestDelayMillis(event.guid, event.delayMillis)
+                resultWriter.record(event.guid, event.delayMillis)
             }
 
             is RealPingEvent.Finish -> {

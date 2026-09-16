@@ -161,9 +161,6 @@ android {
 
 }
 
-// Required by the Room Gradle Plugin. Schemas are emitted per flavor, e.g.
-// schemas/fdroidRelease/com.v2ray.ang.data.AppDatabase/1.json, and must be committed:
-// they are the input for auto-migrations and CI schema validation.
 room3 {
     schemaDirectory("$projectDir/schemas")
 }

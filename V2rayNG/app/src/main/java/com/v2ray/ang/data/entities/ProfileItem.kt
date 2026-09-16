@@ -11,7 +11,8 @@ import com.v2ray.ang.util.Utils
 @Entity(
     tableName = "profiles",
     indices = [
-        Index(value = ["subscriptionId", "sortOrder"]),
+        Index(value = ["subscriptionId", "groupSortOrder", "sortOrder", "guid"]),
+        Index(value = ["groupSortOrder", "sortOrder", "guid"]),
         Index(value = ["dedupeKey"]),
         Index(value = ["remarks"]),
     ]
@@ -22,6 +23,13 @@ data class ProfileItem(
 
     /** Sparse ordering within a group; drag/insert rewrites a single row. */
     var sortOrder: Long = 0L,
+
+    /**
+     * Copy of the owning subscription's sortOrder, kept in sync by GROUP_ORDER_TRIGGERS.
+     * Long.MAX_VALUE is the orphan fallback.
+     */
+    @ColumnInfo(defaultValue = "9223372036854775807")
+    var groupSortOrder: Long = Long.MAX_VALUE,
 
     /**
      * Stable digest of duplicateIdentity() used by SQL dedupe. Empty means "not computed yet";
@@ -123,13 +131,14 @@ data class ProfileItem(
 
     /**
      * Identity for "remove duplicate configurations": everything that does not affect the
-     * connection is zeroed. guid, sortOrder and dedupeKey MUST be cleared here or two rows can
-     * never compare equal. ProfileDaoTest covers each of the three.
+     * connection is zeroed. guid, sortOrder, groupSortOrder and dedupeKey MUST be cleared here
+     * or two rows can never compare equal. ProfileDaoTest covers each of them.
      */
     fun duplicateIdentity(): ProfileItem =
         copy(
             guid = "",
             sortOrder = 0L,
+            groupSortOrder = Long.MAX_VALUE,
             dedupeKey = "",
             configVersion = 0,
             subscriptionId = "",

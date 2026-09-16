@@ -1,7 +1,12 @@
 package com.v2ray.ang.data.legacy
 
+import android.content.Context
 import com.tencent.mmkv.MMKV
+import com.tencent.mmkv.MMKVHandler
+import com.tencent.mmkv.MMKVLogLevel
+import com.tencent.mmkv.MMKVRecoverStrategic
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileItem
@@ -11,12 +16,10 @@ import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
+import java.io.File
 
 /**
  * Immutable view of the legacy MMKV stores, ready to be inserted.
- *
- * groups is ordered: the list index inside a group becomes sortOrder, and subOrder fixes the
- * order of the groups themselves.
  */
 data class LegacySnapshot(
     val groups: Map<String, List<Pair<String, ProfileItem>>>,
@@ -47,6 +50,16 @@ data class LegacySnapshot(
 }
 
 /**
+ * Raised when the legacy MMKV store exists on disk but cannot be read.
+ *
+ * Must be distinguished from "there is no legacy data": the first must abort the database
+ * create transaction so the upgrade can be retried, the second is a legitimate empty snapshot
+ * for a fresh install.
+ */
+class LegacyReadException(message: String, cause: Throwable? = null) :
+    IllegalStateException(message, cause)
+
+/**
  * Read-only reader for the legacy MMKV stores. This is the only file that is allowed to import
  * com.tencent.mmkv once MmkvManager is gone.
  *
@@ -59,21 +72,63 @@ data class LegacySnapshot(
  * side while this reader consumes their RESULT. Upgrading directly from a very old version
  * would otherwise drop every profile silently.
  *
- * @param rootDir MMKV root. Null uses the process-wide root configured by MMKV.initialize();
- *                the restore path points it at the unpacked archive.
+ * MMKV.initialize() is performed here on first use rather than in Application.onCreate: the
+ * legacy store is only touched by this reader, and initializing it in every process would
+ * mmap the legacy files four times over for no benefit.
+ *
+ * @param rootDir MMKV root. Null uses the app-private legacy directory; the restore path
+ *                points it at the unpacked archive.
  */
-class MmkvLegacyReader(private val rootDir: String? = null) {
+class MmkvLegacyReader(
+    private val context: Context,
+    private val rootDir: String? = null,
+) {
 
-    private fun store(id: String): MMKV? = runCatching {
-        if (rootDir == null) {
-            MMKV.mmkvWithID(id, MMKV.SINGLE_PROCESS_MODE)
-        } else {
-            MMKV.mmkvWithID(id, MMKV.SINGLE_PROCESS_MODE, null, rootDir)
+    /**
+     * True when the legacy store actually exists on disk. A fresh install has no such file,
+     * and readAll() must be allowed to return EMPTY for it without tripping the exception
+     * below.
+     */
+    fun hasLegacyStore(): Boolean =
+        if (rootDir != null) File(rootDir, ID_MAIN).isFile
+        else context.filesDir.resolve(LEGACY_DIR).resolve(ID_MAIN).isFile
+
+    private fun ensureInitialized() {
+        if (initialized) return
+        synchronized(INIT_LOCK) {
+            if (initialized) return
+            MMKV.initialize(
+                context,
+                context.filesDir.resolve(LEGACY_DIR).absolutePath,
+                null,
+                if (BuildConfig.DEBUG) MMKVLogLevel.LevelDebug else MMKVLogLevel.LevelInfo,
+                RECOVERY_HANDLER,
+            )
+            initialized = true
         }
-    }.onFailure { LogUtil.e(AppConfig.TAG, "Cannot open legacy store $id", it) }.getOrNull()
+    }
+
+    private fun store(id: String): MMKV? {
+        ensureInitialized()
+        return runCatching {
+            if (rootDir == null) {
+                MMKV.mmkvWithID(id, MMKV.SINGLE_PROCESS_MODE)
+            } else {
+                MMKV.mmkvWithID(id, MMKV.SINGLE_PROCESS_MODE, null, rootDir)
+            }
+        }.onFailure { LogUtil.e(AppConfig.TAG, "Cannot open legacy store $id", it) }.getOrNull()
+    }
 
     fun readAll(): LegacySnapshot {
-        val main = store(ID_MAIN) ?: return LegacySnapshot.EMPTY
+        if (!hasLegacyStore()) return LegacySnapshot.EMPTY
+
+        // The MAIN file is present but cannot be opened: the legacy data is real and this
+        // read failed. Returning EMPTY here is how the previous version silently dropped
+        // every profile on upgrade; throwing lets the create transaction roll back so the
+        // import is retried on the next launch.
+        val main = store(ID_MAIN)
+            ?: throw LegacyReadException("Legacy MAIN store exists on disk but cannot be opened")
+
         val profiles = store(ID_PROFILE_FULL_CONFIG)
         val subs = store(ID_SUB)
         val aff = store(ID_SERVER_AFF)
@@ -156,6 +211,10 @@ class MmkvLegacyReader(private val rootDir: String? = null) {
         val json = profiles.decodeString(guid)
         if (json.isNullOrBlank()) return null
         val item = JsonUtil.fromJsonSafe(json, ProfileItem::class.java) ?: return null
+        // Gson constructs ProfileItem through Unsafe, so a legacy payload that predates a
+        // non-null field leaves that field null at runtime. Normalise the fields added after
+        // the JSON was written, otherwise the compiler-inserted null check inside copy() throws.
+        if (item.dedupeKey == null) item.dedupeKey = ""
         return guid to item.copy(guid = guid)
     }
 
@@ -289,6 +348,8 @@ class MmkvLegacyReader(private val rootDir: String? = null) {
     private data class ServerAffiliationJson(val testDelayMillis: Long = 0L)
 
     private companion object {
+        const val LEGACY_DIR = "mmkv"
+
         const val ID_MAIN = "MAIN"
         const val ID_PROFILE_FULL_CONFIG = "PROFILE_FULL_CONFIG"
         const val ID_SERVER_RAW = "SERVER_RAW"
@@ -312,5 +373,38 @@ class MmkvLegacyReader(private val rootDir: String? = null) {
             KEY_MIGRATED_SERVER_LIST,
             KEY_MIGRATED_HY2_PIN,
         )
+
+        /**
+         * Restores the recovery strategy MmkvManager used before the Room migration. Without
+         * it a CRC or file-length failure makes mkvWithID return null, readAll() throws
+         * LegacyReadException and every profile is left behind on disk.
+         */
+        val RECOVERY_HANDLER = object : MMKVHandler {
+            override fun onMMKVCRCCheckFail(mmapID: String): MMKVRecoverStrategic =
+                recoverFromStorageError(mmapID, "CRC check")
+
+            override fun onMMKVFileLengthError(mmapID: String): MMKVRecoverStrategic =
+                recoverFromStorageError(mmapID, "file length check")
+
+            override fun wantLogRedirecting(): Boolean = false
+
+            override fun mmkvLog(
+                level: MMKVLogLevel,
+                file: String,
+                line: Int,
+                function: String,
+                message: String,
+            ) = Unit
+        }
+
+        private fun recoverFromStorageError(mmapID: String, error: String): MMKVRecoverStrategic {
+            LogUtil.e(AppConfig.TAG, "MMKV $error failed for $mmapID; attempting data recovery")
+            return MMKVRecoverStrategic.OnErrorRecover
+        }
+
+        private val INIT_LOCK = Any()
+
+        @Volatile
+        private var initialized = false
     }
 }

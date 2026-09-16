@@ -2,6 +2,7 @@ package com.v2ray.ang.dto
 
 import android.content.Context
 import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.enums.CoreResolvedType
 
 data class CoreConfigContext(
@@ -10,6 +11,7 @@ data class CoreConfigContext(
     val isCustom: Boolean = false,
     val resolvedOutbounds: List<ResolvedOutbound> = emptyList(),
     val routingDomainRules: List<RoutingDomainRule> = emptyList(),
+    val routingRulesets: List<RulesetItem> = emptyList(),
 ) {
     data class ResolvedOutbound(
         val tag: String,

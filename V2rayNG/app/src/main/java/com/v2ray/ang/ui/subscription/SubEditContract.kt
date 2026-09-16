@@ -54,9 +54,12 @@ data class SubEditUiState(
 
 @Stable
 class SubEditSlices(
-    val profileRemarks: Flow<PagingData<DropdownOption>>,
-    val query: StateFlow<String>,
-    val onQueryChange: (String) -> Unit,
+    val prevProfiles: Flow<PagingData<DropdownOption>>,
+    val prevQuery: StateFlow<String>,
+    val onPrevQueryChange: (String) -> Unit,
+    val nextProfiles: Flow<PagingData<DropdownOption>>,
+    val nextQuery: StateFlow<String>,
+    val onNextQueryChange: (String) -> Unit,
 )
 
 sealed interface SubEditAction : BaseAction {

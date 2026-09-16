@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -49,13 +48,9 @@ class ServerEditViewModel @Inject constructor(
 
     val slices = ServerSlices(
         chainCandidates = chainQuery
-            .debounce(SEARCH_DEBOUNCE_MS)
-            .distinctUntilChanged()
             .flatMapLatest { repository.chainCandidatePager(it) }
             .cachedIn(viewModelScope),
         fallbackTags = tagQuery
-            .debounce(SEARCH_DEBOUNCE_MS)
-            .distinctUntilChanged()
             .flatMapLatest { repository.fallbackTagPager(it) }
             .cachedIn(viewModelScope),
         chainQuery = chainQuery.asStateFlow(),
@@ -380,7 +375,6 @@ class ServerEditViewModel @Inject constructor(
         private const val KEY_SAVED = "server_edit_saved_state"
         private const val KEY_FORM = "form"
         private const val KEY_RAW = "raw"
-        private const val SEARCH_DEBOUNCE_MS = 300L
 
         private fun initialState(handle: SavedStateHandle): ServerUiState {
             val typeValue = handle.get<Int>(AppRoute.EXTRA_TYPE) ?: EConfigType.VMESS.value

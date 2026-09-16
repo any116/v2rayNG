@@ -41,5 +41,7 @@ object Prefs {
 
     suspend fun putString(key: String, value: String?) = store.putString(key, value)
 
-    val isReady: Boolean get() = store.isReady
+    // Checking readiness via a synchronous property is inherently racy with concurrent
+    // refresh() calls; awaiting the ready signal guarantees a consistent snapshot.
+    suspend fun awaitReady() = store.awaitReady()
 }

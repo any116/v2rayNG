@@ -483,8 +483,7 @@ internal fun PolicyGroupForm(
                     onQueryChange = onTagQueryChange,
                     onValueChange = {
                         onAction(ServerAction.TextChanged(ServerField.GROUP_FALLBACK_TAG, it))
-                    },
-                    editable = true,
+                    }
                 )
             }
         }
@@ -587,7 +586,6 @@ private fun ChainMemberRow(
             query = chainQuery,
             onQueryChange = onChainQueryChange,
             onValueChange = { onAction(ServerAction.ChainMemberChanged(member.id, it)) },
-            editable = true,
             modifier = Modifier.weight(1f),
         )
         IconButton(onClick = { onAction(ServerAction.ChainMemberRemoveClicked(member.id)) }) {

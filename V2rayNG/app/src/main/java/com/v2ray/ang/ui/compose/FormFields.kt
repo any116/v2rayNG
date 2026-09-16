@@ -4,22 +4,16 @@ import android.content.res.Configuration
 import androidx.annotation.ArrayRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.TextSelectionColors
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -33,30 +27,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalResources
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.paging.LoadState
-import androidx.paging.PagingData
-import androidx.paging.compose.LazyPagingItems
-import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.paging.compose.itemContentType
-import androidx.paging.compose.itemKey
-import com.v2ray.ang.R
-import kotlinx.coroutines.flow.flowOf
 
-private val FieldHorizontalPad = 16.dp
-private val FieldVerticalPad = 4.dp
+internal val FieldHorizontalPad = 16.dp
+internal val FieldVerticalPad = 4.dp
 private const val SelectionAlpha = 0.4f
-
-private val PagedDropdownMaxHeight = 320.dp
-private const val PagedDropdownItemContentType = "paged-dropdown-item"
 
 @Immutable
 class StringOptions(val values: List<String>) {
@@ -73,13 +54,6 @@ class StringOptions(val values: List<String>) {
     companion object {
         val Empty = StringOptions(emptyList())
     }
-}
-
-@Immutable
-data class DropdownOption(val value: String, val source: Source) {
-    enum class Source { BUILTIN, PROFILE }
-
-    val key: String get() = "${source.name}:$value"
 }
 
 fun List<String>.toStringOptions(): StringOptions =
@@ -142,6 +116,7 @@ fun FormTextField(
     )
 }
 
+/** Dropdown for small, non-paged option sets. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormDropdownField(
@@ -158,13 +133,11 @@ fun FormDropdownField(
     var expanded by rememberSaveable { mutableStateOf(false) }
     val menuScrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
 
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { newExpanded ->
             if (!enabled) return@ExposedDropdownMenuBox
-            if (!editable && newExpanded) keyboardController?.hide()
             expanded = newExpanded
         },
         modifier = modifier
@@ -173,9 +146,15 @@ fun FormDropdownField(
     ) {
         OutlinedTextField(
             value = value,
-            onValueChange = { if (editable) onValueChange(it) },
+            onValueChange = {
+                if (editable) {
+                    onValueChange(it)
+                    if (!expanded) expanded = true
+                }
+            },
             readOnly = !editable,
             enabled = enabled,
+            singleLine = true,
             label = { Text(label) },
             placeholder = placeholder?.let { { Text(it) } },
             supportingText = supportingText?.let { { Text(it) } },
@@ -187,9 +166,7 @@ fun FormDropdownField(
                     else ExposedDropdownMenuAnchorType.PrimaryNotEditable
                 )
                 .fillMaxWidth()
-                .onFocusChanged { focusState ->
-                    if (!editable && focusState.isFocused) keyboardController?.hide()
-                }
+                .then(if (editable) Modifier else Modifier.focusProperties { canFocus = false })
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -211,115 +188,6 @@ fun FormDropdownField(
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FormPagedDropdownField(
-    label: String,
-    value: String,
-    items: LazyPagingItems<DropdownOption>,
-    query: String,
-    onQueryChange: (String) -> Unit,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    editable: Boolean = false,
-    enabled: Boolean = true,
-    placeholder: String? = null,
-    supportingText: String? = null
-) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    val listState = rememberLazyListState()
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { newExpanded ->
-            if (!enabled) return@ExposedDropdownMenuBox
-            if (!editable && newExpanded) keyboardController?.hide()
-            expanded = newExpanded
-        },
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { if (editable) onValueChange(it) },
-            readOnly = !editable,
-            enabled = enabled,
-            label = { Text(label) },
-            placeholder = placeholder?.let { { Text(it) } },
-            supportingText = supportingText?.let { { Text(it) } },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = appFieldColors(),
-            modifier = Modifier
-                .menuAnchor(
-                    type = if (editable) ExposedDropdownMenuAnchorType.PrimaryEditable
-                    else ExposedDropdownMenuAnchorType.PrimaryNotEditable
-                )
-                .fillMaxWidth()
-                .onFocusChanged { focusState ->
-                    if (!editable && focusState.isFocused) keyboardController?.hide()
-                }
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                placeholder = { Text(stringResource(R.string.msg_enter_keywords)) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                colors = appFieldColors(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
-            )
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .heightIn(max = PagedDropdownMaxHeight)
-                    .verticalScrollbar(listState)
-            ) {
-                items(
-                    count = items.itemCount,
-                    key = items.itemKey { it.key },
-                    contentType = items.itemContentType { PagedDropdownItemContentType }
-                ) { index ->
-                    val option = items[index] ?: return@items
-                    DropdownMenuItem(
-                        text = { Text(option.value) },
-                        onClick = {
-                            onValueChange(option.value)
-                            expanded = false
-                            onQueryChange("")
-                            focusManager.clearFocus()
-                        }
-                    )
-                }
-                if (items.itemCount == 0 && items.loadState.refresh is LoadState.NotLoading) {
-                    item(contentType = PagedDropdownItemContentType) {
-                        Text(
-                            text = stringResource(R.string.msg_no_result),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(FieldHorizontalPad)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun rememberPreviewDropdownItems(values: List<String>): LazyPagingItems<DropdownOption> =
-    remember(values) {
-        flowOf(PagingData.from(values.map { DropdownOption(it, DropdownOption.Source.PROFILE) }))
-    }.collectAsLazyPagingItems()
 
 // ===== previews =====
 
@@ -347,19 +215,5 @@ private fun FormDropdownFieldPreview() = AppTheme {
         options = listOf("tcp", "ws", "grpc").toStringOptions(),
         supportingText = "Added before every profile in this subscription",
         onValueChange = {}
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-private fun FormPagedDropdownFieldPreview() = AppTheme {
-    FormPagedDropdownField(
-        label = "Entry proxy",
-        value = "node-01",
-        items = rememberPreviewDropdownItems(listOf("node-01", "node-02")),
-        query = "",
-        onQueryChange = {},
-        onValueChange = {},
-        editable = true
     )
 }

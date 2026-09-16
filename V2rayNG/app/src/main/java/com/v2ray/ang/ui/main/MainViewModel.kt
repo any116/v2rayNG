@@ -32,6 +32,7 @@ import javax.inject.Inject
 
 private const val SEARCH_DEBOUNCE_MS = 300L
 private const val COUNT_SHARING_TIMEOUT_MS = 5_000L
+private const val MAX_CACHED_PAGERS = 6
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -46,16 +47,34 @@ class MainViewModel @Inject constructor(
 ) {
 
     private val query = MutableStateFlow("")
-    private val debouncedQuery = query.debounce(SEARCH_DEBOUNCE_MS).distinctUntilChanged()
+
+    /**
+     * Empty query passes through immediately: debounce also delays the MutableStateFlow's
+     * initial value, so the first screen would otherwise sit empty for SEARCH_DEBOUNCE_MS.
+     */
+    private val debouncedQuery = query
+        .debounce { if (it.isEmpty()) 0L else SEARCH_DEBOUNCE_MS }
+        .distinctUntilChanged()
 
     /**
      * One cached Pager flow per group, so swiping back and forth in HorizontalPager does not
      * rebuild the PagingSource. A new search term swaps the PagingSource, not the flow.
+     *
+     * Access-ordered with a capacity bound: cachedIn keeps the last PagingData alive, and with
+     * dozens of groups retaining every one of them is wasted resident memory. LinkedHashMap is
+     * not thread-safe — servers() runs from a Composable on the main thread, observeGroups()
+     * from a coroutine, so every access goes through @Synchronized.
      */
-    private val pagers = ConcurrentHashMap<String, Flow<PagingData<ServerRowItem>>>()
+    private val pagers = object :
+        LinkedHashMap<String, Flow<PagingData<ServerRowItem>>>(MAX_CACHED_PAGERS, 0.75f, true) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<String, Flow<PagingData<ServerRowItem>>>,
+        ): Boolean = size > MAX_CACHED_PAGERS
+    }
 
+    @Synchronized
     fun servers(groupId: String): Flow<PagingData<ServerRowItem>> =
-        pagers.computeIfAbsent(groupId) {
+        pagers.getOrPut(groupId) {
             debouncedQuery
                 .flatMapLatest { repo.serverPager(groupId, it) }
                 .cachedIn(viewModelScope)
@@ -94,6 +113,9 @@ class MainViewModel @Inject constructor(
         observeServiceEvents()
         observeGroups()
     }
+
+    /** Delegates to MainRepository: suspends until the settings snapshot is ready. */
+    suspend fun awaitReady() = repo.awaitReady()
 
     override fun onAction(action: MainAction) {
         when (action) {
@@ -161,9 +183,12 @@ class MainViewModel @Inject constructor(
 
     /** Subscription-table changes push new tabs; the selection is re-resolved on every emission. */
     private fun observeGroups() = launch(onError = {}) {
+        repo.awaitReady()
         repo.observeGroups().collect { groups ->
             val validIds = groups.mapTo(HashSet()) { it.id }
-            pagers.keys.removeAll { it !in validIds }
+            synchronized(pagers) {
+                pagers.keys.removeAll { it !in validIds }
+            }
             countFlows.keys.removeAll { it !in validIds }
             val selected = resolveSelectedGroup(groups)
             setState {
@@ -250,6 +275,7 @@ class MainViewModel @Inject constructor(
                 onRunningChanged(false)
             }
             MainServiceEvent.StateStopSuccess -> onRunningChanged(false)
+            MainServiceEvent.WarnInsecure -> toastError(R.string.toast_allow_insecure_deprecated)
             is MainServiceEvent.MeasureDelayResult -> onCurrentTestResult(event.requestId, event.result)
             is MainServiceEvent.MeasureDelayCanceled -> onCurrentTestCanceled(event.requestId)
             is MainServiceEvent.MeasureConfigNotify -> onBatchProgress(event.requestId, event.progress)
@@ -478,7 +504,6 @@ class MainViewModel @Inject constructor(
         currentTestId = null
         batchTestId = null
         batchGroupId = null
-        repo.close()
         super.onCleared()
     }
 }

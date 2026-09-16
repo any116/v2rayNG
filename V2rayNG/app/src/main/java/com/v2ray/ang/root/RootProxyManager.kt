@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.Process
 import android.util.AtomicFile
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.handler.MmkvManager
+import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.root.RootProxyManager.TABLE
 import com.v2ray.ang.root.RootProxyManager.TUN
@@ -122,8 +122,8 @@ object RootProxyManager {
         val logFile = File(runDir, "tun2socks.log").absolutePath
         val cfgFile = File(runDir, "tun2socks.yml")
         val oomGuardPid = File(runDir, "oomguard.pid").absolutePath
-        val ipv6 = MmkvManager.decodeSettingsBool(AppConfig.PREF_IPV6_ENABLED)
-        val lanShare = forceLanShare || MmkvManager.decodeSettingsBool(AppConfig.PREF_ROOT_LAN_SHARING)
+        val ipv6 = Prefs.bool(AppConfig.PREF_IPV6_ENABLED, false)
+        val lanShare = forceLanShare || Prefs.bool(AppConfig.PREF_ROOT_LAN_SHARING, false)
         val corePid = Process.myPid()
 
         val config = buildHevConfig(socksUsername, socksPassword, port, ipv6)
@@ -133,10 +133,10 @@ object RootProxyManager {
         val cfgPath = cfgFile.absolutePath
 
         // Per-app proxy/bypass (mirrors what VpnService does via allowed/disallowed apps).
-        val perAppEnabled = MmkvManager.decodeSettingsBool(AppConfig.PREF_PER_APP_PROXY)
-        val bypassApps = MmkvManager.decodeSettingsBool(AppConfig.PREF_BYPASS_APPS)
+        val perAppEnabled = Prefs.bool(AppConfig.PREF_PER_APP_PROXY, false)
+        val bypassApps = Prefs.bool(AppConfig.PREF_BYPASS_APPS, false)
         val selectedUids = if (perAppEnabled) {
-            val pkgs = MmkvManager.decodeSettingsStringSet(AppConfig.PREF_PER_APP_PROXY_SET)?.toList().orEmpty()
+            val pkgs = Prefs.stringSet(AppConfig.PREF_PER_APP_PROXY_SET).toList()
             if (pkgs.isNotEmpty()) PackageUidResolver.packageNamesToUids(context, pkgs) else emptyList()
         } else {
             emptyList()

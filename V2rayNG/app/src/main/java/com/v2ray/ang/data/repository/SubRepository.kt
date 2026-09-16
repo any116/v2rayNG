@@ -15,6 +15,7 @@ import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.SubscriptionDao
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.IoDispatcher
+import com.v2ray.ang.dto.SubChainValidation
 import com.v2ray.ang.dto.SubEditData
 import com.v2ray.ang.dto.SubUpdateOptions
 import com.v2ray.ang.dto.SubscriptionUpdateMessage
@@ -86,6 +87,10 @@ open class SubRepository @Inject constructor(
             data.map { DropdownOption(it.remarks, DropdownOption.Source.PROFILE) }
         }
 
+    /** Entry / exit chain references are remarks; nothing in the schema validates them. */
+    open suspend fun validateChain(prevProfile: String, nextProfile: String): SubChainValidation =
+        withIO { AngConfigManager.validateSubChainProfiles(prevProfile, nextProfile) }
+
     // ---- Write ----
 
     open suspend fun save(subId: String, item: SubscriptionItem) = withIO {
@@ -109,7 +114,7 @@ open class SubRepository @Inject constructor(
 
     open suspend fun remove(subId: String) = withIO {
         SubscriptionUpdater.cancelOne(subId = subId)
-        subscriptionDao.removeWithDefault(subId, DEFAULT_REMARKS)
+        subscriptionDao.removeWithDefault(subId, AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
         settings.poke(SettingsStore.KEY_SELECTED_SERVER, profileDao.selectedGuid())
         SettingsChangeManager.makeSetupGroupTab()
     }
@@ -142,15 +147,37 @@ open class SubRepository @Inject constructor(
         acc
     }
 
-    open suspend fun updateInBackground(): Boolean = withIO {
+    /**
+     * Refreshes exactly one subscription. The periodic timer is reset afterwards so a manual
+     * refresh is not immediately followed by the scheduled one.
+     */
+    open suspend fun updateOne(subId: String): SubscriptionUpdateResult = withIO {
+        val result = AngConfigManager.updateConfigViaSubId(subId)
+        if (result.successCount > 0) {
+            SubscriptionUpdater.updateLastUpdatedAndReschedule(app, subId)
+        }
+        result
+    }
+
+    /**
+     * Hands the work to the background service, which also runs the test / prune / sort phases.
+     *
+     * @param subIds restricts the batch; empty means every enabled subscription.
+     * @param forced bypasses PREF_UPDATE_SUBSCRIPTION, for an explicitly requested refresh.
+     */
+    open suspend fun updateInBackground(
+        subIds: List<String> = emptyList(),
+        forced: Boolean = false,
+    ): Boolean = withIO {
         SettingsChangeManager.makeSetupGroupTab()
-        val subIds = subscriptionDao.all()
+        val targets = subscriptionDao.all()
             .filter { it.enabled && it.url.isNotEmpty() }
+            .filter { subIds.isEmpty() || it.guid in subIds }
             .map { it.guid }
-        if (subIds.isEmpty()) return@withIO false
+        if (targets.isEmpty()) return@withIO false
         MessageHelper.sendMsg2SubscriptionService(
             app,
-            SubscriptionUpdateMessage(AppConfig.MSG_SUB_UPDATE_START, false, subIds)
+            SubscriptionUpdateMessage(AppConfig.MSG_SUB_UPDATE_START, forced, targets)
         )
         true
     }
@@ -165,7 +192,6 @@ open class SubRepository @Inject constructor(
     }.isSuccess
 
     private companion object {
-        const val DEFAULT_REMARKS = "Default"
         const val PAGE_SIZE = 40
         const val INITIAL_LOAD_SIZE = 80
         const val PREFETCH_DISTANCE = 20

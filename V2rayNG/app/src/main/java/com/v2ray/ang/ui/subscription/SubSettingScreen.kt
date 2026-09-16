@@ -97,7 +97,8 @@ fun SubSettingScreen(viewModel: SubSettingViewModel) {
                 onShare = { url -> dispatch(SubAction.ShareClicked(url)) },
                 onEdit = { guid -> dispatch(SubAction.Edit(guid)) },
                 onRemove = dialogs.requestRemove,
-                onToggle = { guid, enabled -> dispatch(SubAction.ToggleEnabled(guid, enabled)) }
+                onToggle = { guid, enabled -> dispatch(SubAction.ToggleEnabled(guid, enabled)) },
+                onUpdate = { guid -> dispatch(SubAction.UpdateOne(guid)) }
             )
         }
 
@@ -222,6 +223,12 @@ private fun SubscriptionRow(
         ) {
             Row {
                 if (subRow.hasUrl) {
+                    IconButton(onClick = { callbacks.onUpdate(guid) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_restore_24dp),
+                            contentDescription = stringResource(R.string.title_sub_update)
+                        )
+                    }
                     IconButton(onClick = { callbacks.onShare(url) }) {
                         Icon(
                             painter = painterResource(R.drawable.ic_share_24dp),
@@ -265,7 +272,7 @@ private fun SubSettingContentPreview() = AppTheme {
             SubRow("1", "Primary", "https://example.com/sub", "2026-05-21 09:30", true),
             SubRow("2", "Local only", "", "", false)
         ),
-        callbacks = SubRowCallbacks({}, {}, {}, { _, _ -> }),
+        callbacks = SubRowCallbacks({}, {}, {}, { _, _ -> }, {}),
         onMove = { _, _ -> }
     )
 }
@@ -275,7 +282,7 @@ private fun SubSettingContentPreview() = AppTheme {
 private fun SubSettingEmptyPreview() = AppTheme {
     SubSettingContent(
         subscriptions = emptyList(),
-        callbacks = SubRowCallbacks({}, {}, {}, { _, _ -> }),
+        callbacks = SubRowCallbacks({}, {}, {}, { _, _ -> }, {}),
         onMove = { _, _ -> }
     )
 }

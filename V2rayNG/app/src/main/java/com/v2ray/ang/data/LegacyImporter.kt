@@ -1,8 +1,6 @@
 package com.v2ray.ang.data
 
-import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
-import androidx.sqlite.execSQL
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileItem
@@ -22,24 +20,38 @@ import com.v2ray.ang.util.JsonUtil
  *     few thousand SHA-256 digests plus Gson serialisation inside the create transaction is a
  *     measurable ANR risk on the first process to open the database
  * Orphan cleanup belongs to ProfileDao.cleanupOrphans(), not here.
+ *
+ * Called by LegacyMigrationGate inside an immediateTransaction on a writer connection.
  */
 internal object LegacyImporter {
 
-    suspend fun importInto(connection: SQLiteConnection, snapshot: LegacySnapshot) {
+    suspend fun importInto(exec: SqlExec, snapshot: LegacySnapshot) {
         if (snapshot.isEmpty) return
-        val step = ProfileItem.SORT_STEP
+        val sortStep = ProfileItem.SORT_STEP
 
         // 1) Subscriptions: the subOrder index becomes sortOrder.
         snapshot.subOrder.forEachIndexed { index, subId ->
             val item = snapshot.subscriptions[subId] ?: return@forEachIndexed
-            insertSubscription(connection, subId, (index + 1) * step, item)
+            insertSubscription(exec, subId, (index + 1) * sortStep, item)
         }
         // Subscriptions present in SUB but absent from SUB_IDS still need a row.
         var tail = snapshot.subOrder.size
         snapshot.subscriptions.forEach { (subId, item) ->
             if (subId in snapshot.subOrder) return@forEach
             tail++
-            insertSubscription(connection, subId, tail * step, item)
+            insertSubscription(exec, subId, tail * sortStep, item)
+        }
+
+        if (AppConfig.DEFAULT_SUBSCRIPTION_ID !in snapshot.subscriptions) {
+            insertSubscription(
+                exec,
+                AppConfig.DEFAULT_SUBSCRIPTION_ID,
+                0L,
+                SubscriptionItem(
+                    guid = AppConfig.DEFAULT_SUBSCRIPTION_ID,
+                    remarks = AppConfig.DEFAULT_SUBSCRIPTION_REMARKS,
+                ),
+            )
         }
 
         // 2) Profiles, group by group; the index inside a group becomes sortOrder.
@@ -55,58 +67,52 @@ internal object LegacyImporter {
 
         groupOrder.forEach { subId ->
             snapshot.groups[subId]?.forEachIndexed { index, (guid, profile) ->
-                insertProfile(connection, guid, subId, (index + 1) * step, profile)
+                insertProfile(exec, guid, subId, (index + 1) * sortStep, profile)
                 snapshot.stats[guid]?.let { delay ->
-                    connection.prepare(
-                        "INSERT OR REPLACE INTO profile_stats (guid, testDelayMillis) VALUES (?, ?)"
-                    ).use { st ->
-                        st.bindText(1, guid)
-                        st.bindLong(2, delay)
-                        st.step()
+                    exec("INSERT OR REPLACE INTO profile_stats (guid, testDelayMillis) VALUES (?, ?)") {
+                        bindText(1, guid)
+                        bindLong(2, delay)
+                        step()
                     }
                 }
                 snapshot.raws[guid]?.let { raw ->
-                    connection.prepare(
-                        "INSERT OR REPLACE INTO profile_raw (guid, content) VALUES (?, ?)"
-                    ).use { st ->
-                        st.bindText(1, guid)
-                        st.bindText(2, raw)
-                        st.step()
+                    exec("INSERT OR REPLACE INTO profile_raw (guid, content) VALUES (?, ?)") {
+                        bindText(1, guid)
+                        bindText(2, raw)
+                        step()
                     }
                 }
             }
         }
 
         // 3) Assets.
-        snapshot.assets.forEach { insertAsset(connection, it) }
+        snapshot.assets.forEach { insertAsset(exec, it) }
 
         // 4) Routing rules: the array index becomes sortOrder.
         snapshot.rulesets.forEachIndexed { index, rule ->
-            insertRule(connection, rule, (index + 1) * step)
+            insertRule(exec, rule, (index + 1) * sortStep)
         }
 
         // 5) Scalar preferences, SELECTED_SERVER and WEBDAV_CONFIG.
         snapshot.settings.forEach { entry ->
-            putSetting(connection, entry.key, entry.value, entry.kind)
+            putSetting(exec, entry.key, entry.value, entry.kind)
         }
 
         // 6) dedupeKey algorithm version, for later comparison and backfill.
         putSetting(
-            connection,
+            exec,
             SettingsStore.KEY_DEDUPE_ALGO_VERSION,
             ProfileItem.DEDUPE_ALGO_VERSION.toString(),
             SettingsStore.KIND_INT,
         )
-
-        connection.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
     }
 
     private suspend fun insertSubscription(
-        connection: SQLiteConnection,
+        exec: SqlExec,
         guid: String,
         sortOrder: Long,
         item: SubscriptionItem,
-    ) = connection.prepare(
+    ) = exec(
         """
         INSERT OR REPLACE INTO subscriptions
           (guid, sortOrder, remarks, url, enabled, addedTime, lastUpdated, autoUpdate,
@@ -114,152 +120,152 @@ internal object LegacyImporter {
            userAgent, requestHeaders)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """
-    ).use { st ->
-        st.bindText(1, guid)
-        st.bindLong(2, sortOrder)
-        st.bindText(3, item.remarks)
-        st.bindText(4, item.url)
-        st.bindLong(5, item.enabled.toSqlite())
-        st.bindLong(6, item.addedTime)
-        st.bindLong(7, item.lastUpdated)
-        st.bindLong(8, item.autoUpdate.toSqlite())
-        st.bindLong(9, item.updateInterval)
-        st.bindNullableText(10, item.prevProfile)
-        st.bindNullableText(11, item.nextProfile)
-        st.bindNullableText(12, item.filter)
-        st.bindLong(13, item.allowInsecureUrl.toSqlite())
-        st.bindNullableText(14, item.userAgent)
-        st.bindNullableText(15, item.requestHeaders)
-        st.step()
+    ) {
+        bindText(1, guid)
+        bindLong(2, sortOrder)
+        bindText(3, item.remarks)
+        bindText(4, item.url)
+        bindLong(5, item.enabled.toSqlite())
+        bindLong(6, item.addedTime)
+        bindLong(7, item.lastUpdated)
+        bindLong(8, item.autoUpdate.toSqlite())
+        bindLong(9, item.updateInterval)
+        bindNullableText(10, item.prevProfile)
+        bindNullableText(11, item.nextProfile)
+        bindNullableText(12, item.filter)
+        bindLong(13, item.allowInsecureUrl.toSqlite())
+        bindNullableText(14, item.userAgent)
+        bindNullableText(15, item.requestHeaders)
+        step()
     }
 
     @Suppress("DEPRECATION")
     private suspend fun insertProfile(
-        connection: SQLiteConnection,
+        exec: SqlExec,
         guid: String,
         subscriptionId: String,
         sortOrder: Long,
         p: ProfileItem,
-    ) = connection.prepare(PROFILE_INSERT).use { st ->
-        st.bindText(1, guid)
-        st.bindLong(2, sortOrder)
-        st.bindText(3, "")                      // dedupeKey: lazily backfilled
-        st.bindLong(4, p.configVersion.toLong())
-        st.bindLong(5, p.configType.value.toLong())
-        st.bindText(6, subscriptionId)
-        st.bindLong(7, p.addedTime)
-        st.bindText(8, p.remarks)
-        st.bindNullableText(9, p.description)
-        st.bindNullableText(10, p.server)
-        st.bindNullableText(11, p.serverPort)
-        st.bindNullableText(12, p.password)
-        st.bindNullableText(13, p.method)
-        st.bindNullableText(14, p.flow)
-        st.bindNullableText(15, p.username)
-        st.bindNullableText(16, p.network)
-        st.bindNullableText(17, p.headerType)
-        st.bindNullableText(18, p.host)
-        st.bindNullableText(19, p.path)
-        st.bindNullableText(20, p.seed)
-        st.bindNullableLong(21, p.kcpMtu?.toLong())
-        st.bindNullableLong(22, p.kcpTti?.toLong())
-        st.bindNullableText(23, p.quicSecurity)
-        st.bindNullableText(24, p.quicKey)
-        st.bindNullableText(25, p.mode)
-        st.bindNullableText(26, p.serviceName)
-        st.bindNullableText(27, p.authority)
-        st.bindNullableText(28, p.xhttpMode)
-        st.bindNullableText(29, p.xhttpExtra)
-        st.bindNullableText(30, p.finalMask)
-        st.bindNullableText(31, p.security)
-        st.bindNullableText(32, p.sni)
-        st.bindNullableText(33, p.alpn)
-        st.bindNullableText(34, p.fingerPrint)
-        st.bindNullableLong(35, p.insecure?.toSqlite())
-        st.bindNullableText(36, p.echConfigList)
-        st.bindNullableText(37, p.verifyPeerCertByName)
-        st.bindNullableText(38, p.pinnedCA256)
-        st.bindNullableText(39, p.publicKey)
-        st.bindNullableText(40, p.shortId)
-        st.bindNullableText(41, p.spiderX)
-        st.bindNullableText(42, p.mldsa65Verify)
-        st.bindNullableText(43, p.secretKey)
-        st.bindNullableText(44, p.preSharedKey)
-        st.bindNullableText(45, p.localAddress)
-        st.bindNullableText(46, p.reserved)
-        st.bindNullableLong(47, p.mtu?.toLong())
-        st.bindNullableText(48, p.obfsPassword)
-        st.bindNullableText(49, p.portHopping)
-        st.bindNullableText(50, p.portHoppingInterval)
-        st.bindNullableText(51, p.pinSHA256)
-        st.bindNullableText(52, p.bandwidthDown)
-        st.bindNullableText(53, p.bandwidthUp)
-        st.bindNullableText(54, p.policyGroupType)
-        st.bindNullableText(55, p.policyGroupSubscriptionId)
-        st.bindNullableText(56, p.policyGroupFilter)
-        st.bindNullableLong(57, p.policyGroupTestOutbounds?.toSqlite())
-        st.bindNullableText(58, p.policyGroupFallbackTag)
-        st.bindNullableText(59, p.proxyChainProfiles)
-        st.bindNullableText(60, p.browserDialerMode)
-        st.step()
+    ) = exec(PROFILE_INSERT) {
+        bindText(1, guid)
+        bindLong(2, sortOrder)
+        bindText(3, "")                      // dedupeKey: lazily backfilled
+        bindLong(4, p.configVersion.toLong())
+        bindLong(5, p.configType.value.toLong())
+        bindText(6, subscriptionId)
+        bindLong(7, p.addedTime)
+        bindText(8, p.remarks)
+        bindNullableText(9, p.description)
+        bindNullableText(10, p.server)
+        bindNullableText(11, p.serverPort)
+        bindNullableText(12, p.password)
+        bindNullableText(13, p.method)
+        bindNullableText(14, p.flow)
+        bindNullableText(15, p.username)
+        bindNullableText(16, p.network)
+        bindNullableText(17, p.headerType)
+        bindNullableText(18, p.host)
+        bindNullableText(19, p.path)
+        bindNullableText(20, p.seed)
+        bindNullableLong(21, p.kcpMtu?.toLong())
+        bindNullableLong(22, p.kcpTti?.toLong())
+        bindNullableText(23, p.quicSecurity)
+        bindNullableText(24, p.quicKey)
+        bindNullableText(25, p.mode)
+        bindNullableText(26, p.serviceName)
+        bindNullableText(27, p.authority)
+        bindNullableText(28, p.xhttpMode)
+        bindNullableText(29, p.xhttpExtra)
+        bindNullableText(30, p.finalMask)
+        bindNullableText(31, p.security)
+        bindNullableText(32, p.sni)
+        bindNullableText(33, p.alpn)
+        bindNullableText(34, p.fingerPrint)
+        bindNullableLong(35, p.insecure?.toSqlite())
+        bindNullableText(36, p.echConfigList)
+        bindNullableText(37, p.verifyPeerCertByName)
+        bindNullableText(38, p.pinnedCA256)
+        bindNullableText(39, p.publicKey)
+        bindNullableText(40, p.shortId)
+        bindNullableText(41, p.spiderX)
+        bindNullableText(42, p.mldsa65Verify)
+        bindNullableText(43, p.secretKey)
+        bindNullableText(44, p.preSharedKey)
+        bindNullableText(45, p.localAddress)
+        bindNullableText(46, p.reserved)
+        bindNullableLong(47, p.mtu?.toLong())
+        bindNullableText(48, p.obfsPassword)
+        bindNullableText(49, p.portHopping)
+        bindNullableText(50, p.portHoppingInterval)
+        bindNullableText(51, p.pinSHA256)
+        bindNullableText(52, p.bandwidthDown)
+        bindNullableText(53, p.bandwidthUp)
+        bindNullableText(54, p.policyGroupType)
+        bindNullableText(55, p.policyGroupSubscriptionId)
+        bindNullableText(56, p.policyGroupFilter)
+        bindNullableLong(57, p.policyGroupTestOutbounds?.toSqlite())
+        bindNullableText(58, p.policyGroupFallbackTag)
+        bindNullableText(59, p.proxyChainProfiles)
+        bindNullableText(60, p.browserDialerMode)
+        step()
     }
 
-    private suspend fun insertAsset(connection: SQLiteConnection, asset: AssetUrlItem) =
-        connection.prepare(
+    private suspend fun insertAsset(exec: SqlExec, asset: AssetUrlItem) =
+        exec(
             """
             INSERT OR REPLACE INTO assets (guid, remarks, url, addedTime, lastUpdated, locked)
             VALUES (?,?,?,?,?,?)
             """
-        ).use { st ->
-            st.bindText(1, asset.guid)
-            st.bindText(2, asset.remarks)
-            st.bindText(3, asset.url)
-            st.bindLong(4, asset.addedTime)
-            st.bindLong(5, asset.lastUpdated)
-            st.bindNullableLong(6, asset.locked?.toSqlite())
-            st.step()
+        ) {
+            bindText(1, asset.guid)
+            bindText(2, asset.remarks)
+            bindText(3, asset.url)
+            bindLong(4, asset.addedTime)
+            bindLong(5, asset.lastUpdated)
+            bindNullableLong(6, asset.locked?.toSqlite())
+            step()
         }
 
     private suspend fun insertRule(
-        connection: SQLiteConnection,
+        exec: SqlExec,
         rule: RulesetItem,
         sortOrder: Long,
-    ) = connection.prepare(
+    ) = exec(
         """
         INSERT OR REPLACE INTO routing_rules
           (id, sortOrder, remarks, ip, domain, process, outboundTag, port, network, protocol,
            enabled, locked)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """
-    ).use { st ->
+    ) {
         // An id-less legacy rule would collide on the primary key; give it a stable synthetic one.
-        st.bindText(1, rule.id.ifBlank { "legacy-$sortOrder" })
-        st.bindLong(2, sortOrder)
-        st.bindNullableText(3, rule.remarks)
-        st.bindNullableText(4, rule.ip?.let(JsonUtil::toJson))
-        st.bindNullableText(5, rule.domain?.let(JsonUtil::toJson))
-        st.bindNullableText(6, rule.process?.let(JsonUtil::toJson))
-        st.bindText(7, rule.outboundTag)
-        st.bindNullableText(8, rule.port)
-        st.bindNullableText(9, rule.network)
-        st.bindNullableText(10, rule.protocol?.let(JsonUtil::toJson))
-        st.bindLong(11, rule.enabled.toSqlite())
-        st.bindNullableLong(12, rule.locked?.toSqlite())
-        st.step()
+        bindText(1, rule.id.ifBlank { "legacy-$sortOrder" })
+        bindLong(2, sortOrder)
+        bindNullableText(3, rule.remarks)
+        bindNullableText(4, rule.ip?.let(JsonUtil::toJson))
+        bindNullableText(5, rule.domain?.let(JsonUtil::toJson))
+        bindNullableText(6, rule.process?.let(JsonUtil::toJson))
+        bindText(7, rule.outboundTag)
+        bindNullableText(8, rule.port)
+        bindNullableText(9, rule.network)
+        bindNullableText(10, rule.protocol?.let(JsonUtil::toJson))
+        bindLong(11, rule.enabled.toSqlite())
+        bindNullableLong(12, rule.locked?.toSqlite())
+        step()
     }
 
     private suspend fun putSetting(
-        connection: SQLiteConnection,
+        exec: SqlExec,
         key: String,
         value: String?,
         kind: String,
-    ) = connection.prepare(
+    ) = exec(
         "INSERT OR REPLACE INTO settings (key, value, kind) VALUES (?,?,?)"
-    ).use { st ->
-        st.bindText(1, key)
-        st.bindNullableText(2, value)
-        st.bindText(3, kind)
-        st.step()
+    ) {
+        bindText(1, key)
+        bindNullableText(2, value)
+        bindText(3, kind)
+        step()
     }
 
     private fun SQLiteStatement.bindNullableText(index: Int, value: String?) {

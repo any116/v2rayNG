@@ -16,8 +16,9 @@ object AppConfig {
     /** Legacy configuration keys. */
     const val ANG_CONFIG = "ang_config"
 
-    // Default subscription ID for ungrouped servers
+    /** Default subscription ID for ungrouped servers. */
     const val DEFAULT_SUBSCRIPTION_ID = "__default_subscription__"
+    const val DEFAULT_SUBSCRIPTION_REMARKS = "Default"
 
     /** Preferences mapped to MMKV storage. */
     const val PREF_SNIFFING_ENABLED = "pref_sniffing_enabled"
@@ -96,6 +97,7 @@ object AppConfig {
     const val CACHE_WORKER_SCHEMA_VERSION = "cache_worker_schema_version"
     const val CACHE_WIDGET_STATE = "cache_widget_state"
     const val CACHE_WIDGET_STATE_AT = "cache_widget_state_at"
+    const val CACHE_RUNTIME_SOCKS_PORT = "cache_runtime_socks_port"
 
     /** Protocol identifiers. */
     const val PROTOCOL_FREEDOM = "freedom"
@@ -195,6 +197,8 @@ object AppConfig {
 
     const val MSG_SUB_UPDATE_START = 8
     const val MSG_SUB_UPDATE_CANCEL = 81
+
+    const val MSG_WARN_INSECURE = 9
 
     /** Notification channel IDs and names. */
     // Use a new ID because Android does not let an app raise an existing channel's importance.

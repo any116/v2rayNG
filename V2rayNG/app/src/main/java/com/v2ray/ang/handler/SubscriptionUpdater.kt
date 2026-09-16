@@ -10,10 +10,16 @@ import androidx.work.workDataOf
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.SubscriptionDao
+import com.v2ray.ang.data.entities.SubscriptionItem
+import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.util.LogUtil
 import java.util.concurrent.TimeUnit
 
 object SubscriptionUpdater {
+
+    private val subscriptionDao: SubscriptionDao
+        get() = PlatformDependencies.subscriptionDao(AngApplication.application)
 
     // -------------------------------------------------------------------------
     // Public API — the only methods external callers should ever use
@@ -27,7 +33,7 @@ object SubscriptionUpdater {
      * the latest persisted subscription state (for example after a manual refresh).
      * Call from: MainActivity.onCreate(), BootReceiver.onReceive().
      */
-    fun sync(
+    suspend fun sync(
         context: Context = AngApplication.application,
         forceReschedule: Boolean = false
     ) {
@@ -45,15 +51,11 @@ object SubscriptionUpdater {
             else -> ExistingPeriodicWorkPolicy.KEEP
         }
 
-        MmkvManager.decodeSubscriptions()
-            .filter { it.subscription.autoUpdate && it.subscription.url.isNotEmpty() }
-            .forEach { sub ->
-                scheduleOne(
-                    context = context,
-                    subId = sub.guid,
-                    existingWorkPolicy = existingWorkPolicy
-                )
-            }
+        // Deliberately not subscriptionDao.autoUpdatable(): that also filters on `enabled`,
+        // while the pre-Room scheduler only looked at autoUpdate and a non-empty url.
+        subscriptionDao.all()
+            .filter { it.autoUpdate && it.url.isNotEmpty() }
+            .forEach { sub -> scheduleOne(context, sub, existingWorkPolicy) }
 
         if (migrating) {
             markWorkerMigrated()
@@ -68,17 +70,16 @@ object SubscriptionUpdater {
      * Sync a single subscription's task.
      * Call from: SubEditActivity after saving, after a manual update (to reset the timer).
      */
-    fun syncOne(context: Context = AngApplication.application, subId: String) {
-        scheduleOne(
-            context = context,
-            subId = subId,
-            existingWorkPolicy = ExistingPeriodicWorkPolicy.REPLACE
-        )
+    suspend fun syncOne(context: Context = AngApplication.application, subId: String) {
+        val subItem = subscriptionDao.find(subId) ?: return
+        scheduleOne(context, subItem, ExistingPeriodicWorkPolicy.REPLACE)
     }
 
     /**
      * Cancel the auto-update task for a single subscription.
      * Call from: when a subscription is deleted.
+     *
+     * Stays non-suspend: it touches WorkManager only, never the profile database.
      */
     fun cancelOne(context: Context = AngApplication.application, subId: String) {
         RemoteWorkManager.getInstance(context)
@@ -89,11 +90,15 @@ object SubscriptionUpdater {
      * Update the last updated timestamp and reschedule the task.
      * This is used to reset the periodic timer and prevent rapid rescheduling loops.
      */
-    fun updateLastUpdatedAndReschedule(context: Context = AngApplication.application, subId: String) {
-        val subItem = MmkvManager.decodeSubscription(subId) ?: return
-        subItem.lastUpdated = System.currentTimeMillis()
-        MmkvManager.encodeSubscription(subId, subItem)
-        syncOne(context, subId)
+    suspend fun updateLastUpdatedAndReschedule(
+        context: Context = AngApplication.application,
+        subId: String
+    ) {
+        val subItem = subscriptionDao.find(subId) ?: return
+        val now = System.currentTimeMillis()
+        subscriptionDao.touch(subId, now)
+        // Reschedule from the value just written rather than re-reading the row.
+        scheduleOne(context, subItem.copy(lastUpdated = now), ExistingPeriodicWorkPolicy.REPLACE)
     }
 
     // -------------------------------------------------------------------------
@@ -123,12 +128,16 @@ object SubscriptionUpdater {
 
     private fun taskName(subId: String) = "${AppConfig.SUBSCRIPTION_UPDATE_TASK_NAME}_$subId"
 
+    /**
+     * Takes the already loaded item so callers read the table once; scheduling itself performs
+     * no database access and therefore needs no suspension point.
+     */
     private fun scheduleOne(
         context: Context,
-        subId: String,
+        subItem: SubscriptionItem,
         existingWorkPolicy: ExistingPeriodicWorkPolicy
     ) {
-        val subItem = MmkvManager.decodeSubscription(subId) ?: return
+        val subId = subItem.guid
         val rw = RemoteWorkManager.getInstance(context)
         if (!subItem.autoUpdate) {
             cancelOne(context, subId)
