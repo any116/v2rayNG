@@ -41,7 +41,7 @@ object LogUtil {
             if (current != CACHE_UNSET) {
                 current
             } else {
-                parsePriority(Prefs.string(AppConfig.PREF_LOGLEVEL, DEFAULT_LEVEL)).also {
+                parsePriority(DEFAULT_LEVEL).also {
                     cachedMinPriority = it
                 }
             }

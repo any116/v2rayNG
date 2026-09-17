@@ -52,6 +52,8 @@ class AngApplication : Application() {
                 return@launch
             }
 
+            LogUtil.refreshLogLevel()
+
             // Routing presets need the database; the call is idempotent and also runs at the
             // head of the core startup sequence.
             runCatching { SettingsManager.ensureRoutingRulesets(this@AngApplication) }

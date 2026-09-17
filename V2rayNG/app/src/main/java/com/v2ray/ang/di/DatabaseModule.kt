@@ -1,6 +1,7 @@
 package com.v2ray.ang.di
 
 import android.app.Application
+import android.util.Log as AndroidLog
 import androidx.room3.Room
 import androidx.room3.useReaderConnection
 import androidx.room3.useWriterConnection
@@ -18,7 +19,6 @@ import com.v2ray.ang.data.legacy.LegacySnapshot
 import com.v2ray.ang.data.legacy.MmkvLegacyReader
 import com.v2ray.ang.data.repository.BackupRepository
 import com.v2ray.ang.util.JsonUtil
-import com.v2ray.ang.util.LogUtil
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -75,7 +75,7 @@ object DatabaseModule {
         if (!app.getDatabasePath(AppDatabase.NAME).exists()) return build()
 
         val db = runCatching { build() }.getOrElse { error ->
-            LogUtil.e(AppConfig.TAG, "Building the database wrapper failed", error)
+            AndroidLog.e(AppConfig.TAG, "Building the database wrapper failed", error)
             quarantine(app)
             return build()
         }
@@ -90,7 +90,7 @@ object DatabaseModule {
             }
             db
         }.getOrElse { error ->
-            LogUtil.e(AppConfig.TAG, "Opening the database failed; quarantining the file", error)
+            AndroidLog.e(AppConfig.TAG, "Opening the database failed; quarantining the file", error)
             runCatching { db.close() }
             quarantine(app)
             build()
@@ -103,7 +103,7 @@ object DatabaseModule {
                         }
                     }
                 }.onFailure {
-                    LogUtil.w(AppConfig.TAG, "Post-open WAL checkpoint skipped", it)
+                    AndroidLog.w(AppConfig.TAG, "Post-open WAL checkpoint skipped", it)
                 }
             }
         }
