@@ -126,8 +126,14 @@ jobs:
         workflows_keep_day: 0
         gh_token: ${{ secrets.GITHUB_TOKEN }}
 
+    - name: Upload Room schemas
+      uses: actions/upload-artifact@v7
+      with:
+        name: room-schemas
+        path: ${{ github.workspace }}/V2rayNG/app/schemas
+
     - name: Upload to release
-      uses: softprops/action-gh-release@v3
+      uses: softprops/action-gh-release@v3.0.2
       with:
         draft: false
         files: |
