@@ -43,6 +43,8 @@ data class RemarkRow(val remarks: String)
 
 data class SortAnchor(val guid: String, val sortOrder: Long)
 
+data class DefaultGroupRepair(val createdDefault: Boolean, val adoptedProfiles: Int)
+
 /**
  * Single source of truth for list ordering. pageServers / indexOf / neighboursAt /
  * allGuidsInOrder must stay character-identical, and ProfilePagingTest asserts that they
@@ -621,6 +623,9 @@ interface SubscriptionDao {
     @Query("SELECT IFNULL(MAX(sortOrder), 0) FROM subscriptions")
     suspend fun maxSortOrder(): Long
 
+    @Query("SELECT IFNULL(MIN(sortOrder), 0) FROM subscriptions")
+    suspend fun minSortOrder(): Long
+
     @Query("SELECT COUNT(*) FROM subscriptions")
     suspend fun count(): Int
 
@@ -642,14 +647,20 @@ interface SubscriptionDao {
     @Query("SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId")
     suspend fun profileGuidsOf(subscriptionId: String): List<String>
 
-    @Query("DELETE FROM profiles      WHERE subscriptionId = :subscriptionId")
+    @Query("DELETE FROM profiles WHERE subscriptionId = :subscriptionId")
     suspend fun deleteProfilesOf(subscriptionId: String)
 
     @Query("DELETE FROM profile_stats WHERE guid IN (:guids)")
     suspend fun deleteStatsOf(guids: List<String>)
 
-    @Query("DELETE FROM profile_raw   WHERE guid IN (:guids)")
+    @Query("DELETE FROM profile_raw WHERE guid IN (:guids)")
     suspend fun deleteRawsOf(guids: List<String>)
+
+    @Query("SELECT COUNT(*) FROM profiles WHERE subscriptionId NOT IN (SELECT guid FROM subscriptions)")
+    suspend fun orphanProfileCount(): Int
+
+    @Query("UPDATE profiles SET subscriptionId = :target WHERE subscriptionId NOT IN (SELECT guid FROM subscriptions)")
+    suspend fun adoptOrphanProfiles(target: String)
 
     @Query("SELECT value FROM settings WHERE key = 'SELECTED_SERVER'")
     suspend fun selectedGuid(): String?
@@ -682,13 +693,28 @@ interface SubscriptionDao {
         guids.forEachIndexed { index, guid -> setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP) }
     }
 
-    /**
-     * Replaces SettingsManager.removeSubscriptionWithDefault: drops the subscription and its
-     * profiles (stats/raw included), then re-creates a Default subscription if none remain.
-     *
-     * Selection handling mirrors ProfileDao.deleteProfiles: repoint rather than clear, so
-     * deleting a subscription does not leave the user with "no server selected".
-     */
+    @Transaction
+    suspend fun ensureDefault(defaultRemarks: String): DefaultGroupRepair {
+        val created = find(AppConfig.DEFAULT_SUBSCRIPTION_ID) == null
+        if (created) {
+            val head = if (count() == 0) {
+                ProfileItem.SORT_STEP
+            } else {
+                minSortOrder() - ProfileItem.SORT_STEP
+            }
+            upsert(
+                SubscriptionItem(
+                    guid = AppConfig.DEFAULT_SUBSCRIPTION_ID,
+                    sortOrder = head,
+                    remarks = defaultRemarks,
+                )
+            )
+        }
+        val adopted = orphanProfileCount()
+        if (adopted > 0) adoptOrphanProfiles(AppConfig.DEFAULT_SUBSCRIPTION_ID)
+        return DefaultGroupRepair(createdDefault = created, adoptedProfiles = adopted)
+    }
+
     @Transaction
     suspend fun removeWithDefault(guid: String, defaultRemarks: String) {
         val guids = profileGuidsOf(guid)
@@ -700,15 +726,7 @@ interface SubscriptionDao {
         deleteProfilesOf(guid)
         deleteRow(guid)
 
-        if (count() == 0) {
-            upsert(
-                SubscriptionItem(
-                    guid = AppConfig.DEFAULT_SUBSCRIPTION_ID,
-                    sortOrder = ProfileItem.SORT_STEP,
-                    remarks = defaultRemarks,
-                )
-            )
-        }
+        ensureDefault(defaultRemarks)
 
         if (hadSelection) {
             val fallback = firstProfileGuid()

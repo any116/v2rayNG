@@ -7,19 +7,27 @@ import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.ui.base.BaseHelperActivity
+import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 @AndroidEntryPoint
 class MainActivity : BaseHelperActivity() {
@@ -43,7 +51,9 @@ class MainActivity : BaseHelperActivity() {
     override fun ScreenContent() {
         var ready by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) {
-            viewModel.awaitReady()
+            // Timed out bootstrap still renders: coded defaults beat a blank window.
+            val ok = withTimeoutOrNull(BOOT_TIMEOUT_MS) { viewModel.awaitReady() } != null
+            if (!ok) LogUtil.w(AppConfig.TAG, "Settings snapshot timed out; rendering degraded UI")
             ready = true
         }
         if (ready) {
@@ -51,6 +61,10 @@ class MainActivity : BaseHelperActivity() {
                 viewModel = viewModel,
                 onPlatformEvent = ::handlePlatformEvent,
             )
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
     }
 
@@ -113,5 +127,9 @@ class MainActivity : BaseHelperActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         viewModel.onAction(MainAction.RefreshGroups)
+    }
+
+    private companion object {
+        const val BOOT_TIMEOUT_MS = 5_000L
     }
 }

@@ -2,7 +2,11 @@ package com.v2ray.ang.data.legacy
 
 import android.content.Context
 import com.tencent.mmkv.MMKV
+import com.tencent.mmkv.MMKVHandler
+import com.tencent.mmkv.MMKVLogLevel
+import com.tencent.mmkv.MMKVRecoverStrategic
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileItem
@@ -96,6 +100,9 @@ class MmkvLegacyReader(
             MMKV.initialize(
                 context,
                 context.filesDir.resolve(LEGACY_DIR).absolutePath,
+                null,
+                if (BuildConfig.DEBUG) MMKVLogLevel.LevelDebug else MMKVLogLevel.LevelInfo,
+                RECOVERY_HANDLER,
             )
             initialized = true
         }
@@ -204,6 +211,10 @@ class MmkvLegacyReader(
         val json = profiles.decodeString(guid)
         if (json.isNullOrBlank()) return null
         val item = JsonUtil.fromJsonSafe(json, ProfileItem::class.java) ?: return null
+        // Gson constructs ProfileItem through Unsafe, so a legacy payload that predates a
+        // non-null field leaves that field null at runtime. Normalise the fields added after
+        // the JSON was written, otherwise the compiler-inserted null check inside copy() throws.
+        if (item.dedupeKey == null) item.dedupeKey = ""
         return guid to item.copy(guid = guid)
     }
 
@@ -362,6 +373,34 @@ class MmkvLegacyReader(
             KEY_MIGRATED_SERVER_LIST,
             KEY_MIGRATED_HY2_PIN,
         )
+
+        /**
+         * Restores the recovery strategy MmkvManager used before the Room migration. Without
+         * it a CRC or file-length failure makes mkvWithID return null, readAll() throws
+         * LegacyReadException and every profile is left behind on disk.
+         */
+        val RECOVERY_HANDLER = object : MMKVHandler {
+            override fun onMMKVCRCCheckFail(mmapID: String): MMKVRecoverStrategic =
+                recoverFromStorageError(mmapID, "CRC check")
+
+            override fun onMMKVFileLengthError(mmapID: String): MMKVRecoverStrategic =
+                recoverFromStorageError(mmapID, "file length check")
+
+            override fun wantLogRedirecting(): Boolean = false
+
+            override fun mmkvLog(
+                level: MMKVLogLevel,
+                file: String,
+                line: Int,
+                function: String,
+                message: String,
+            ) = Unit
+        }
+
+        private fun recoverFromStorageError(mmapID: String, error: String): MMKVRecoverStrategic {
+            LogUtil.e(AppConfig.TAG, "MMKV $error failed for $mmapID; attempting data recovery")
+            return MMKVRecoverStrategic.OnErrorRecover
+        }
 
         private val INIT_LOCK = Any()
 

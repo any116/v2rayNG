@@ -1,12 +1,16 @@
 package com.v2ray.ang
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.v2ray.ang.AppConfig.ANG_PACKAGE
+import com.v2ray.ang.data.AppDatabase
+import com.v2ray.ang.data.LegacyMigrationGate
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.di.ApplicationScope
 import com.v2ray.ang.handler.AppLocaleManager
@@ -31,6 +35,9 @@ class AngApplication : Application() {
     lateinit var settings: SettingsStore
 
     @Inject
+    lateinit var db: AppDatabase
+
+    @Inject
     @ApplicationScope
     lateinit var appScope: CoroutineScope
 
@@ -42,30 +49,47 @@ class AngApplication : Application() {
     override fun onCreate() {
         super.onCreate()
 
-        // Settings bootstrap runs off the main thread.
-        appScope.launch {
-            runCatching {
-                settings.refresh()
-                settings.seedDefaults()
-            }.onFailure {
-                LogUtil.e(AppConfig.TAG, "Settings bootstrap failed", it)
-                return@launch
-            }
-
-            LogUtil.refreshLogLevel()
-
-            // Routing presets need the database; the call is idempotent and also runs at the
-            // head of the core startup sequence.
-            runCatching { SettingsManager.ensureRoutingRulesets(this@AngApplication) }
-                .onFailure { LogUtil.e(AppConfig.TAG, "Routing ruleset seeding failed", it) }
-
-            settings.observe(appScope)
-            ThemeManager.refresh()
-        }
-
         AppLocaleManager.initialize(this)
 
         WorkManager.initialize(this, buildWorkManagerConfiguration())
+
+        // Settings bootstrap runs off the main thread.
+        appScope.launch {
+            val isMain = isMainProcess()
+            try {
+                if (isMain) {
+                    runCatching { LegacyMigrationGate.runIfNeeded(this@AngApplication, db, settings) }
+                        .onFailure { LogUtil.e(AppConfig.TAG, "Legacy import failed", it) }
+                    runCatching { settings.refresh() }
+                        .onFailure { LogUtil.e(AppConfig.TAG, "Settings refresh failed", it) }
+                    runCatching { settings.seedDefaults() }
+                        .onFailure { LogUtil.e(AppConfig.TAG, "Settings seed failed", it) }
+                    runCatching { SettingsManager.ensureRoutingRulesets(this@AngApplication) }
+                        .onFailure { LogUtil.e(AppConfig.TAG, "Routing ruleset seeding failed", it) }
+                    runCatching { SettingsManager.ensureDefaultSubscription() }
+                        .onFailure { LogUtil.e(AppConfig.TAG, "Default subscription seeding failed", it) }
+                } else {
+                    runCatching { settings.refresh() }
+                        .onFailure { LogUtil.e(AppConfig.TAG, "Settings refresh failed", it) }
+                }
+            } finally {
+                LogUtil.refreshLogLevel()
+                // After refreshLogLevel so the configured level applies to this line too.
+                runCatching { LegacyMigrationGate.logStorageMode(this@AngApplication, db, isMain) }
+                    .onFailure { LogUtil.e(AppConfig.TAG, "Storage mode logging failed", it) }
+                settings.observe(appScope)
+                ThemeManager.refresh()
+            }
+        }
+    }
+
+    private fun isMainProcess(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Application.getProcessName() == packageName
+        }
+        val pid = android.os.Process.myPid()
+        val am = getSystemService(ActivityManager::class.java) ?: return true
+        return am.runningAppProcesses?.firstOrNull { it.pid == pid }?.processName == packageName
     }
 
     /**

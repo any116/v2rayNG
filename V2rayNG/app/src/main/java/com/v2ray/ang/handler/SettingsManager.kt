@@ -32,8 +32,6 @@ import kotlin.random.Random
 
 object SettingsManager {
 
-    private const val DEFAULT_SUBSCRIPTION_REMARKS = "Default"
-
     @Volatile
     private var runtimeSocksPort: Int? = null
 
@@ -171,12 +169,27 @@ object SettingsManager {
     ): List<String> = profileDao.remarks(excludeConfigTypes.map { it.value })
 
     /**
+     * Idempotent bootstrap step, called alongside ensureRoutingRulesets. Without it a fresh
+     * install has no group row at all and MainScreen renders nothing.
+     */
+    suspend fun ensureDefaultSubscription() {
+        val repair = subscriptionDao.ensureDefault(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
+        if (repair.createdDefault || repair.adoptedProfiles > 0) {
+            LogUtil.i(
+                AppConfig.TAG,
+                "Default subscription repaired: created=${repair.createdDefault}, " +
+                    "adopted=${repair.adoptedProfiles}"
+            )
+        }
+    }
+
+    /**
      * Cancelling the worker stays outside the transaction: WorkManager writes to its own
      * database and must not be rolled back by a profile transaction failure.
      */
     suspend fun removeSubscriptionWithDefault(subid: String) {
         SubscriptionUpdater.cancelOne(subId = subid)
-        subscriptionDao.removeWithDefault(subid, DEFAULT_SUBSCRIPTION_REMARKS)
+        subscriptionDao.removeWithDefault(subid, AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
     }
 
     // ---------------- ports ----------------

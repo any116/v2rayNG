@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
@@ -28,20 +29,31 @@ import javax.inject.Singleton
  *
  * Callers that need the snapshot but cannot assume refresh() has already completed (UI startup
  * gate, first-time consumers) suspend on awaitReady() instead of racing the bootstrap coroutine
- * and reading defaults.
+ * and reading defaults. awaitReady() is guaranteed to return: refresh() completes the signal in
+ * a finally block, so a database failure degrades to coded defaults instead of hanging the UI.
  */
 @Singleton
 class SettingsStore @Inject constructor(
-    private val dao: SettingsDao,
-    private val db: AppDatabase,
+    private val daoProvider: Provider<SettingsDao>,
+    private val dbProvider: Provider<AppDatabase>,
     @IoDispatcher private val io: CoroutineDispatcher,
 ) {
+
+    private val dao: SettingsDao by lazy { daoProvider.get() }
+    private val db: AppDatabase by lazy { dbProvider.get() }
 
     private val snapshot = ConcurrentHashMap<String, String>()
     private val ready = AtomicBoolean(false)
 
-    /** Completed by the first successful refresh(); awaitReady() suspends on it. */
+    /** Completed by the first refresh(), success or failure; awaitReady() suspends on it. */
     private val readySignal = CompletableDeferred<Unit>()
+
+    /** Cause of the last refresh failure, or null when the snapshot reflects the database. */
+    @Volatile
+    var degradedCause: Throwable? = null
+        private set
+
+    val isDegraded: Boolean get() = degradedCause != null
 
     /** Owns fire and forget writes issued from non suspend call sites. */
     private val writeScope = CoroutineScope(SupervisorJob() + io)
@@ -54,13 +66,23 @@ class SettingsStore @Inject constructor(
     suspend fun awaitReady() = readySignal.await()
 
     suspend fun refresh() {
-        val rows = dao.all()
-        val fresh = HashMap<String, String>(rows.size)
-        rows.forEach { row -> row.value?.let { fresh[row.key] = it } }
-        snapshot.putAll(fresh)
-        snapshot.keys.retainAll(fresh.keys)
-        ready.set(true)
-        readySignal.complete(Unit)
+        try {
+            val rows = dao.all()
+            val fresh = HashMap<String, String>(rows.size)
+            rows.forEach { row -> row.value?.let { fresh[row.key] = it } }
+            if (fresh.isNotEmpty()) {
+                snapshot.putAll(fresh)
+                snapshot.keys.retainAll(fresh.keys)
+            }
+            degradedCause = null
+        } catch (t: Throwable) {
+            degradedCause = t
+            LogUtil.e(AppConfig.TAG, "SettingsStore.refresh failed; running on coded defaults", t)
+            throw t
+        } finally {
+            ready.set(true)
+            readySignal.complete(Unit)
+        }
     }
 
     /**
@@ -69,7 +91,7 @@ class SettingsStore @Inject constructor(
     fun observe(scope: CoroutineScope): Job = scope.launch(io) {
         db.invalidationTracker.createFlow(TABLE, emitInitialState = false)
             .conflate()
-            .collect { refresh() }
+            .collect { runCatching { refresh() } }
     }
 
     /**

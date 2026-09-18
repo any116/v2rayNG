@@ -190,18 +190,23 @@ object AngConfigManager {
      * Imports a batch of configurations.
      *
      * @param server The server string.
-     * @param subid The subscription ID.
+     * @param subid The subscription ID; empty means the "All" tab, which is not a real group.
      * @param append Whether to append the configurations.
      * @return A pair containing the number of configurations and subscriptions imported.
      */
     suspend fun importBatchConfig(server: String?, subid: String, append: Boolean): Pair<Int, Int> {
         return try {
-            var count = parseBatchConfig(Utils.decode(server), subid, append)
+            val targetSubId = subid.ifEmpty { AppConfig.DEFAULT_SUBSCRIPTION_ID }
+            if (targetSubId == AppConfig.DEFAULT_SUBSCRIPTION_ID) {
+                subscriptionDao.ensureDefault(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
+            }
+
+            var count = parseBatchConfig(Utils.decode(server), targetSubId, append)
             if (count <= 0) {
-                count = parseBatchConfig(server, subid, append)
+                count = parseBatchConfig(server, targetSubId, append)
             }
             if (count <= 0) {
-                count = parseCustomConfigServer(server, subid, append)
+                count = parseCustomConfigServer(server, targetSubId, append)
             }
 
             var countSub = parseBatchSubscription(server)
@@ -311,17 +316,24 @@ object AngConfigManager {
         subid: String,
         append: Boolean,
     ) {
+        // Last line of defence: replaceGroup would otherwise write rows into a group that
+        // owns no subscriptions row, and nothing in the UI can reach those.
+        val targetSubId = subid.ifEmpty { AppConfig.DEFAULT_SUBSCRIPTION_ID }
+        if (subscriptionDao.find(targetSubId) == null) {
+            subscriptionDao.ensureDefault(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
+        }
+
         val profiles = ArrayList<ProfileItem>(configs.size)
         val raws = mutableListOf<ProfileRaw>()
 
         configs.forEach { parsed ->
             val key = Utils.getUuid()
-            profiles += parsed.profile.copy(guid = key, subscriptionId = subid)
+            profiles += parsed.profile.copy(guid = key, subscriptionId = targetSubId)
             parsed.rawConfig?.let { raw -> raws += ProfileRaw(key, raw) }
         }
 
         profileDao.replaceGroup(
-            subscriptionId = subid,
+            subscriptionId = targetSubId,
             profiles = profiles,
             raws = raws,
             append = append,

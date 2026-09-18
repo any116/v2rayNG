@@ -109,7 +109,11 @@ open class ServerRepository @Inject constructor(
     open suspend fun saveProfile(guid: String, profile: ProfileItem): String = withIO {
         val targetGuid = guid.ifEmpty { profile.guid.ifEmpty { Utils.getUuid() } }
         val existing = profileDao.findByGuid(targetGuid)
-        val subId = existing?.subscriptionId?.takeIf { it.isNotEmpty() } ?: profile.subscriptionId
+        val subId = existing?.subscriptionId?.takeIf { it.isNotEmpty() }
+            ?: profile.subscriptionId.ifEmpty { AppConfig.DEFAULT_SUBSCRIPTION_ID }
+        if (subscriptionDao.find(subId) == null) {
+            subscriptionDao.ensureDefault(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
+        }
 
         profileDao.upsert(
             profile.copy(

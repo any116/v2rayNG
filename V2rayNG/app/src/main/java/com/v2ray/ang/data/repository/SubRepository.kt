@@ -109,7 +109,7 @@ open class SubRepository @Inject constructor(
 
     open suspend fun remove(subId: String) = withIO {
         SubscriptionUpdater.cancelOne(subId = subId)
-        subscriptionDao.removeWithDefault(subId, DEFAULT_REMARKS)
+        subscriptionDao.removeWithDefault(subId, AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
         settings.poke(SettingsStore.KEY_SELECTED_SERVER, profileDao.selectedGuid())
         SettingsChangeManager.makeSetupGroupTab()
     }
@@ -165,7 +165,6 @@ open class SubRepository @Inject constructor(
     }.isSuccess
 
     private companion object {
-        const val DEFAULT_REMARKS = "Default"
         const val PAGE_SIZE = 40
         const val INITIAL_LOAD_SIZE = 80
         const val PREFETCH_DISTANCE = 20
