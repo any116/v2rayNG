@@ -454,6 +454,8 @@
     <string name="toast_tasker_select_profile">Select a profile first</string>
     <string name="toast_field_required">Please fill in: %1$s</string>
     <string name="msg_no_result">No matching entries</string>
+    <string name="toast_sub_chain_same_profile">Entry and exit proxy cannot be the same profile</string>
+    <string name="toast_sub_chain_profile_missing">Profile not found: %s</string>
 
     <string name="share_method_qrcode">QR code</string>
     <string name="share_method_clipboard">Copy profile link</string>

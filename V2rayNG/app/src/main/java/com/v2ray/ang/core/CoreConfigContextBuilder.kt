@@ -212,9 +212,28 @@ object CoreConfigContextBuilder {
         return try {
             val subItem = scope.subscriptionDao.find(config.subscriptionId) ?: return listOf(config)
             val resolved = mutableListOf<ProfileItem>()
-            SettingsManager.getServerViaRemarks(subItem.nextProfile)?.let { resolved.add(it) }
+            val seen = mutableSetOf(config.guid)
+
+            fun addHop(remarks: String?, role: String, hop: ProfileItem?) {
+                if (remarks.isNullOrBlank()) return
+                if (hop == null) {
+                    LogUtil.w(AppConfig.TAG, "Subscription $role proxy '$remarks' has no matching profile, skipping")
+                    return
+                }
+                if (hop.configType.isComplexType()) {
+                    LogUtil.w(AppConfig.TAG, "Subscription $role proxy '$remarks' is a complex type, skipping")
+                    return
+                }
+                if (!seen.add(hop.guid)) {
+                    LogUtil.w(AppConfig.TAG, "Subscription $role proxy '$remarks' duplicates a hop, skipping")
+                    return
+                }
+                resolved.add(hop)
+            }
+
+            addHop(subItem.nextProfile, "exit", SettingsManager.getServerViaRemarks(subItem.nextProfile))
             resolved.add(config)
-            SettingsManager.getServerViaRemarks(subItem.prevProfile)?.let { resolved.add(it) }
+            addHop(subItem.prevProfile, "entry", SettingsManager.getServerViaRemarks(subItem.prevProfile))
             resolved
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to resolve proxy chain from group for '${config.remarks}'", e)

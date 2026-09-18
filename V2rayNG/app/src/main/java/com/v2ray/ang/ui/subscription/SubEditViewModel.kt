@@ -11,12 +11,15 @@ import com.v2ray.ang.data.repository.SubRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult
+import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.EditFormSaver
+import com.v2ray.ang.ui.compose.ToastType
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -33,16 +36,16 @@ class SubEditViewModel @Inject constructor(
 
     private val saver = EditFormSaver(handle, KEY_SAVED)
 
-    private val profileQuery = MutableStateFlow("")
+    private val prevQuery = MutableStateFlow("")
+    private val nextQuery = MutableStateFlow("")
 
     val slices = SubEditSlices(
-        profileRemarks = profileQuery
-            .debounce(SEARCH_DEBOUNCE_MS)
-            .distinctUntilChanged()
-            .flatMapLatest { repo.profileRemarkPager(it) }
-            .cachedIn(viewModelScope),
-        query = profileQuery.asStateFlow(),
-        onQueryChange = { profileQuery.value = it },
+        prevProfiles = prevQuery.toProfilePager(),
+        prevQuery = prevQuery.asStateFlow(),
+        onPrevQueryChange = { prevQuery.value = it },
+        nextProfiles = nextQuery.toProfilePager(),
+        nextQuery = nextQuery.asStateFlow(),
+        onNextQueryChange = { nextQuery.value = it },
     )
 
     private var initial: SubscriptionItem? = null
@@ -60,6 +63,11 @@ class SubEditViewModel @Inject constructor(
         saver.register { bundle -> bundle.putString(KEY_FORM, JsonUtil.toJson(state.form)) }
         loadJob = load()
     }
+
+    private fun StateFlow<String>.toProfilePager() = debounce(SEARCH_DEBOUNCE_MS)
+        .distinctUntilChanged()
+        .flatMapLatest { repo.profileRemarkPager(it) }
+        .cachedIn(viewModelScope)
 
     private fun load(): Job = launch(onError = { loadFailed = true; toastError() }) {
         val data = repo.loadEdit(state.subId)
@@ -116,6 +124,16 @@ class SubEditViewModel @Inject constructor(
             form.updateInterval.toLongEx() < AppConfig.SUBSCRIPTION_MIN_INTERVAL_MINUTES
         ) {
             toastError(R.string.toast_invalid_update_interval)
+            return null
+        }
+
+        val chain = repo.validateChain(form.prevProfile, form.nextProfile)
+        if (chain.selfReference) {
+            toastError(R.string.toast_sub_chain_same_profile)
+            return null
+        }
+        chain.missingProfiles.firstOrNull()?.let { missing ->
+            toast(BaseText.of(R.string.toast_sub_chain_profile_missing, missing), ToastType.ERROR)
             return null
         }
 

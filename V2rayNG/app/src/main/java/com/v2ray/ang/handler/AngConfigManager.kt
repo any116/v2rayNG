@@ -14,9 +14,11 @@ import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.PlatformDependencies
+import com.v2ray.ang.dto.SubChainValidation
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.UrlContentRequest
 import com.v2ray.ang.enums.EConfigType
+import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.fmt.CustomFmt
 import com.v2ray.ang.fmt.Hysteria2Fmt
@@ -198,7 +200,8 @@ object AngConfigManager {
         return try {
             val targetSubId = subid.ifEmpty { AppConfig.DEFAULT_SUBSCRIPTION_ID }
             if (targetSubId == AppConfig.DEFAULT_SUBSCRIPTION_ID) {
-                subscriptionDao.ensureDefault(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
+                // Forced: profiles are about to be written into this group.
+                subscriptionDao.ensureDefaultForced(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
             }
 
             var count = parseBatchConfig(Utils.decode(server), targetSubId, append)
@@ -209,15 +212,17 @@ object AngConfigManager {
                 count = parseCustomConfigServer(server, targetSubId, append)
             }
 
-            var countSub = parseBatchSubscription(server)
-            if (countSub <= 0) {
-                countSub = parseBatchSubscription(Utils.decode(server))
+            var importedSubIds = parseBatchSubscription(server)
+            if (importedSubIds.isEmpty()) {
+                importedSubIds = parseBatchSubscription(Utils.decode(server))
             }
-            if (countSub > 0) {
-                updateConfigViaSubAll()
+            // Only fetch what this import just created. updateConfigViaSubAll() re-downloaded
+            // every subscription in the table, so pasting a single link refreshed all of them.
+            if (importedSubIds.isNotEmpty()) {
+                updateConfigViaSubIds(importedSubIds)
             }
 
-            count to countSub
+            count to importedSubIds.size
         } catch (e: SQLiteException) {
             LogUtil.e(AppConfig.TAG, "Failed to store imported profiles", e)
             0 to 0
@@ -228,27 +233,85 @@ object AngConfigManager {
      * Parses a batch of subscriptions.
      *
      * @param servers The servers string.
-     * @return The number of subscriptions parsed.
+     * @return The guids of the subscriptions that were actually created.
      */
-    private suspend fun parseBatchSubscription(servers: String?): Int {
+    private suspend fun parseBatchSubscription(servers: String?): List<String> {
         try {
             if (servers == null) {
-                return 0
+                return emptyList()
             }
 
-            var count = 0
+            val created = mutableListOf<String>()
             servers.lines()
                 .distinct()
                 .forEach { str ->
                     if (Utils.isValidSubUrl(str)) {
-                        count += importUrlAsSubscription(str)
+                        importUrlAsSubscription(str)?.let { created.add(it) }
                     }
                 }
-            return count
+            return created
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to parse batch subscription", e)
         }
-        return 0
+        return emptyList()
+    }
+
+    /**
+     * Imports a URL as a subscription.
+     *
+     * @param url The URL.
+     * @return The new subscription guid, or null when it was a duplicate or unparsable.
+     */
+    private suspend fun importUrlAsSubscription(url: String): String? {
+        val subscriptions = subscriptionDao.all()
+        val normalized = normalizeSubUrl(url)
+        // Compare normalized forms: the old raw == check let ".../sub" and ".../sub/" (or the
+        // same link with a different #fragment) both be imported on every paste.
+        if (subscriptions.any { normalizeSubUrl(it.url) == normalized }) {
+            return null
+        }
+        val uri = runCatching { URI(Utils.fixIllegalUrl(url)) }.getOrNull()
+        val fragment = uri?.fragment?.trim()?.takeIf { it.isNotEmpty() }
+        val guid = Utils.getUuid()
+        subscriptionDao.insertAtEnd(
+            SubscriptionItem(
+                guid = guid,
+                remarks = uniqueSubRemarks(fragment, subscriptions),
+                url = url,
+            )
+        )
+        return guid
+    }
+
+    /**
+     * Scheme and host are case-insensitive, the fragment is a display name and a trailing slash
+     * is not part of the identity. Query and path case are preserved: they frequently carry a
+     * case-sensitive token and folding them would drop genuinely different subscriptions.
+     */
+    private fun normalizeSubUrl(raw: String): String {
+        val trimmed = raw.trim().substringBefore('#')
+        val uri = runCatching { URI(Utils.fixIllegalUrl(trimmed)) }.getOrNull()
+            ?: return trimmed.trimEnd('/')
+        val scheme = uri.scheme?.lowercase().orEmpty()
+        val host = uri.host?.lowercase().orEmpty()
+        val port = if (uri.port > 0) ":${uri.port}" else ""
+        val path = uri.path.orEmpty().trimEnd('/')
+        val query = uri.query?.let { "?$it" }.orEmpty()
+        return "$scheme://$host$port$path$query"
+    }
+
+    /**
+     * A fragment-less link used to always become the literal "import sub", so a second paste
+     * produced two indistinguishable rows in the group tab strip. Fall back to
+     * "import sub1" / "import sub2" / … and keep an explicit fragment unique the same way.
+     */
+    private fun uniqueSubRemarks(preferred: String?, existing: List<SubscriptionItem>): String {
+        val taken = existing.mapTo(HashSet()) { it.remarks }
+        if (preferred != null && preferred !in taken) return preferred
+        val base = preferred ?: IMPORT_SUB_REMARKS_PREFIX
+        var index = 1
+        while ("$base$index" in taken) index++
+        return "$base$index"
     }
 
     /**
@@ -320,7 +383,7 @@ object AngConfigManager {
         // owns no subscriptions row, and nothing in the UI can reach those.
         val targetSubId = subid.ifEmpty { AppConfig.DEFAULT_SUBSCRIPTION_ID }
         if (subscriptionDao.find(targetSubId) == null) {
-            subscriptionDao.ensureDefault(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
+            subscriptionDao.ensureDefaultForced(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
         }
 
         val profiles = ArrayList<ProfileItem>(configs.size)
@@ -487,6 +550,33 @@ object AngConfigManager {
     }
 
     /**
+     * Updates exactly the given subscriptions and nothing else.
+     *
+     * Exists so import and the per-row refresh button never widen into "update everything".
+     */
+    suspend fun updateConfigViaSubIds(subIds: List<String>): SubscriptionUpdateResult {
+        return try {
+            var acc = SubscriptionUpdateResult()
+            subIds.distinct().forEach { id ->
+                val item = subscriptionDao.find(id)
+                if (item == null) {
+                    LogUtil.w(AppConfig.TAG, "updateConfigViaSubIds: no subscription for $id")
+                } else {
+                    acc += updateConfigViaSub(item)
+                }
+            }
+            acc
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to update config via subscription ids", e)
+            SubscriptionUpdateResult()
+        }
+    }
+
+    /** Single-subscription entry point used by the UI. */
+    suspend fun updateConfigViaSubId(subId: String): SubscriptionUpdateResult =
+        updateConfigViaSubIds(listOf(subId))
+
+    /**
      * Updates the configuration via a subscription.
      *
      * @param it The subscription item.
@@ -576,6 +666,35 @@ object AngConfigManager {
     }
 
     /**
+     * Validates a subscription's entry / exit chain references.
+     *
+     * Both are remarks, so they can name a profile that does not exist, name the same profile
+     * twice (which would make the node dial through itself), or name a CUSTOM / POLICYGROUP /
+     * PROXYCHAIN entry, which cannot be a chain hop at all.
+     */
+    suspend fun validateSubChainProfiles(
+        prevProfile: String?,
+        nextProfile: String?,
+    ): SubChainValidation {
+        val prev = prevProfile?.trim().orEmpty()
+        val next = nextProfile?.trim().orEmpty()
+        val missing = mutableListOf<String>()
+        listOf(prev, next)
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .forEach { remarks ->
+                val profile = profileDao.findByRemarks(remarks)
+                if (profile == null || profile.configType.isComplexType()) {
+                    missing.add(remarks)
+                }
+            }
+        return SubChainValidation(
+            missingProfiles = missing,
+            selfReference = prev.isNotEmpty() && prev == next,
+        )
+    }
+
+    /**
      * Removes invalid server configurations for a subscription.
      *
      * @param subId The subscription ID.
@@ -616,29 +735,6 @@ object AngConfigManager {
             count = parseCustomConfigServer(server, subid, append)
         }
         return count
-    }
-
-    /**
-     * Imports a URL as a subscription.
-     *
-     * @param url The URL.
-     * @return The number of subscriptions imported.
-     */
-    private suspend fun importUrlAsSubscription(url: String): Int {
-        val subscriptions = subscriptionDao.all()
-        subscriptions.forEach {
-            if (it.url == url) {
-                return 0
-            }
-        }
-        val uri = URI(Utils.fixIllegalUrl(url))
-        val subItem = SubscriptionItem(
-            guid = Utils.getUuid(),
-            remarks = uri.fragment ?: "import sub",
-            url = url,
-        )
-        subscriptionDao.insertAtEnd(subItem)
-        return 1
     }
 
     /**
@@ -692,4 +788,6 @@ object AngConfigManager {
         val truncatedPrefix = prefix.substring(0, keepLen.coerceAtMost(prefix.length)) + "***"
         return truncatedPrefix + addr.substring(lastSepIdx)
     }
+
+    private const val IMPORT_SUB_REMARKS_PREFIX = "import sub"
 }

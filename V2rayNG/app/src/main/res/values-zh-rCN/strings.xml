@@ -454,6 +454,8 @@
     <string name="toast_tasker_select_profile">请选择一个配置</string>
     <string name="toast_field_required">请填写：%1$s</string>
     <string name="msg_no_result">无匹配项</string>
+    <string name="toast_sub_chain_same_profile">前置代理与落地代理不能是同一个节点</string>
+    <string name="toast_sub_chain_profile_missing">找不到节点：%s</string>
 
     <string name="share_method_qrcode">二维码</string>
     <string name="share_method_clipboard">复制配置链接</string>

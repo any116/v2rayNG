@@ -694,8 +694,18 @@ interface SubscriptionDao {
     }
 
     @Transaction
-    suspend fun ensureDefault(defaultRemarks: String): DefaultGroupRepair {
-        val created = find(AppConfig.DEFAULT_SUBSCRIPTION_ID) == null
+    suspend fun ensureDefault(defaultRemarks: String): DefaultGroupRepair =
+        repairDefault(defaultRemarks, force = false)
+
+    @Transaction
+    suspend fun ensureDefaultForced(defaultRemarks: String): DefaultGroupRepair =
+        repairDefault(defaultRemarks, force = true)
+
+    @Transaction
+    suspend fun repairDefault(defaultRemarks: String, force: Boolean): DefaultGroupRepair {
+        var exists = find(AppConfig.DEFAULT_SUBSCRIPTION_ID) != null
+        val orphans = orphanProfileCount()
+        val created = !exists && (force || orphans > 0 || count() == 0)
         if (created) {
             val head = if (count() == 0) {
                 ProfileItem.SORT_STEP
@@ -709,9 +719,14 @@ interface SubscriptionDao {
                     remarks = defaultRemarks,
                 )
             )
+            exists = true
         }
-        val adopted = orphanProfileCount()
-        if (adopted > 0) adoptOrphanProfiles(AppConfig.DEFAULT_SUBSCRIPTION_ID)
+        val adopted = if (exists && orphans > 0) {
+            adoptOrphanProfiles(AppConfig.DEFAULT_SUBSCRIPTION_ID)
+            orphans
+        } else {
+            0
+        }
         return DefaultGroupRepair(createdDefault = created, adoptedProfiles = adopted)
     }
 
@@ -725,9 +740,7 @@ interface SubscriptionDao {
         }
         deleteProfilesOf(guid)
         deleteRow(guid)
-
         ensureDefault(defaultRemarks)
-
         if (hadSelection) {
             val fallback = firstProfileGuid()
             if (fallback.isNullOrBlank()) clearSelectedGuid() else putSelectedGuid(fallback)

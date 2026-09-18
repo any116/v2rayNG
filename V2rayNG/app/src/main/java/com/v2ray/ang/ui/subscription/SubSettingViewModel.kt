@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.subscription
 
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.SubUpdateOptions
+import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.data.repository.SubRepository
 import com.v2ray.ang.ui.AppRoute
@@ -45,6 +46,7 @@ class SubSettingViewModel @Inject constructor(
             is SubAction.RemoveConfirmed -> remove(action.subId)
             is SubAction.ToggleEnabled -> toggleEnabled(action.subId, action.enabled)
             is SubAction.Move -> move(action.fromId, action.toId)
+            is SubAction.UpdateOne -> updateOne(action.subId)
             SubAction.OpenUpdateOptions -> platform(SubEvent.ShowUpdateOptions)
             is SubAction.UpdateOptionChanged ->
                 setState { copy(updateOptions = action.field.set(updateOptions, action.value)) }
@@ -141,7 +143,37 @@ class SubSettingViewModel @Inject constructor(
         navigate(AppRoute.SubEdit(subId))
     }
 
-    // ===== Update options =====
+    // ===== Update =====
+
+    /**
+     * Refreshes a single subscription. Deliberately does not reuse [performUpdate]: that path
+     * walks every row, which is what made "update this subscription" refresh all of them.
+     */
+    private fun updateOne(subId: String) = launch(loading = true) {
+        awaitWrites()
+        val item = subscriptions.firstOrNull { it.guid == subId } ?: return@launch
+
+        if (state.updateOptions.autoTestAfterUpdate) {
+            if (repo.updateInBackground(subIds = listOf(subId), forced = true)) {
+                changed = true
+                toast(R.string.subscription_updater_job_tips)
+            } else {
+                toastError()
+            }
+            return@launch
+        }
+
+        _updateProgress.value = SubUpdateProgress(0, 1)
+        val result = try {
+            repo.updateOne(subId)
+        } finally {
+            _updateProgress.value = null
+        }
+
+        reportUpdateResult(result, single = true)
+        changed = true
+        reload()
+    }
 
     private fun confirmUpdateOptions() = launch(loading = true) {
         val options = state.updateOptions
@@ -171,9 +203,15 @@ class SubSettingViewModel @Inject constructor(
             _updateProgress.value = null
         }
 
+        reportUpdateResult(result, single = false)
+        changed = true
+        reload()
+    }
+
+    private fun reportUpdateResult(result: SubscriptionUpdateResult, single: Boolean) {
         val total = result.successCount + result.failureCount + result.skipCount
         when {
-            total == 0 -> toast(R.string.title_update_subscription_no_subscription)
+            total == 0 && !single -> toast(R.string.title_update_subscription_no_subscription)
             result.successCount > 0 && result.failureCount + result.skipCount == 0 ->
                 toast(BaseText.of(R.string.title_update_config_count, result.configCount))
             else -> toast(
@@ -186,8 +224,6 @@ class SubSettingViewModel @Inject constructor(
                 )
             )
         }
-        changed = true
-        reload()
     }
 
     // ===== Share =====

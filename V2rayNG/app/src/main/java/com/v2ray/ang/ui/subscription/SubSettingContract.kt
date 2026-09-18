@@ -53,6 +53,10 @@ sealed interface SubAction : BaseAction {
     data class RemoveConfirmed(val subId: String) : SubAction
     data class ToggleEnabled(val subId: String, val enabled: Boolean) : SubAction
     data class Move(val fromId: String, val toId: String) : SubAction
+
+    /** Refresh one subscription only. Separate from the toolbar's update-everything action. */
+    data class UpdateOne(val subId: String) : SubAction
+
     data object OpenUpdateOptions : SubAction
     data class UpdateOptionChanged(val field: UpdateOptionField, val value: Boolean) : SubAction
     data object ConfirmUpdateOptions : SubAction
@@ -74,7 +78,8 @@ class SubRowCallbacks(
     val onShare: (String) -> Unit,
     val onEdit: (String) -> Unit,
     val onRemove: (String) -> Unit,
-    val onToggle: (String, Boolean) -> Unit
+    val onToggle: (String, Boolean) -> Unit,
+    val onUpdate: (String) -> Unit
 )
 
 fun List<SubscriptionItem>.toSubRows(): List<SubRow> = map { item ->

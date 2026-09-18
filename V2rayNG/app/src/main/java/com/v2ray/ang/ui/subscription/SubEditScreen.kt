@@ -83,8 +83,10 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
     val callbacks = remember(onAction) { SubFieldCallbacks(onAction) }
     val host = remember(onAction) { SubEditHost(onAction) }
 
-    val profileItems = viewModel.slices.profileRemarks.collectAsLazyPagingItems()
-    val query by viewModel.slices.query.collectAsStateWithLifecycle()
+    val prevItems = viewModel.slices.prevProfiles.collectAsLazyPagingItems()
+    val nextItems = viewModel.slices.nextProfiles.collectAsLazyPagingItems()
+    val prevQuery by viewModel.slices.prevQuery.collectAsStateWithLifecycle()
+    val nextQuery by viewModel.slices.nextQuery.collectAsStateWithLifecycle()
 
     BackHandler { onAction(SubEditAction.Back) }
 
@@ -99,9 +101,12 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
 
         SubEditFields(
             form = state.form,
-            profileItems = profileItems,
-            query = query,
-            onQueryChange = viewModel.slices.onQueryChange,
+            prevItems = prevItems,
+            prevQuery = prevQuery,
+            onPrevQueryChange = viewModel.slices.onPrevQueryChange,
+            nextItems = nextItems,
+            nextQuery = nextQuery,
+            onNextQueryChange = viewModel.slices.onNextQueryChange,
             callbacks = callbacks,
             modifier = Modifier.fillMaxSize().imePadding()
         )
@@ -146,9 +151,12 @@ private fun SubEditTopBar(
 @Composable
 private fun SubEditFields(
     form: SubEditForm,
-    profileItems: LazyPagingItems<DropdownOption>,
-    query: String,
-    onQueryChange: (String) -> Unit,
+    prevItems: LazyPagingItems<DropdownOption>,
+    prevQuery: String,
+    onPrevQueryChange: (String) -> Unit,
+    nextItems: LazyPagingItems<DropdownOption>,
+    nextQuery: String,
+    onNextQueryChange: (String) -> Unit,
     callbacks: SubFieldCallbacks,
     modifier: Modifier = Modifier
 ) {
@@ -210,9 +218,9 @@ private fun SubEditFields(
             label = stringResource(R.string.sub_setting_pre_profile),
             placeholder = stringResource(R.string.sub_setting_pre_profile_tip),
             value = form.prevProfile,
-            items = profileItems,
-            query = query,
-            onQueryChange = onQueryChange,
+            items = prevItems,
+            query = prevQuery,
+            onQueryChange = onPrevQueryChange,
             onValueChange = callbacks[SubField.PREV_PROFILE],
             editable = true,
             supportingText = stringResource(R.string.sub_setting_entry_proxy_tip)
@@ -221,9 +229,9 @@ private fun SubEditFields(
             label = stringResource(R.string.sub_setting_next_profile),
             placeholder = stringResource(R.string.sub_setting_pre_profile_tip),
             value = form.nextProfile,
-            items = profileItems,
-            query = query,
-            onQueryChange = onQueryChange,
+            items = nextItems,
+            query = nextQuery,
+            onQueryChange = onNextQueryChange,
             onValueChange = callbacks[SubField.NEXT_PROFILE],
             editable = true,
             supportingText = stringResource(R.string.sub_setting_exit_proxy_tip)
@@ -244,9 +252,12 @@ private fun SubEditFieldsPreview() = AppTheme {
             autoUpdate = true,
             updateInterval = "1440"
         ),
-        profileItems = rememberPreviewDropdownItems(listOf("direct", "proxy")),
-        query = "",
-        onQueryChange = {},
+        prevItems = rememberPreviewDropdownItems(listOf("direct", "proxy")),
+        prevQuery = "",
+        onPrevQueryChange = {},
+        nextItems = rememberPreviewDropdownItems(listOf("direct", "proxy")),
+        nextQuery = "",
+        onNextQueryChange = {},
         callbacks = SubFieldCallbacks({})
     )
 }
