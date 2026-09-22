@@ -101,6 +101,7 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
 
         SubEditFields(
             form = state.form,
+            fieldErrors = state.fieldErrors,
             prevItems = prevItems,
             prevQuery = prevQuery,
             onPrevQueryChange = viewModel.slices.onPrevQueryChange,
@@ -151,6 +152,7 @@ private fun SubEditTopBar(
 @Composable
 private fun SubEditFields(
     form: SubEditForm,
+    fieldErrors: Map<SubField, Int>,
     prevItems: LazyPagingItems<DropdownOption>,
     prevQuery: String,
     onPrevQueryChange: (String) -> Unit,
@@ -161,6 +163,9 @@ private fun SubEditFields(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    val remarksError = fieldErrors[SubField.REMARKS]
+    val urlError = fieldErrors[SubField.URL]
+    val intervalError = fieldErrors[SubField.UPDATE_INTERVAL]
 
     Column(
         modifier = modifier
@@ -171,12 +176,16 @@ private fun SubEditFields(
         FormTextField(
             label = stringResource(R.string.sub_setting_remarks),
             value = form.remarks,
-            onValueChange = callbacks[SubField.REMARKS]
+            onValueChange = callbacks[SubField.REMARKS],
+            isError = remarksError != null,
+            supportingText = remarksError?.let { stringResource(it) },
         )
         FormTextField(
             label = stringResource(R.string.sub_setting_url),
             value = form.url,
-            onValueChange = callbacks[SubField.URL]
+            onValueChange = callbacks[SubField.URL],
+            isError = urlError != null,
+            supportingText = urlError?.let { stringResource(it) },
         )
         FormTextField(
             label = stringResource(R.string.sub_setting_user_agent),
@@ -207,7 +216,9 @@ private fun SubEditFields(
             label = stringResource(R.string.title_pref_auto_update_interval),
             value = form.updateInterval,
             onValueChange = callbacks[SubField.UPDATE_INTERVAL],
-            keyboardType = KeyboardType.Number
+            keyboardType = KeyboardType.Number,
+            isError = intervalError != null,
+            supportingText = intervalError?.let { stringResource(it) },
         )
         SettingsSwitchItem(
             title = stringResource(R.string.sub_allow_insecure_url),
@@ -250,6 +261,7 @@ private fun SubEditFieldsPreview() = AppTheme {
             autoUpdate = true,
             updateInterval = "1440"
         ),
+        fieldErrors = emptyMap(),
         prevItems = rememberPreviewDropdownItems(listOf("direct", "proxy")),
         prevQuery = "",
         onPrevQueryChange = {},

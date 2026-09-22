@@ -73,7 +73,9 @@ data class UserAssetUrlUiState(
     val assetId: String = "",
     val remarks: String = "",
     val url: String = "",
-    val showDeleteDialog: Boolean = false
+    val showDeleteDialog: Boolean = false,
+    val remarksError: Int? = null,
+    val urlError: Int? = null
 ) : BaseUiState {
     val isEdit: Boolean get() = assetId.isNotEmpty()
 }
@@ -88,7 +90,7 @@ sealed interface UserAssetUrlAction : BaseAction {
     data object DialogDismiss : UserAssetUrlAction
 }
 
-// ====== Mapping helpers =====
+// ====== Mapping helpers ======
 
 /** Projects the domain models onto the stable model the list renders. */
 fun List<AssetFile>.toAssetRows(): List<AssetRow> = map { assetFile ->

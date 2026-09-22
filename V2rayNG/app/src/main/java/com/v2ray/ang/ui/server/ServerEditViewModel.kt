@@ -123,7 +123,10 @@ class ServerEditViewModel @Inject constructor(
         when (action) {
             is ServerAction.TextChanged -> {
                 saver.markDirty()
-                setState { copy(form = action.field.set(form, action.value)) }
+                setState {
+                    val remaining = if (action.field in fieldErrors) fieldErrors - action.field else fieldErrors
+                    copy(form = action.field.set(form, action.value), fieldErrors = remaining)
+                }
             }
 
             is ServerAction.FlagChanged -> {
@@ -200,13 +203,13 @@ class ServerEditViewModel @Inject constructor(
         }
         val snapshot = state.form
         if (snapshot.address.isBlank()) {
-            toastError(R.string.server_lab_address)
+            setState { copy(fieldErrors = fieldErrors + (ServerField.ADDRESS to R.string.server_lab_address)) }
             return
         }
         if (state.configType != EConfigType.HYSTERIA2 &&
             (snapshot.port.toIntOrNull() ?: 0) <= 0
         ) {
-            toastError(R.string.server_lab_port)
+            setState { copy(fieldErrors = fieldErrors + (ServerField.PORT to R.string.server_lab_port)) }
             return
         }
 
@@ -254,7 +257,13 @@ class ServerEditViewModel @Inject constructor(
     private suspend fun saveStandard(): BaseResult? {
         val configType = state.configType
         val form = state.form
-        ServerValidator.validateForm(configType, form)?.let { return fail(it) }
+
+        val errors = ServerValidator.validateForm(configType, form)
+        if (errors.isNotEmpty()) {
+            setState { copy(fieldErrors = errors) }
+            return null
+        }
+        if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }
 
         val profile = form.toProfileItem(initialProfile, configType)
         if (configType == EConfigType.HYSTERIA2 && profile.security.isNullOrBlank()) {
@@ -272,7 +281,11 @@ class ServerEditViewModel @Inject constructor(
 
     private suspend fun saveCustom(): BaseResult? {
         val form = state.form
-        if (form.remarks.isBlank()) return fail(BaseText.of(R.string.server_lab_remarks))
+        if (form.remarks.isBlank()) {
+            setState { copy(fieldErrors = mapOf(ServerField.REMARKS to R.string.server_lab_remarks)) }
+            return null
+        }
+        if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }
 
         val content = state.rawContent
         val parsed = runCatching { repository.parseCustomConfig(content) }
@@ -293,7 +306,11 @@ class ServerEditViewModel @Inject constructor(
 
     private suspend fun savePolicyGroup(): BaseResult? {
         val form = state.form
-        if (form.remarks.isBlank()) return fail(BaseText.of(R.string.server_lab_remarks))
+        if (form.remarks.isBlank()) {
+            setState { copy(fieldErrors = mapOf(ServerField.REMARKS to R.string.server_lab_remarks)) }
+            return null
+        }
+        if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }
 
         val typeIndex = form.groupType.toIntOrNull() ?: 0
         val profile = initialProfile.takeIf { state.isEdit }
@@ -319,7 +336,11 @@ class ServerEditViewModel @Inject constructor(
 
     private suspend fun saveProxyChain(): BaseResult? {
         val form = state.form
-        if (form.remarks.isBlank()) return fail(BaseText.of(R.string.server_lab_remarks))
+        if (form.remarks.isBlank()) {
+            setState { copy(fieldErrors = mapOf(ServerField.REMARKS to R.string.server_lab_remarks)) }
+            return null
+        }
+        if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }
 
         val members = form.chainMembers.map { it.remarks.trim() }
         if (members.any { it.isEmpty() }) {

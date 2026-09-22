@@ -117,17 +117,27 @@ class RoutingEditViewModel @Inject constructor(
 
     private fun updateField(field: RoutingField, value: String) {
         saver.markDirty()
-        setState { copy(form = field.set(form, value)) }
+        setState {
+            copy(
+                form = field.set(form, value),
+                fieldErrors = if (field in fieldErrors) fieldErrors - field else fieldErrors,
+            )
+        }
     }
 
     override suspend fun doSave(): BaseResult? {
         if (!awaitLoad()) return null
 
         val form = state.form
-        if (form.remarks.isBlank()) {
-            toastError(R.string.sub_setting_remarks)
+        val errors = buildMap {
+            if (form.remarks.isBlank()) put(RoutingField.REMARKS, R.string.sub_setting_remarks)
+        }
+        if (errors.isNotEmpty()) {
+            setState { copy(fieldErrors = errors) }
             return null
         }
+        if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }
+
         val base = initial
         if (state.isEdit && base == null) {
             toastError(R.string.toast_failure)

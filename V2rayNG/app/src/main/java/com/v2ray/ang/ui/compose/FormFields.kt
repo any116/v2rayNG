@@ -69,19 +69,39 @@ fun rememberStringOptions(@ArrayRes id: Int): StringOptions {
 }
 
 @Composable
-internal fun appFieldColors(borderless: Boolean = false): TextFieldColors {
+internal fun appFieldColors(
+    borderless: Boolean = false,
+    isError: Boolean = false,
+): TextFieldColors {
     val secondary = MaterialTheme.colorScheme.secondary
+    val error = MaterialTheme.colorScheme.error
+    val accent = if (isError) error else secondary
+    val defaultColors = OutlinedTextFieldDefaults.colors()
     val border = if (borderless) Color.Transparent else Color.Unspecified
+    val focusedBorder = when {
+        borderless -> border
+        isError -> error
+        else -> defaultColors.focusedIndicatorColor
+    }
+    val unfocusedBorder = when {
+        borderless -> border
+        isError -> error
+        else -> defaultColors.unfocusedIndicatorColor
+    }
     return OutlinedTextFieldDefaults.colors(
         focusedContainerColor = Color.Transparent,
         unfocusedContainerColor = Color.Transparent,
-        focusedBorderColor = if (borderless) border else OutlinedTextFieldDefaults.colors().focusedIndicatorColor,
-        unfocusedBorderColor = if (borderless) border else OutlinedTextFieldDefaults.colors().unfocusedIndicatorColor,
-        cursorColor = secondary,
-        selectionColors = remember(secondary) {
+        focusedBorderColor = focusedBorder,
+        unfocusedBorderColor = unfocusedBorder,
+        errorBorderColor = error,
+        errorLabelColor = error,
+        errorSupportingTextColor = error,
+        errorCursorColor = error,
+        cursorColor = accent,
+        selectionColors = remember(accent) {
             TextSelectionColors(
-                handleColor = secondary,
-                backgroundColor = secondary.copy(alpha = SelectionAlpha)
+                handleColor = accent,
+                backgroundColor = accent.copy(alpha = SelectionAlpha)
             )
         }
     )
@@ -94,6 +114,7 @@ fun FormTextField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    isError: Boolean = false,
     keyboardType: KeyboardType = KeyboardType.Text,
     placeholder: String? = null,
     supportingText: String? = null,
@@ -108,8 +129,9 @@ fun FormTextField(
         singleLine = false,
         maxLines = maxLines,
         enabled = enabled,
+        isError = isError,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-        colors = appFieldColors(),
+        colors = appFieldColors(isError = isError),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
@@ -127,6 +149,7 @@ fun FormDropdownField(
     modifier: Modifier = Modifier,
     editable: Boolean = false,
     enabled: Boolean = true,
+    isError: Boolean = false,
     placeholder: String? = null,
     supportingText: String? = null
 ) {
@@ -155,11 +178,12 @@ fun FormDropdownField(
             readOnly = !editable,
             enabled = enabled,
             singleLine = true,
+            isError = isError,
             label = { Text(label) },
             placeholder = placeholder?.let { { Text(it) } },
             supportingText = supportingText?.let { { Text(it) } },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = appFieldColors(),
+            colors = appFieldColors(isError = isError),
             modifier = Modifier
                 .menuAnchor(
                     type = if (editable) ExposedDropdownMenuAnchorType.PrimaryEditable
@@ -200,6 +224,13 @@ private fun FormTextFieldPreview() = AppTheme {
         FormTextField(
             label = "Remarks",
             value = "A remark long enough to wrap across more than one visual line in the field",
+            onValueChange = {}
+        )
+        FormTextField(
+            label = "Address",
+            value = "",
+            isError = true,
+            supportingText = "Address is required",
             onValueChange = {}
         )
         FormTextField(label = "Disabled", value = "", enabled = false, onValueChange = {})

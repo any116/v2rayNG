@@ -165,6 +165,7 @@ private fun RoutingEditForm(
 ) {
     val scrollState = rememberScrollState()
     val form = state.form
+    val remarksError = state.fieldErrors[RoutingField.REMARKS]
 
     Column(
         modifier = modifier
@@ -176,6 +177,8 @@ private fun RoutingEditForm(
             label = stringResource(R.string.sub_setting_remarks),
             value = form.remarks,
             onValueChange = callbacks[RoutingField.REMARKS],
+            isError = remarksError != null,
+            supportingText = remarksError?.let { stringResource(it) },
         )
         SettingsSwitchItem(
             title = stringResource(R.string.routing_settings_locked),

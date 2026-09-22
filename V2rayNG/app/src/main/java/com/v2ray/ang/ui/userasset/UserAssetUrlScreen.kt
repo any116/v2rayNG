@@ -44,7 +44,13 @@ fun UserAssetUrlScreen(viewModel: UserAssetUrlViewModel) {
             UserAssetUrlTopBar(isEdit = isEdit, onBack = onBack, onAction = onAction)
         }
     ) { state, _ ->
-        UserAssetUrlForm(remarks = state.remarks, url = state.url, onAction = onAction)
+        UserAssetUrlForm(
+            remarks = state.remarks,
+            remarksError = state.remarksError,
+            url = state.url,
+            urlError = state.urlError,
+            onAction = onAction,
+        )
 
         if (state.showDeleteDialog) {
             DeleteConfirmDialog(
@@ -89,7 +95,9 @@ private fun UserAssetUrlTopBar(
 @Composable
 private fun UserAssetUrlForm(
     remarks: String,
+    remarksError: Int?,
     url: String,
+    urlError: Int?,
     onAction: (UserAssetUrlAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -110,12 +118,16 @@ private fun UserAssetUrlForm(
         FormTextField(
             label = stringResource(R.string.sub_setting_remarks),
             value = remarks,
-            onValueChange = onRemarksChange
+            onValueChange = onRemarksChange,
+            isError = remarksError != null,
+            supportingText = remarksError?.let { stringResource(it) },
         )
         FormTextField(
             label = stringResource(R.string.title_url),
             value = url,
-            onValueChange = onUrlChange
+            onValueChange = onUrlChange,
+            isError = urlError != null,
+            supportingText = urlError?.let { stringResource(it) },
         )
     }
 }
@@ -128,7 +140,9 @@ private fun UserAssetUrlForm(
 private fun UserAssetUrlFormPreview() = AppTheme {
     UserAssetUrlForm(
         remarks = "geosite-cn.dat",
+        remarksError = null,
         url = "https://example.com/geosite-cn.dat",
+        urlError = null,
         onAction = {}
     )
 }

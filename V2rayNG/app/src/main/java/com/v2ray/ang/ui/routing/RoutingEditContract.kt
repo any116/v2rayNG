@@ -35,6 +35,7 @@ data class RoutingEditUiState(
     val ruleId: String = "",
     val form: RoutingForm = RoutingForm(),
     val canUseProcess: Boolean = false,
+    val fieldErrors: Map<RoutingField, Int> = emptyMap()
 ) : BaseUiState {
     val isEdit: Boolean get() = ruleId.isNotEmpty()
 }

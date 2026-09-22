@@ -303,6 +303,7 @@ data class ServerUiState(
     val options: ServerOptions = ServerOptions(),
     val rawContent: String = "",
     val isFetchingCert: Boolean = false,
+    val fieldErrors: Map<ServerField, Int> = emptyMap()
 ) : BaseUiState {
 
     val isEdit: Boolean get() = guid.isNotEmpty()

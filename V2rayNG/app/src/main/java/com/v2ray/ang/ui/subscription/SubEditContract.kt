@@ -47,7 +47,8 @@ enum class SubFlag {
 data class SubEditUiState(
     val subId: String = "",
     val form: SubEditForm = SubEditForm(),
-    val confirmRemove: Boolean = false
+    val confirmRemove: Boolean = false,
+    val fieldErrors: Map<SubField, Int> = emptyMap()
 ) : BaseUiState {
     val isEdit: Boolean get() = subId.isNotEmpty()
 }

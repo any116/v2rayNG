@@ -85,12 +85,26 @@ class SubEditViewModel @Inject constructor(
         when (action) {
             is SubEditAction.TextChanged -> {
                 saver.markDirty()
-                setState { copy(form = action.field.set(form, action.value)) }
+                setState {
+                    val remaining = if (action.field in fieldErrors) fieldErrors - action.field else fieldErrors
+                    copy(
+                        form = action.field.set(form, action.value),
+                        fieldErrors = remaining,
+                    )
+                }
             }
 
             is SubEditAction.FlagChanged -> {
                 saver.markDirty()
-                setState { copy(form = action.flag.set(form, action.value)) }
+                setState {
+                    val remaining = if (action.flag == SubFlag.ALLOW_INSECURE_URL && SubField.URL in fieldErrors)
+                        fieldErrors - SubField.URL
+                    else fieldErrors
+                    copy(
+                        form = action.flag.set(form, action.value),
+                        fieldErrors = remaining,
+                    )
+                }
             }
 
             SubEditAction.Save -> save()
@@ -103,25 +117,37 @@ class SubEditViewModel @Inject constructor(
         if (!awaitLoad()) return null
 
         val form = state.form
-        if (form.remarks.isBlank()) {
-            toastError(R.string.sub_setting_remarks)
+        val errors = buildMap {
+            if (form.remarks.isBlank()) put(SubField.REMARKS, R.string.sub_setting_remarks)
+
+            if (form.url.isNotEmpty()) {
+                when {
+                    !Utils.isValidUrl(form.url) ->
+                        put(SubField.URL, R.string.toast_invalid_url)
+                    !Utils.isValidSubUrl(form.url) && !form.allowInsecureUrl ->
+                        put(SubField.URL, R.string.toast_insecure_url_protocol)
+                }
+            }
+
+            if (form.autoUpdate &&
+                form.updateInterval.toLongEx() < AppConfig.SUBSCRIPTION_MIN_INTERVAL_MINUTES
+            ) {
+                put(SubField.UPDATE_INTERVAL, R.string.toast_invalid_update_interval)
+            }
+        }
+
+        if (errors.isNotEmpty()) {
+            setState { copy(fieldErrors = errors) }
             return null
         }
-        if (form.url.isNotEmpty()) {
-            if (!Utils.isValidUrl(form.url)) {
-                toastError(R.string.toast_invalid_url)
-                return null
-            }
-            if (!Utils.isValidSubUrl(form.url)) {
-                toast(R.string.toast_insecure_url_protocol)
-                if (!form.allowInsecureUrl) return null
-            }
-        }
-        if (form.autoUpdate &&
-            form.updateInterval.toLongEx() < AppConfig.SUBSCRIPTION_MIN_INTERVAL_MINUTES
+        if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }
+
+        if (form.url.isNotEmpty() &&
+            Utils.isValidUrl(form.url) &&
+            !Utils.isValidSubUrl(form.url) &&
+            form.allowInsecureUrl
         ) {
-            toastError(R.string.toast_invalid_update_interval)
-            return null
+            toast(R.string.toast_insecure_url_protocol)
         }
 
         val chain = repo.validateChain(form.prevProfile, form.nextProfile)

@@ -99,6 +99,7 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
         ServerEditContent(
             configType = state.configType,
             form = state.form,
+            fieldErrors = state.fieldErrors,
             options = state.options,
             isFetchingCert = state.isFetchingCert,
             rawContent = rawContent,
@@ -244,6 +245,7 @@ private fun ServerEditDialogs(
 private fun ServerEditContent(
     configType: EConfigType,
     form: ServerForm,
+    fieldErrors: Map<ServerField, Int>,
     options: ServerOptions,
     isFetchingCert: Boolean,
     rawContent: TextFieldState,
@@ -270,6 +272,7 @@ private fun ServerEditContent(
             EConfigType.PROXYCHAIN -> {
                 ProxyChainForm(
                     remarks = form.remarks,
+                    remarksError = fieldErrors[ServerField.REMARKS],
                     members = form.chainMembers,
                     candidates = chainCandidates,
                     chainQuery = chainQuery,
@@ -291,6 +294,7 @@ private fun ServerEditContent(
                 ) {
                     PolicyGroupForm(
                         form = form,
+                        remarksError = fieldErrors[ServerField.REMARKS],
                         options = options,
                         fallbackTags = fallbackTags,
                         tagQuery = tagQuery,
@@ -313,6 +317,7 @@ private fun ServerEditContent(
                     ProtocolForm(
                         configType = configType,
                         form = form,
+                        fieldErrors = fieldErrors,
                         isFetchingCert = isFetchingCert,
                         onAction = onAction,
                     )

@@ -6,8 +6,6 @@ import com.v2ray.ang.data.repository.UserAssetRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult
-import com.v2ray.ang.ui.base.BaseText
-import com.v2ray.ang.ui.compose.ToastType
 import com.v2ray.ang.util.Utils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,12 +56,22 @@ class UserAssetUrlViewModel @Inject constructor(
         when (action) {
             is UserAssetUrlAction.RemarksChanged -> {
                 handle[KEY_REMARKS] = action.value
-                setState { copy(remarks = action.value) }
+                setState {
+                    copy(
+                        remarks = action.value,
+                        remarksError = if (remarksError != null) null else remarksError,
+                    )
+                }
             }
 
             is UserAssetUrlAction.UrlChanged -> {
                 handle[KEY_URL] = action.value
-                setState { copy(url = action.value) }
+                setState {
+                    copy(
+                        url = action.value,
+                        urlError = if (urlError != null) null else urlError,
+                    )
+                }
             }
 
             UserAssetUrlAction.Save -> save()
@@ -81,22 +89,26 @@ class UserAssetUrlViewModel @Inject constructor(
     override suspend fun doSave(): BaseResult? {
         val remarks = state.remarks.trim()
         val url = state.url.trim()
-        if (remarks.isEmpty()) {
-            toastFieldRequired(R.string.sub_setting_remarks)
+
+        val remarksError = if (remarks.isEmpty()) R.string.sub_setting_remarks else null
+        val urlError = when {
+            url.isEmpty() -> R.string.title_url
+            !Utils.isValidUrl(url) -> R.string.toast_invalid_url
+            else -> null
+        }
+        if (remarksError != null || urlError != null) {
+            setState { copy(remarksError = remarksError, urlError = urlError) }
             return null
         }
-        if (url.isEmpty()) {
-            toastFieldRequired(R.string.title_url)
-            return null
+        if (state.remarksError != null || state.urlError != null) {
+            setState { copy(remarksError = null, urlError = null) }
         }
-        if (!Utils.isValidUrl(url)) {
-            toastError(R.string.toast_invalid_url)
-            return null
-        }
+
         if (repo.isRemarkDuplicated(remarks, state.assetId)) {
-            toastError(R.string.msg_remark_is_duplicate)
+            setState { copy(remarksError = R.string.msg_remark_is_duplicate) }
             return null
         }
+
         val id = repo.saveAsset(state.assetId, remarks, url)
         return BaseResult.Saved(id = id, refreshList = true)
     }
@@ -106,11 +118,6 @@ class UserAssetUrlViewModel @Inject constructor(
         repo.removeAssetUrl(state.assetId)
         return BaseResult.Deleted(id = state.assetId, refreshList = true)
     }
-
-    private fun toastFieldRequired(labelRes: Int) = toast(
-        BaseText.of(R.string.toast_field_required, BaseText.of(labelRes)),
-        ToastType.ERROR
-    )
 
     private companion object {
         const val KEY_REMARKS = "asset_edit_remarks"
