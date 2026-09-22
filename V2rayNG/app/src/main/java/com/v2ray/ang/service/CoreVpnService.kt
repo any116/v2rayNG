@@ -202,7 +202,7 @@ class CoreVpnService : VpnService(), ServiceControl {
 
         // Configure IPv4 settings
         builder.setMtu(SettingsManager.getVpnMtu())
-        builder.addAddress(vpnConfig.ipv4Client, 30)
+        builder.addAddress(vpnConfig.ipv4Client, 32)
 
         // Configure routing rules
         if (bypassLan) {
@@ -216,7 +216,7 @@ class CoreVpnService : VpnService(), ServiceControl {
 
         // Configure IPv6 if enabled
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_IPV6_ENABLED) == true) {
-            builder.addAddress(vpnConfig.ipv6Client, 126)
+            builder.addAddress(vpnConfig.ipv6Client, 128)
             if (bypassLan) {
                 builder.addRoute("2000::", 3) // Currently only 1/8 of total IPv6 is in use
                 builder.addRoute("fc00::", 18) // Xray-core default FakeIPv6 Pool
