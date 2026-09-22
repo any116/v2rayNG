@@ -1,0 +1,80 @@
+diff --git a/transport/internet/finalmask/realm/client.go b/transport/internet/finalmask/realm/client.go
+index ab7ba6bb..b63f7dfe 100644
+--- a/transport/internet/finalmask/realm/client.go
++++ b/transport/internet/finalmask/realm/client.go
+@@ -1,3 +1,4 @@
++//go:build !android
+ package realm
+ 
+ import (
+diff --git a/transport/internet/finalmask/realm/config.go b/transport/internet/finalmask/realm/config.go
+index 2604fa8a..8c16265d 100644
+--- a/transport/internet/finalmask/realm/config.go
++++ b/transport/internet/finalmask/realm/config.go
+@@ -1,3 +1,4 @@
++//go:build !android
+ package realm
+ 
+ import (
+diff --git a/transport/internet/finalmask/realm/config_norealm.go b/transport/internet/finalmask/realm/config_norealm.go
+new file mode 100644
+index 00000000..c075eb23
+--- /dev/null
++++ b/transport/internet/finalmask/realm/config_norealm.go
+@@ -0,0 +1,19 @@
++//go:build android
++
++package realm
++
++import (
++	"net"
++
++	"github.com/xtls/xray-core/common/errors"
++)
++
++func (c *Config) UDP() {}
++
++func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
++	return nil, errors.New("realm is not supported on this platform")
++}
++
++func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
++	return nil, errors.New("realm is not supported on this platform")
++}
+diff --git a/transport/internet/finalmask/realm/http.go b/transport/internet/finalmask/realm/http.go
+index 2f58ee89..8d3f9cf9 100644
+--- a/transport/internet/finalmask/realm/http.go
++++ b/transport/internet/finalmask/realm/http.go
+@@ -1,3 +1,4 @@
++ //go:build !android
+ package realm
+ 
+ import (
+diff --git a/transport/internet/finalmask/realm/punch.go b/transport/internet/finalmask/realm/punch.go
+index 92174f6b..ef87738b 100644
+--- a/transport/internet/finalmask/realm/punch.go
++++ b/transport/internet/finalmask/realm/punch.go
+@@ -1,3 +1,4 @@
++//go:build !android
+ package realm
+ 
+ import (
+diff --git a/transport/internet/finalmask/realm/server.go b/transport/internet/finalmask/realm/server.go
+index 544bf49d..70639f32 100644
+--- a/transport/internet/finalmask/realm/server.go
++++ b/transport/internet/finalmask/realm/server.go
+@@ -1,3 +1,4 @@
++//go:build !android
+ package realm
+ 
+ import (
+diff --git a/transport/internet/finalmask/realm/stun.go b/transport/internet/finalmask/realm/stun.go
+index 5ff59bb3..737d7eba 100644
+--- a/transport/internet/finalmask/realm/stun.go
++++ b/transport/internet/finalmask/realm/stun.go
+@@ -1,3 +1,4 @@
++//go:build !android
+ package realm
+ 
+ import (
+
