@@ -324,7 +324,7 @@ object CoreServiceManager {
                 LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to measure delay", e)
                 errorStr = e.message?.substringAfter("\":").orEmpty()
             }
-            if (time == -1L) {
+/*            if (time == -1L) {
                 try {
                     time = coreController.measureDelay(SettingsManager.getDelayTestUrl(true))
                 } catch (e: Exception) {
@@ -333,12 +333,10 @@ object CoreServiceManager {
                 }
             }
 
-            val endpoint = if (time >= 0) SpeedtestManager.getRemoteIPInfo() else null
+            val endpoint = if (time >= 0) SpeedtestManager.getRemoteIPInfo() else null*/
             val result = ConnectionTestResult(
                 delayMillis = time,
-                errorMessage = errorStr,
-                country = endpoint?.country,
-                ipAddress = endpoint?.ipAddress,
+                errorMessage = errorStr
             )
             MessageHelper.sendMsg2UI(service, AppConfig.MSG_MEASURE_DELAY_RESULT, result)
         }

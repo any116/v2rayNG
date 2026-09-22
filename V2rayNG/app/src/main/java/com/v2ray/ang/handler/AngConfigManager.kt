@@ -617,24 +617,43 @@ object AngConfigManager {
         return 1
     }
 
-    /** Generates a description for the profile.
-     *
-     * @param profile The profile item.
-     * @return The generated description.
-     */
-    fun generateDescription(profile: ProfileItem): String {
-        // Hide xxx:xxx:***/xxx.xxx.xxx.***
-        val server = profile.server
-        val port = profile.serverPort
-        if (server.isNullOrBlank() && port.isNullOrBlank()) return ""
+    fun generateDescription(
+        profile: ProfileItem,
+        prefixLimit: Int = 21
+    ): String {
+         val server = profile.server
+         val port = profile.serverPort
+         if (server.isNullOrBlank() && port.isNullOrBlank()) return ""
 
-        val addrPart = server?.let {
-            if (it.contains(":"))
-                it.split(":").take(2).joinToString(":", postfix = ":***")
-            else
-                it.split('.').dropLast(1).joinToString(".", postfix = ".***")
-        } ?: ""
+        val isIPv6 = server?.contains(":") == true
+        val separator = if (isIPv6) ":" else "."
 
-        return "$addrPart : ${port ?: ""}"
+         val addrPart = server?.let {
+            if (isIPv6) {
+                 it.split(":").take(2).joinToString(":", postfix = ":***")
+            } else {
+                 it.split('.').dropLast(1).joinToString(".", postfix = ".***")
+            }
+         } ?: ""
+
+        val truncatedAddr = truncateByLastSeparator(addrPart, separator, prefixLimit)
+
+        return "$truncatedAddr : ${port ?: ""}"
+    }
+
+    private fun truncateByLastSeparator(
+        addr: String,
+        separator: String,
+        limit: Int
+    ): String {
+        val lastSepIdx = addr.lastIndexOf(separator)
+        if (lastSepIdx <= 0) return addr
+
+        val prefix = addr.substring(0, lastSepIdx)
+        if (prefix.length <= limit) return addr
+
+        val keepLen = 17
+        val truncatedPrefix = prefix.substring(0, keepLen.coerceAtMost(prefix.length)) + "***"
+        return truncatedPrefix + addr.substring(lastSepIdx)
     }
 }
