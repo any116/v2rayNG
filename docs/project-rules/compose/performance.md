@@ -8,12 +8,13 @@ Kotlin 2.4 的 Compose 编译器插件默认开启 **Strong Skipping**：
 
 1. **一屏只订阅一次 `uiState`**：只有 `BaseScreen` 收集它。
 2. **槽位内单独收窄切片**：topBar / bottomBar 需要的字段自己收，不从 content 传出去。
-3. **大列表不进 UiState**：走 per-key `StateFlow` 切片。
+3. **大列表不进 UiState**：走 Paging 3 的 `Flow<PagingData<T>>`，在 content 里
+   `collectAsLazyPagingItems()`。
 4. **稳定的 dispatch 引用**：`val dispatch = remember(viewModel) { viewModel::onAction }`。
 5. **多回调打包成 `@Stable class`**，不要传 4 个匿名 lambda。
 6. **所有 `LazyColumn` / `LazyVerticalGrid` 的 `items` 必须给 `key`**，
    异构列表再给 `contentType`。
-7. **不在 composition 里做计算**：过滤、正则、排序、字符串拼装全在 ViewModel/Repository。
+7. **不在 composition 里做计算**：过滤、排序、字符串拼装全在 ViewModel/Repository/SQL。
 8. **默认参数不得是新建对象**：提成 `companion object` 的 `Default` 单例。
 9. **高频 State 读取要下沉**：把读取推到真正需要它的最内层 Composable 或
    lambda-based modifier 里。
@@ -26,10 +27,10 @@ Kotlin 2.4 的 Compose 编译器插件默认开启 **Strong Skipping**：
 ```kotlin
 BaseScreen(
     viewModel = viewModel,
-    showLoading = false,                          // BaseScreen 不订阅 isLoading
     topBar = {
         val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()  // 只影响顶栏
-        MainTopBar(isLoading = isLoading, …)
+        val search by rememberSearchState(viewModel)
+        MainTopBar(isLoading = isLoading, isSearchActive = search.isActive, query = search.query, …)
     },
     bottomBar = {
         val bottom by rememberBottomState(viewModel)                        // 只影响底栏
@@ -69,6 +70,7 @@ private fun rememberBottomState(viewModel: MainViewModel): State<MainBottomState
 | UiState、参数包、事件载荷 | `@Immutable` | 全 `val`，字段本身也必须稳定 |
 | 持有可变句柄/缓存的类 | `@Stable` | 如 `MainSlices`、`GroupScrollStates`、`MainDialogHost`、`MainScreenHandles`、`AppSnackbarController`、`ScrollbarConfig` |
 | 值对象包装集合 | 自定义类 + `equals` | 如 `StringOptions` 包 `List<String>` |
+| Paging 行模型 | `@Immutable` `data class` | `ServerRowItem`、`DropdownOption` |
 
 - `List` / `Map` / `Set` 在 Compose 里被视为**不稳定**。如果它作为高频参数出现在热路径上，
   用 `@Immutable` 的包装类（`StringOptions`）或 `kotlinx.collections.immutable`
@@ -86,27 +88,36 @@ private fun rememberBottomState(viewModel: MainViewModel): State<MainBottomState
   @Stable
   class ServerRowCallbacks(
       val onSelect: (String) -> Unit,
-      val onEdit: (String) -> Unit,
-      val onShare: (String) -> Unit,
-      val onMore: (String) -> Unit,
+      val onEdit: (String, EConfigType) -> Unit,
+      val onShare: (String, EConfigType) -> Unit,
+      val onMore: (String, EConfigType) -> Unit,
       val onRemove: (String) -> Unit,
   )
   ```
-  在列表外层 `remember(dispatch) { ServerRowCallbacks(...) }` 一次，所有行共用。
+  在列表外层 `remember(handles) { ServerRowCallbacks(...) }` 一次，所有行共用。
 
-## 4. 列表
+## 4. 列表与 Paging 3
 
 ```kotlin
+val items = remember(groupId, handles) { handles.slices.servers(groupId) }
+    .collectAsLazyPagingItems()
 LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) {
-    items(items = rows, key = { it.guid }, contentType = { "server-row" }) { row ->
-        ServerRow(item = row, isSelected = row.guid == selectedGuid, callbacks = callbacks)
+    items(
+        count = items.itemCount,
+        key = items.itemKey { it.guid },
+        contentType = items.itemContentType { ServerRowContentType },
+    ) { index ->
+        val row = items[index]
+        if (row == null) ServerRowPlaceholder() else ServerRow(row, …, callbacks)
     }
 }
 ```
 
 - `key` 用稳定业务 id（`guid`），不要用 index。
-- `contentType` 让不同类型的行复用各自的槽（`SelectListDialog` 用的
-  `OptionContentType = "select-option"` 就是这个用法）。
+- `contentType` 让不同类型的行复用各自的槽（Paging 的 `itemContentType`）。
+- **占位行必须处理**：`enablePlaceholders = true` 时 `items[index]` 可能为 `null`，
+  画一个和真实行同高同宽的骨架（`ServerRowPlaceholder`），避免滚动条跳动。
+- **`collectAsLazyPagingItems()` 的结果要 `remember` 住**，不要每帧重建流。
 - **滚动状态按分组缓存**：`GroupScrollStates` 用 `HashMap<String, LazyListState>`，
   切分组回来时位置不丢；分组列表变化后调 `retain(validIds)` 清理，防止泄漏。
 - `HorizontalPager` 设 `beyondViewportPageCount = 0`，并给 `key = { groups[it].id }`。
@@ -114,7 +125,13 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
   不要监听 `currentPage`（滑动过程中每帧都变）。
 - 行内不要 `collectAsStateWithLifecycle` 一个大流；行只接收已经算好的数据。
 - 拖拽排序统一用 `ReorderableListItem` / `ReorderableGridItem` + `rememberReorderable*State`，
-  拖拽结束 dispatch `MoveServer(groupId, from, to)`，UI 先本地重排、ViewModel 再串行落盘。
+  拖拽结束 dispatch `MoveServer(groupId, movedGuid, toIndex)`，重排由 DAO 事务完成
+  （`to.index` 是移除被拖行**之后**的下标）。
+- 定位选中项不要扫全表：位置由 SQL 的 `indexOf` 给出，再 `scrollToItem`；
+  等布局就绪要有超时（`withTimeoutOrNull(LocateLayoutTimeoutMs)`，600ms）。
+- **下拉框用 Paging 时**用 `FormPagedDropdownField`：它用 bare `Popup` + `LazyColumn`
+  而不是 `ExposedDropdownMenu`（后者内部是 `verticalScroll`，无法嵌套同方向懒列表），
+  输入去抖 250ms，并区分 refresh / append 的 `LoadState`。
 
 ## 5. 修饰符与布局
 
@@ -122,8 +139,7 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
   `Modifier.drawBehind { }` —— 它们在 layout/draw 阶段读状态，不触发重组。
 - 需要"按父约束的比例限宽"时用 `Modifier.layout { }` 而不是 `BoxWithConstraints`
   （后者是 SubcomposeLayout，代价高）。范本：`SnackBar.kt` 的 `maxWidthFraction`。
-- 不要为了加内边距而多包一层 `Box`；直接把 padding 加在目标组件的 `modifier` 上
-  （`FormTextField` 就是这么改的）。
+- 不要为了加内边距而多包一层 `Box`；直接把 padding 加在目标组件的 `modifier` 上。
 - 层级越浅越好：一个列表行不应该超过 3~4 层嵌套容器。
 
 ## 6. 避免每次重组重建对象
@@ -144,30 +160,38 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
 | 离开组合时清理 | `DisposableEffect` |
 | 让 effect 内的回调永远是最新的 | `rememberUpdatedState(onXxx)` |
 
-- `LaunchedEffect(Unit)` 只在"整个屏幕生命周期一次"时用；其余必须给真实 key。
+- `LaunchedEffect(Unit)` 只在"整个屏幕生命周期一次"时用（样板：`MainActivity` 的
+  `awaitReady` 门）；其余必须给真实 key。
 - effect 里等待布局就绪要有超时：
   ```kotlin
   withTimeoutOrNull(LocateLayoutTimeoutMs) {          // 600ms
-      snapshotFlow { list.layoutInfo.viewportSize.height }.first { it > 0 }
+      snapshotFlow { list.layoutInfo.viewportSize.height to list.layoutInfo.totalItemsCount }
+          .first { (height, count) -> height > 0 && count > targetIndex }
   }
   ```
 - 一次性"定位/滚动"类事件处理完必须回调清标志（`finally { onLocateHandled() }`），
   否则配置变化后会重放。
 
-## 8. ViewModel 侧的性能配合
+## 8. ViewModel / 数据层侧的性能配合
 
-这些常量已经在 `MainViewModel` / `MainRepository` 里定型，新页面沿用同一套思路：
+这些常量已经在 `MainViewModel` / `MainRepository` / `TestResultWriter` 里定型，
+新页面沿用同一套思路：
 
-| 常量 | 值 | 作用 |
-| --- | --- | --- |
-| `LOAD_CHUNK_SIZE` | 60 | 分块回吐，首屏更快 |
-| `PREFETCH_RADIUS` | 1 | 只预取左右各一个分组 |
-| `PREFETCH_DELAY_MS` | 32 | 预取前让出一帧 |
-| `SEARCH_DEBOUNCE_MS` | 300 | 搜索去抖 |
-| `DELAY_REFRESH_INTERVAL_MS` | 400 | 批量测速结果合并刷新 |
+| 常量 | 值 | 位置 | 作用 |
+| --- | --- | --- | --- |
+| `PAGE_SIZE` | 40 | `MainRepository` | Paging 每页条数 |
+| `INITIAL_LOAD_SIZE` | 80 | `MainRepository` | 首屏一次加载 |
+| `PREFETCH_DISTANCE` | 20 | `MainRepository` | 提前预取 |
+| `JUMP_THRESHOLD` | 240 | `MainRepository` | 允许跳转的距离 |
+| `SEARCH_DEBOUNCE_MS` | 300 | `MainViewModel` | 搜索去抖（空串走 0） |
+| `MAX_CACHED_PAGERS` | 6 | `MainViewModel` | 每分组 Pager 的 LRU 上限 |
+| `COUNT_SHARING_TIMEOUT_MS` | 5000 | `MainViewModel` | 计数切片停止订阅前的保留时间 |
+| `FLUSH_INTERVAL_MS` | 400 | `TestResultWriter` | 测速结果合并落库窗口 |
+| `QueryDebounceMillis` | 250 | `FormPagedDropdownField` | 下拉筛选去抖 |
 
-- 过滤/排序在 `Dispatchers.Default`，串行 IO 在 `Dispatchers.IO.limitedParallelism(1)`。
-- 只有变化的分组才 `publish`；`refreshDelays` 内部逐项比对，无变化返回 `null` 不触发 UI。
+- 过滤/排序下沉到 **SQL**（`LIKE`、`ORDER BY`、`ROW_NUMBER`），Kotlin 侧只做展示串拼装。
+- 分页数据链在 `viewModelScope` 里 `cachedIn`，切组回来不重建 `PagingSource`。
+- 高频写库（测速结果）在写侧合并，读侧靠 `PagingSource` 失效刷新，绝不轮询。
 
 ## 9. 度量
 
@@ -187,7 +211,7 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
 ## 10. 内存
 
 - `ConcurrentHashMap` 缓存必须有清理路径：分组列表变化后
-  `serverFlows.keys.removeAll { it !in validIds }`、`GroupScrollStates.retain(validIds)`。
-- `Closeable` 的 Repository 在 `onCleared()` 关闭。
-- Bitmap 用完即弃，不进 State、不进缓存。
+  `pagers.keys.removeAll { it !in validIds }`、`GroupScrollStates.retain(validIds)`、
+  `countFlows.keys.removeAll { it !in validIds }`。
+- Bitmap 用完即弃，不进 State、不进缓存（二维码只在弹窗生命周期内存在）。
 - Coil 的图标加载给固定尺寸，避免解码原始大图。

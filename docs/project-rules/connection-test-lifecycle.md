@@ -8,28 +8,40 @@
 ## 消息
 | 方向 | key | content |
 | --- | --- | --- |
-| UI→守护 | `MSG_MEASURE_DELAY`（有序广播） | `requestId` |
-| 守护→UI | `MSG_MEASURE_DELAY_RESULT` | `ConnectionTestResponse` |
+| UI→守护 | `MSG_MEASURE_DELAY`（有序广播，`sendMsg2ServiceForResult`） | `requestId` |
+| 守护→UI | `MSG_MEASURE_DELAY_RESULT` | `ConnectionTestResponse(requestId, result)` |
 | 守护→UI | `MSG_MEASURE_DELAY_CANCELED` | `requestId` |
 | UI→测试服务 | `MSG_MEASURE_CONFIG_START` / `_CANCEL` | `TestServiceMessage`（`requestId` 为空的取消＝全部取消） |
 | 测试服务→UI | `_NOTIFY` / `_SUCCESS` / `_FINISH` / `_CANCELED` | `TestNotification(requestId, payload)` |
 
 ## 当前服务器测试
-有序广播确认只在"真的接受并启动测量"时置 `RESULT_OK`；提前返回回取消。
-测量协程用 `finally` 兜底：未回结果则补发取消，绝不留悬挂请求。
-UI 侧未被处理时由发送方在同一 `serviceEvents` 流补发取消。
+有序广播确认只在"真的接受并启动测量"时置 `RESULT_OK`；若无守护进程接收，
+`MainRepository.testCurrentServer` 会经 `sendMsg2ServiceForResult` 的 `handled = false`
+回调主动 `emitDelayCanceled(requestId)`，绝不留悬挂请求。
+测量协程用 `finally` 兜底：未回结果则补发取消。
 
 ## 批量测试
-先取消旧请求、快照目标列表，再登记新请求。服务端按工作单元记录所属请求，
+先取消旧请求、清空延迟、快照目标列表，再登记新请求。服务端按工作单元记录所属请求，
 `units.remove(unit)` 是原子归属声明——完成与取消只能由声明成功的一方发出。
-取消、`onDestroy`、启动时的防御覆盖都逐请求回 `_CANCELED`，
-每个请求独立 `runCatching`，单个失败不阻断其余。
+取消、`onDestroy`、启动时的防御覆盖都逐请求回 `_CANCELED`，每个请求独立 `runCatching`，
+单个失败不阻断其余。
+
+## 结果落库（Room 3 / Paging 3 时代的关键变化）
+- 批量结果不再逐条经 `MSG_MEASURE_CONFIG_SUCCESS` 推给 UI 再更新内存状态。
+  服务侧把每个 `RealPingEvent.Result` 交给 `service/TestResultWriter` 合并，
+  每 400ms（`FLUSH_INTERVAL_MS`，与旧 `DELAY_REFRESH_INTERVAL_MS` 对齐）在**单个事务**里
+  `upsertStats` 写入 `profile_stats`。
+- UI 侧刷新是**数据库失效驱动**的：`profile_stats` 变化 → `MainRepository.serverPager`
+  的 `PagingSource` 失效 → `LazyPagingItems` 自动重取受影响行。
+  因此 `MainViewModel.handleServiceEvent` 里 `MeasureConfigSuccess` 是 **no-op**，
+  不要再写"批量结果合并刷新"的自定义去抖（那是 MMKV 时代的实现，已删除）。
+- 单次写全表会闪屏：写入节流只在写侧做，读侧绝不轮询数据库。
 
 ## 失效点
 界面取消、`onCleared`、服务停止/未运行/启动成功失败、内核重载、测试服务销毁。
-运行状态变化一律释放当前测试请求，状态栏回落到批量请求状态，
+运行状态变化一律释放当前测试请求（`currentTestId = null`），状态栏回落到批量请求状态，
 因此不会出现"已停止但仍显示测试中"。
 
 ## 已知限制
 `SpeedtestManager.socketConnectTime` 是阻塞调用，不参与协作取消，
-取消后可能浪费一次探测（已有 1s 超时）；改为可取消实现前请勿去掉超时。
+取消后可能浪费一次探测（已有默认 1.5s 超时）；改为可取消实现前请勿去掉超时。

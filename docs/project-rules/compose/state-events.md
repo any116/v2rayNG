@@ -14,12 +14,15 @@ data class XxxUiState(
 规则：
 
 1. `@Immutable` + `data class` + 全 `val` + 全部有默认值（便于 Preview 与初始化）。
-2. 不放 `isLoading`（`BaseViewModel` 提供）。
+2. 不放 `isLoading`（`BaseViewModel` 提供，引用计数）。
 3. 不放一次性效果（消息、导航、弹窗触发）。
 4. 不放 `Context`、`Bitmap` 之外的平台对象；`Bitmap` 只允许经 `BaseEvent.Platform` 传递
    （`MainEvent.ShowQrCode`），不入 State。
-5. 派生值优先在 UI 现算（`state.items.isEmpty()`），只有计算昂贵时才存进 State。
-6. 超大列表不进 State，走 ViewModel 的切片 StateFlow（见 `architecture-rules.md` §3.3）。
+5. 派生值优先在 UI 现算（`state.items.isEmpty()`），只有计算昂贵时才存进 State
+   （样板：`MainUiState.isFiltering`）。
+6. **大列表不进 State**：主列表是 Paging 3 的 `Flow<PagingData<T>>`（见
+   `architecture-rules.md` §3.3 与 `performance.md` §4）。计数、行数据都用切片
+   `StateFlow` / `Flow<PagingData>`，不塞进 `XxxUiState`。
 7. 多态状态用密封接口而不是一堆布尔：
    ```kotlin
    @Immutable
@@ -27,8 +30,8 @@ data class XxxUiState(
        data object Disconnected : MainStatus
        data object Connected : MainStatus
        data object Testing : MainStatus
-       data class TaskLeft(val left: String) : MainStatus
-       data class Delay(val content: String) : MainStatus
+       data class TestProgress(val progress: String) : MainStatus
+       data class ConnectionTest(val result: ConnectionTestResult) : MainStatus
    }
    ```
    状态到文案的映射写成 UI 侧的 `@Composable fun MainStatus.asText(): String`，
@@ -59,7 +62,7 @@ sealed interface XxxEvent : BaseEvent.Platform {
 }
 ```
 
-三条路径：
+四条路径：
 
 | 事件 | 谁消费 |
 | --- | --- |
@@ -121,9 +124,11 @@ sealed interface XxxDialog {
   → `setState`。不要在 Composable 里 `remember { mutableStateOf(initial) }` 存输入。
 - 校验在 ViewModel。失败时 `toastError` 并保持在当前页
   （`BaseEditViewModel.doSave()` 返回 `null`）。
-- 保存/删除用 `BaseEditViewModel.save()` / `delete()`，它们自带 `loading = true`
-  和"成功即 `finishWith(result)`"。
-- 需要跨进程死亡保活的输入，构造 VM 时接 `SavedStateHandle`。
+- 保存/删除用 `BaseEditViewModel.save()` / `delete()`：内部有 `mutationJob` 防重入，
+  成功即 `finishWith(result)`。
+- 需要跨进程死亡保活的输入，接 `SavedStateHandle` + `EditFormSaver`：
+  `restore()` 先于 `register()`，只有用户真的改过（`markDirty()`）才写快照。
+- 快速连续写入用 Job 链串行（`SettingsViewModel.persist()`），离开页面前 `writeJob?.join()`。
 
 ## 7. 结果回传
 
@@ -133,6 +138,6 @@ sealed interface BaseResult { Cancelled / Saved / Deleted / Changed / Selected }
 
 - 子页：`finishWithResult(BaseResult.Saved(...))`。
 - 父页：`BaseScreen(onResult = { viewModel.onAction(XxxAction.ResultReceived(it)) })`。
-- ViewModel 在 `handleResult` 里按 `result.refreshList` / `result.restartService` /
-  `result.notify` 决定后续动作。
+- ViewModel 在 `handleResult` 里按 `result.refreshList` / `result.restartService` 决定后续动作。
 - `autoToastResult = true`（默认）时框架已经替你弹成功提示，别重复弹。
+- `BaseResult.Selected` 用于"选择器"语义（如 `AppPicker`），`refreshList` / `notify` 都为 false。

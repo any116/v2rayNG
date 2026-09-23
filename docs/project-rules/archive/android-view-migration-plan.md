@@ -1,6 +1,40 @@
 # Android View 收尾迁移计划
 
-状态：待实施。
+状态：**已完成**（Widget 的 API 36+ 增强路径未做，属于可选增强，不影响完成）。
+本计划作为历史方案保留。
+
+## 实施结果
+
+- **About 开源许可（完成）**：最终没有采用 §4 的"自建许可 JSON DTO + WebView 替换"路线，
+  而是接入 `com.mikepenz:aboutlibraries` 15.2.0：
+  - Gradle 插件 `aboutlibraries`（`offlineMode = true`）生成 `res/raw/aboutlibraries.json`；
+  - `ui/about/AboutLicenseContent.kt` 用 `produceLibraries(R.raw.aboutlibraries)` +
+    `LibrariesContainer`（M3、`LibrariesVariant.Refined`、`LibraryDetailMode.Sheet`）渲染，
+    正文离线可读；
+  - `LicenseWebView` / `AndroidView` / HTML 资产已全部移除——全仓库现在**没有业务 `AndroidView`**；
+  - 翻译贡献名单继续由独立的 `translators.json` 驱动。
+- **桌面组件（完成基础路径）**：`receiver/WidgetProvider.kt` 已改为
+  `GlanceAppWidgetReceiver`，Glance UI 在 `ui/widget/SwitchWidget.kt`
+  （包 `com.v2ray.ang.ui.widget`，目录 `ui/widght` 为历史拼写），跑在 `:bg`。
+  - 状态模型落在 `enums/WidgetRunState.kt`：
+    `UNKNOWN / STOPPED / STARTING / RUNNING / STOPPING / PERMISSION_REQUIRED / FAILED`；
+  - `handler/WidgetStateManager` 持有进程内 `StateFlow`，用 `Prefs` 存快照，
+    点击先 `reconcile()`（`MSG_REGISTER_CLIENT` 有序广播问守护真值）再决定动作，
+    点击只记录"请求中"，不伪装成已连接；`STARTING`/`STOPPING` 期间忽略重复点击；
+  - 组件身份（组件名 + provider XML）保持不变，已有桌面组件升级后继续可用；
+  - 首次 VPN 授权通过 `AppRoute.Main` 打开可见 Activity，接收器不直接弹权限界面。
+- **未完成项（可选增强，非阻断）**：§6.3 / §6.4 的 API 36+ Remote Compose 增强、
+  响应式尺寸/预览、以及配套的真机矩阵验收未实施；当前只提供基础 Glance 路径。
+- **与方案不同的决定**：许可页用现成库而非自建 DTO/解析器；因此 §4.3 的 JSON 契约、
+  §4.4 的构建期转换任务**未采用**。
+- **验证**：`./gradlew :app:compileFdroidReleaseKotlin` + `./gradlew test`；
+  真机验证许可页离线打开、桌面组件增删/缩放/升级、连续点击、权限未授予、服务进程与
+  UI 进程分别被杀后恢复。
+- **回滚结论**：基础 Glance 路径即回退目标；组件身份未变，回滚无需用户重加组件。
+
+以下为原始方案（「已确认现状」描述的是迁移前的旧状态，已不作为当前实现参考）。
+
+---
 
 ## 1. 目标
 

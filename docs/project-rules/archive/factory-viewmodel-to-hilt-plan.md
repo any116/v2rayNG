@@ -1,6 +1,35 @@
 # Factory ViewModel 到 Hilt 迁移计划
 
-状态：待实施。
+状态：**已完成**。Hilt 已全量落地，本计划作为历史方案保留。
+
+## 实施结果
+
+- **完成范围**：`AngApplication` 加 `@HiltAndroidApp`；全部 Activity 加 `@AndroidEntryPoint`；
+  19 个 ViewModel 全部转为 `@HiltViewModel`（18 个用 `@Inject constructor`；
+  `ShortcutViewModel` 用 `@AssistedInject` + `@AssistedFactory` + `withCreationCallback`，
+  因为它的命令来自 Activity 而不是 Intent extra）；
+  `di/` 落地 `Qualifiers` / `DispatcherModule` / `NetworkModule` / `DatabaseModule` /
+  `ThemeModule` / `ServiceEntryPoint`；`SubscriptionUpdateWorker` 转
+  `@HiltWorker` + `@AssistedInject`。
+- **与方案不同的决定**：
+  - `MainRepository` **改成了 `@Singleton`**（原 §8 倾向保持 ViewModel 作用域）。
+    理由：它持有进程级广播注册与共享 `SharedFlow`，页面级实例会重复注册，并在退出时
+    关闭仍被其它订阅者使用的连接。因此**不再实现 `Closeable`**，`onCleared()` 也不再 `close`，
+    receiver 生命周期等于进程（`AtomicBoolean` 幂等注册）。
+  - `ThemeStore` 接口保留为 object 接缝（`ThemeManager` ↔ 注入路径共用），
+    但 `ThemeRepository` 已改为有构造函数的类，绑定从 `@Provides` 改为 `@Binds`。
+  - 数据库/设置读取不再用 `Provider<...>` 延迟解析：`Room.databaseBuilder(...).build()` 本就惰性。
+  - 非 `@AndroidEntryPoint` 的 `:daemon` / `:tasks` / `:bg` 组件通过
+    `di/ServiceEntryPoint.kt` 的 `@EntryPoint` + `PlatformDependencies` 取值。
+- **未完成项**：`BaseViewModelFactory` / `baseViewModels` 作为死代码仍保留在
+  `ui/base/BaseViewModelFactory.kt`（未删除），但**生产路径禁止使用**。
+- **验证**：`./gradlew :app:compileFdroidReleaseKotlin`（KSP 会暴露 Dagger 绑定错误）
+  + `./gradlew test`。
+- **回滚结论**：不保留双创建路径。若需回退某页，同时恢复其 Activity 创建方式与 ViewModel 构造。
+
+以下为原始方案。
+
+---
 
 本计划是 MMKV → Room 3/Paging 3 生产迁移的强制前置条件。
 

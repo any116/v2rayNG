@@ -1,6 +1,57 @@
 # MMKV 到 Room 3、Paging 3 迁移计划
 
-状态：待实施。
+状态：**已完成**。Room 3 + Paging 3 已是生产存储与列表实现，`MmkvManager` 已删除。
+本计划作为历史方案保留。
+
+## 实施结果
+
+- **完成范围**：
+  - 依赖：`androidx.room3:room3-runtime/compiler/paging/testing` 3.0.3、
+    `androidx.sqlite:sqlite-bundled(-jvm)` 2.6.2（`BundledSQLiteDriver`）、
+    Room 3 Gradle 插件、KSP；Paging `3.5.1`（runtime / compose / common / testing）。
+    schema 导出到 `app/schemas/`（`room3 { schemaDirectory(...) }`）。
+  - `AppDatabase` v1，7 张表：`profiles` / `profile_stats` / `profile_raw` /
+    `subscriptions` / `assets` / `routing_rules` / `settings`；DAO 与投影集中在
+    `data/AppDao.kt`；`GROUP_ORDER_TRIGGERS` 在 `DatabaseCallbacks.kt` 由
+    `DatabaseModule` 的 `onCreate/onOpen` 安装。
+  - 跨进程：`enableMultiInstanceInvalidation()`（每个进程都开）。
+  - 设置：`SettingsStore`（进程内同步快照 + `invalidationTracker` 订阅）+ `Prefs` 门面，
+    取代 `MmkvManager.decodeSettingsXxx`。
+  - 迁移：`LegacyMigrationGate`（进程内 `Mutex` + 跨进程 `FileLock`）→
+    `DatabaseIntegrity.verifyOrQuarantine` → `LegacyImporter.importInto`（单 `immediateTransaction`）
+    → 按表计数校验 → 写 `LEGACY_IMPORT_STATE=done`；旧数据源是只读的 `MmkvLegacyReader`
+    （`data/legacy/`），类型映射表 `SettingKinds`。
+  - Repository 全部切到 Room（Main / Server / Sub / Asset / Settings / Routing / PerAppProxy …）；
+    `MmkvManager` 删除，MMKV 仅剩 `MmkvLegacyReader` 一处只读使用。
+  - Paging 3 接入主列表与全部可搜索下拉：
+    `DAO PagingSource → Repository Pager → ViewModel Flow → cachedIn →
+    collectAsLazyPagingItems()`；主列表 `enablePlaceholders = true`，下拉 `false`。
+- **与方案不同的决定（需评审确认）**：
+  - **搜索语义从正则改为 SQL `LIKE`**（不区分大小写的子串匹配，`normalizeLike()` + `ESCAPE '\'`，
+    字段 remarks/description/server）。§12.3 原要求"不能直接改为 LIKE 后声称行为等价"，
+    实际按需求评审改成了普通文本搜索；正则兼容模式**未**实现。
+  - §6.1 的 `ProfilePayload` 拆分**未采用**：协议字段仍与 `ProfileItem` 同表（列表查询用轻量投影
+    规避读全列），仅 CUSTOM 原文单独放 `profile_raw`。
+  - §5.2 未使用 `SupportSQLiteDatabase` 事务样板，改用 Room 3 的
+    `useWriterConnection` / `immediateTransaction` / `usePrepared`。
+  - 拖拽排序在"全部"视图**禁用**（跨订阅无法用单个 `sortOrder` 表达），
+    作为 §12.6 允许的"明确替代操作"；单分组内用稀疏 `sortOrder` 中点插入 + `renormalize`。
+  - 高频测速改为**写侧合并**：`TestResultWriter` 每 400ms 单事务写 `profile_stats`，
+    UI 靠 `PagingSource` 失效刷新，不再有"读侧合并去抖"逻辑。
+- **未完成项 / 遗留**：
+  - 只有一个 schema v1；升级路径的 `Migration` 尚未真正需要，降级用
+    `fallbackToDestructiveMigrationOnDowngrade`。
+  - 旧 MMKV 目录**未清理**（`MmkvLegacyReader` 只读不删）：数据库损坏重建时仍需它做数据源
+    （见 `DatabaseIntegrity` 的说明），至少保留一个版本。
+  - `MmkvImportTest`（`SettingKinds` 注释里提到）当前**不存在**，key→kind 全量守卫测试待补。
+- **验证**：`./gradlew :app:compileFdroidReleaseKotlin` + `./gradlew test`；
+  真机验证冷启动、导入、订阅更新、跨进程（服务写测试结果 → UI 刷新）、Widget、后台更新。
+- **回滚结论**：`Ready`（`LEGACY_IMPORT_STATE=done`）之前可安全回退到旧 MMKV；
+  `Ready` 之后用户已产生新数据，不能直接切回旧快照，需反向导出或明确不支持降级读取。
+
+以下为原始方案。
+
+---
 
 强制前置：factory-viewmodel-to-hilt-plan.md 的完整验收单通过。
 

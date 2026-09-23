@@ -9,17 +9,19 @@
       Icon(painterResource(R.drawable.ic_arrow_back_24dp), stringResource(R.string.acc_back))
   }
   ```
-- 描述文案进 `strings.xml`，统一 `acc_` 前缀（已有 `acc_back`）。
+- 描述文案进 `strings.xml`，统一 `acc_` 前缀（如 `acc_back`、`acc_edit`、`acc_delete`、`acc_more`）。
 - 图标 + 文字并列时，图标 `null`，让文字承载语义。
 
 ## 2. 语义合并
 
-列表行、设置项这类"整行可点"的容器，用 `Modifier.clickable(...)` 加在**最外层**，
-内部子元素不再各自可点；需要时用 `Modifier.semantics(mergeDescendants = true) { }`
-把整行合并成一个可读节点。
+列表行、设置项这类"整行可点"的容器，用 `Modifier.clickable(...)` / `Modifier.selectable(...)`
+加在**最外层**，内部子元素不再各自可点；需要时用
+`Modifier.semantics(mergeDescendants = true) { }` 把整行合并成一个可读节点。
 
 行内还有独立按钮（编辑、分享、删除）时，这些按钮各自需要 `contentDescription`，
 且不能被父节点合并掉——把它们放在 `clickable` 容器之外或使用 `IconButton`（自带语义边界）。
+样板：`MainServerPager.ServerRow` 用 `Modifier.selectable(role = Role.RadioButton)`
+承载整行选择，行内三个 `IconButton` 各自带描述。
 
 ## 3. 状态语义
 
@@ -33,8 +35,9 @@
 
 - 最小 48.dp × 48.dp。图标本身 24.dp 时，用 `IconButton`（默认 48.dp）或
   给容器加 `Modifier.minimumInteractiveComponentSize()`。
-- 列表行高不足 48.dp 时增加垂直 padding（现有 `ItemVerticalPad = 12.dp`
-  配 24.dp 图标正好 48.dp）。
+- 列表行高不足 48.dp 时增加垂直 padding（`Components.kt` 的 `ItemVerticalPad = 12.dp`
+  配 24.dp 图标正好 48.dp；`MainServerPager` 的行图标按钮用 `RowIconButtonSize = 36.dp`，
+  靠行内 padding 补足触控目标）。
 - 拖拽手柄要足够大，且必须提供非拖拽的替代路径（长按菜单里的上移/下移或排序动作）。
 
 ## 5. 文本与对比度
@@ -49,6 +52,10 @@
 - 表单字段给 `KeyboardOptions(keyboardType = …)`；只读下拉用
   `ExposedDropdownMenuAnchorType.PrimaryNotEditable` 并在获焦时收起键盘
   （`FormDropdownField` 已实现）。
+- Paging 下拉（`FormPagedDropdownField`）用 `PrimaryEditable` 锚点：
+  展开时不抢焦点，IME 仍绑定输入框；关闭时 `focusManager.clearFocus()`，
+  并用 `BackHandler` + `PopupProperties(dismissOnBackPress = true)` 处理返回。
 - 弹窗打开时焦点应落在主输入框；关闭后 `focusManager.clearFocus()`。
+- 外链、许可详情等长文本必须可滚动、可选择复制，并支持大字体。
 - TV / 手柄场景：`MainActivity` 已处理 `KEYCODE_BUTTON_B`，新增全屏交互时注意
   可聚焦元素要有可见的焦点态。
