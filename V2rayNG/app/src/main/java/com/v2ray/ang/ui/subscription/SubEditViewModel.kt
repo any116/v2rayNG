@@ -151,10 +151,7 @@ class SubEditViewModel @Inject constructor(
         }
 
         val chain = repo.validateChain(form.prevProfile, form.nextProfile)
-        if (chain.selfReference) {
-            toastError(R.string.toast_sub_chain_same_profile)
-            return null
-        }
+        if (chain.selfReference) return null
         chain.missingProfiles.firstOrNull()?.let { missing ->
             toast(BaseText.of(R.string.toast_sub_chain_profile_missing, missing), ToastType.ERROR)
             return null

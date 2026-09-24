@@ -123,6 +123,7 @@ fun FormPagedDropdownField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    isError: Boolean = false,
     placeholder: String? = null,
     supportingText: String? = null,
     /** Keep the filter when the menu is dismissed; set true to restore the old behaviour. */
@@ -184,13 +185,14 @@ fun FormPagedDropdownField(
             },
             enabled = enabled,
             singleLine = true,
+            isError = isError,
             label = { Text(label) },
             placeholder = placeholder?.let { { Text(it) } },
             supportingText = supportingText?.let { { Text(it) } },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            colors = appFieldColors(),
+            colors = appFieldColors(isError = isError),
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
                 .fillMaxWidth()

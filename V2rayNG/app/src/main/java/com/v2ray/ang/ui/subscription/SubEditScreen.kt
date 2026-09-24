@@ -167,6 +167,11 @@ private fun SubEditFields(
     val urlError = fieldErrors[SubField.URL]
     val intervalError = fieldErrors[SubField.UPDATE_INTERVAL]
 
+    // Entry and exit proxies differ
+    val chainSelfReference =
+        form.prevProfile.isNotEmpty() && form.prevProfile == form.nextProfile
+    val chainErrorText = stringResource(R.string.toast_sub_chain_same_profile)
+
     Column(
         modifier = modifier
             .verticalScrollbar(scrollState)
@@ -233,7 +238,9 @@ private fun SubEditFields(
             query = prevQuery,
             onQueryChange = onPrevQueryChange,
             onValueChange = callbacks[SubField.PREV_PROFILE],
-            supportingText = stringResource(R.string.sub_setting_entry_proxy_tip)
+            isError = chainSelfReference,
+            supportingText = if (chainSelfReference) chainErrorText
+            else stringResource(R.string.sub_setting_entry_proxy_tip)
         )
         FormPagedDropdownField(
             label = stringResource(R.string.sub_setting_next_profile),
@@ -243,7 +250,9 @@ private fun SubEditFields(
             query = nextQuery,
             onQueryChange = onNextQueryChange,
             onValueChange = callbacks[SubField.NEXT_PROFILE],
-            supportingText = stringResource(R.string.sub_setting_exit_proxy_tip)
+            isError = chainSelfReference,
+            supportingText = if (chainSelfReference) chainErrorText
+            else stringResource(R.string.sub_setting_exit_proxy_tip)
         )
         Spacer(modifier = Modifier.height(FormBottomGap))
         NavigationBarsSpacer()
