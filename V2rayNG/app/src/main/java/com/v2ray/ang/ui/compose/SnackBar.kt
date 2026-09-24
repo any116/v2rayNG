@@ -5,8 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.v2ray.ang.extension.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
@@ -70,7 +72,14 @@ object AppSnackbarManager {
 }
 
 private const val QueueCapacity = 8
-private val MinVisibleDuration = 2000
+
+/**
+ * Minimum visible duration (in milliseconds) guaranteed for a non-error message
+ * before it can be preempted by the next queued message.
+ * Error messages are exempt from this limit and are always shown for the
+ * full SnackbarDuration.Short duration.
+ */
+private const val MinNonErrorDisplayDuration = 500L
 
 @Stable
 class AppSnackbarController internal constructor(val hostState: SnackbarHostState) {
@@ -84,19 +93,40 @@ class AppSnackbarController internal constructor(val hostState: SnackbarHostStat
         queue.trySend(AppSnackbarMessage(message.toString(), type, long))
     }
 
-    internal suspend fun consume(): Unit = coroutineScope {
+    internal suspend fun consume() = coroutineScope {
+        var currentJob: Job? = null
+        var currentType: ToastType? = null
+        var currentStartTime = 0L
+
         for (message in queue) {
-            hostState.currentSnackbarData?.dismiss()
-            launch {
+            val now = System.currentTimeMillis()
+
+            currentJob?.let { job ->
+                if (job.isActive) {
+                    if (currentType == ToastType.ERROR) {
+                        job.join()
+                    } else {
+                        val elapsed = now - currentStartTime
+                        if (elapsed < MinNonErrorDisplayDuration) {
+                            delay(MinNonErrorDisplayDuration - elapsed)
+                        }
+                        job.cancel()
+                        hostState.currentSnackbarData?.dismiss()
+                    }
+                }
+            }
+
+            currentStartTime = System.currentTimeMillis()
+            currentType = message.type
+            currentJob = launch {
                 hostState.showSnackbar(
                     AppSnackbarVisuals(
                         message = message.message,
                         type = message.type,
-                        duration = if (message.long) SnackbarDuration.Long else SnackbarDuration.Short
+                        duration = SnackbarDuration.Short
                     )
                 )
             }
-            delay(MinVisibleDuration.toLong())
         }
     }
 }
@@ -134,7 +164,7 @@ private val ToastCornerRadius = 24.dp
 private val ToastHorizontalPad = 16.dp
 private val ToastVerticalPad = 12.dp
 private val ToastBottomOffset = 100.dp
-private const val ToastMaxLines = 8
+private const val ToastMaxLines = 15
 private const val ToastMaxWidthFraction = 0.75f
 
 private fun Modifier.maxWidthFraction(fraction: Float) = layout { measurable, constraints ->
@@ -153,11 +183,15 @@ fun AppSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier)
             ToastType.ERROR -> colors.toastError
             ToastType.INFO -> colors.toastInfo
         }
+
+        // Avoid the IME (soft keyboard) as well as system bars.
+        val imeVisible = WindowInsets.isImeVisible
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(bottom = ToastBottomOffset),
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(bottom = if (imeVisible) 0.dp else ToastBottomOffset),
             contentAlignment = Alignment.BottomCenter
         ) {
             Surface(
