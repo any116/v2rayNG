@@ -31,9 +31,13 @@ import com.v2ray.ang.ui.compose.DropdownOption
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -112,11 +116,18 @@ open class SubRepository @Inject constructor(
         )
     }
 
+    private val _groupRemoved = MutableSharedFlow<String>(
+        extraBufferCapacity = 8,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    open val groupRemoved: SharedFlow<String> = _groupRemoved.asSharedFlow()
+
     open suspend fun remove(subId: String) = withIO {
         SubscriptionUpdater.cancelOne(subId = subId)
         subscriptionDao.removeWithDefault(subId, AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
         settings.poke(SettingsStore.KEY_SELECTED_SERVER, profileDao.selectedGuid())
         SettingsChangeManager.makeSetupGroupTab()
+        _groupRemoved.tryEmit(subId)
     }
 
     open suspend fun saveOrder(guids: List<String>) = withIO {

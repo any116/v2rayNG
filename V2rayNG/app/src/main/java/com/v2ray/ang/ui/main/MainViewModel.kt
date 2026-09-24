@@ -6,8 +6,8 @@ import androidx.paging.cachedIn
 import com.v2ray.ang.R
 import com.v2ray.ang.data.repository.MainRepository
 import com.v2ray.ang.data.repository.MainServiceEvent
+import com.v2ray.ang.data.repository.SubRepository
 import com.v2ray.ang.dto.ConnectionTestResult
-import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseResult
@@ -37,9 +37,10 @@ private const val MAX_CACHED_PAGERS = 6
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repo: MainRepository,
+    private val subRepo: SubRepository,
 ) : BaseViewModel<MainUiState, MainAction>(
     MainUiState(
-        selectedGroupId = repo.selectedGroupId(),
+        selectedGroupId = "",
         selectedGuid = repo.selectedGuid(),
         confirmRemove = repo.confirmRemove(),
         doubleColumnDisplay = repo.doubleColumnDisplay(),
@@ -108,10 +109,12 @@ class MainViewModel @Inject constructor(
 
     private var initialized = false
     private val firstPageReady = CompletableDeferred<Unit>()
+    private var selectionSeeded = false
 
     init {
         observeServiceEvents()
         observeGroups()
+        observeGroupRemovals()
     }
 
     /** Delegates to MainRepository: suspends until the settings snapshot is ready. */
@@ -190,11 +193,20 @@ class MainViewModel @Inject constructor(
                 pagers.keys.removeAll { it !in validIds }
             }
             countFlows.keys.removeAll { it !in validIds }
-            val selected = resolveSelectedGroup(groups)
+
+            val seededId = if (!selectionSeeded && groups.isNotEmpty()) {
+                selectionSeeded = true
+                val saved = repo.selectedGroupId()
+                if (saved in validIds) saved
+                else groups.first().id.also { repo.setSelectedGroupId(it) }
+            } else {
+                null
+            }
+
             setState {
                 copy(
                     groups = groups,
-                    selectedGroupId = selected,
+                    selectedGroupId = seededId ?: selectedGroupId,
                     selectedGuid = repo.selectedGuid(),
                 )
             }
@@ -202,15 +214,13 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    private suspend fun resolveSelectedGroup(groups: List<GroupMapItem>): String {
-        val current = state.selectedGroupId
-        val resolved = when {
-            groups.isEmpty() -> ""
-            groups.any { it.id == current } -> current
-            else -> groups.first().id
+    private fun observeGroupRemovals() = launch(onError = {}) {
+        subRepo.groupRemoved.collect { removed ->
+            if (state.selectedGroupId != removed) return@collect
+            val next = state.groups.firstOrNull { it.id != removed }?.id ?: ""
+            setState { copy(selectedGroupId = next) }
+            repo.setSelectedGroupId(next)
         }
-        if (resolved != current) repo.setSelectedGroupId(resolved)
-        return resolved
     }
 
     private fun initialize() {
