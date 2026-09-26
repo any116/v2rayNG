@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.helper.MessageHelper
@@ -15,11 +16,19 @@ import com.v2ray.ang.service.CoreProxyOnlyService
 import com.v2ray.ang.service.CoreRootService
 import com.v2ray.ang.service.CoreVpnService
 import com.v2ray.ang.util.LogUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object LauncherManager {
 
     /** Guid requested for adoption at startup; persisted by the service, not by the receiver. */
     const val EXTRA_SELECTED_GUID = "launcher_selected_guid"
+
+    /** Owns the deferred starts issued from callbacks that cannot suspend. */
+    private val readyScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     fun startServiceFromToggle(context: Context): Boolean =
         startContextService(context, null)
@@ -27,6 +36,33 @@ object LauncherManager {
     fun startService(context: Context, guid: String? = null) {
         LogUtil.i(AppConfig.TAG, "LauncherManager: startService from ${context::class.java.simpleName}")
         startContextService(context, guid)
+    }
+
+    /**
+     * Storage-aware start for cold entries (receivers, tile, shortcuts): waits for this
+     * process' storage bootstrap before the mode preferences are read. A cold snapshot would
+     * fall back to the coded defaults and silently give a root / proxy-only user the VPN
+     * service.
+     *
+     * @return false when storage was not ready in time; the start is skipped, never guessed.
+     */
+    suspend fun startServiceWhenReady(context: Context, guid: String? = null): Boolean {
+        if (!StorageBootstrap.awaitReadyOrNull()) {
+            LogUtil.w(AppConfig.TAG, "LauncherManager: storage not ready; service start skipped")
+            return false
+        }
+        withContext(Dispatchers.Main.immediate) {
+            startService(context, guid)
+        }
+        return true
+    }
+
+    /** Fire-and-forget [startServiceWhenReady] for callbacks that cannot suspend (tile, shortcuts). */
+    fun startServiceWhenReadyAsync(context: Context, guid: String? = null) {
+        val appContext = context.applicationContext
+        readyScope.launch {
+            startServiceWhenReady(appContext, guid)
+        }
     }
 
     fun stopService(context: Context) {

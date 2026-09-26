@@ -8,18 +8,28 @@ import android.view.KeyEvent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.R
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.enums.PermissionType
@@ -49,21 +59,58 @@ class MainActivity : BaseHelperActivity() {
 
     @Composable
     override fun ScreenContent() {
+        // An attempt that does not end in "ready" shows an explicit failure/retry surface
+        // instead of the main UI: acting on uninitialised storage could write to the database
+        // before the legacy import has run, which is exactly what the migration gate prevents.
+        var attempt by remember { mutableIntStateOf(0) }
         var ready by remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) {
-            // Timed out bootstrap still renders: coded defaults beat a blank window.
-            val ok = withTimeoutOrNull(BOOT_TIMEOUT_MS) { viewModel.awaitReady() } != null
-            if (!ok) LogUtil.w(AppConfig.TAG, "Settings snapshot timed out; rendering degraded UI")
-            ready = true
+        var failed by remember { mutableStateOf(false) }
+        LaunchedEffect(attempt) {
+            ready = false
+            failed = false
+            val outcome = runCatching {
+                withTimeoutOrNull(BOOT_TIMEOUT_MS) { viewModel.awaitReady() }
+            }
+            if (outcome.getOrNull() != null) {
+                ready = true
+            } else {
+                failed = true
+                val cause = outcome.exceptionOrNull()
+                if (cause == null) {
+                    LogUtil.w(AppConfig.TAG, "Storage initialization timed out; showing retry surface")
+                } else {
+                    LogUtil.w(AppConfig.TAG, "Storage initialization failed; showing retry surface", cause)
+                }
+            }
         }
-        if (ready) {
-            MainScreen(
+        when {
+            ready -> MainScreen(
                 viewModel = viewModel,
                 onPlatformEvent = ::handlePlatformEvent,
             )
-        } else {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+
+            failed -> BootFailureContent(onRetry = { attempt++ })
+
+            else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
+            }
+        }
+    }
+
+    @Composable
+    private fun BootFailureContent(onRetry: () -> Unit) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = stringResource(R.string.boot_storage_failed_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(text = stringResource(R.string.boot_storage_failed_message))
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onRetry) {
+                    Text(text = stringResource(R.string.action_retry))
+                }
             }
         }
     }
@@ -130,6 +177,10 @@ class MainActivity : BaseHelperActivity() {
     }
 
     private companion object {
-        const val BOOT_TIMEOUT_MS = 5_000L
+        /**
+         * Generous on purpose: the first launch after an upgrade may run the whole legacy
+         * import (thousands of rows) before the barrier opens.
+         */
+        const val BOOT_TIMEOUT_MS = 30_000L
     }
 }

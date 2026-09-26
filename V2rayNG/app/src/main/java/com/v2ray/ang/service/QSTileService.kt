@@ -81,7 +81,10 @@ class QSTileService : TileService() {
         super.onClick()
         when (qsTile.state) {
             Tile.STATE_INACTIVE -> {
-                LauncherManager.startServiceFromToggle(this)
+                // Cold start: :daemon may not have settled its storage bootstrap yet, and the
+                // run mode (VPN / root / proxy-only) must not be picked from a cold snapshot.
+                // The async helper waits for storage on a scope the tile does not own.
+                LauncherManager.startServiceWhenReadyAsync(this)
             }
 
             Tile.STATE_ACTIVE -> {
