@@ -71,7 +71,11 @@ class CoreRootService : Service(), ServiceControl {
         // must not install a second rule set: cancel the in-flight attempt before replacing it.
         setupJob?.cancel()
         setupJob = serviceScope.launch {
-            CoreStartup.refreshPreferences(this@CoreRootService)
+            if (!CoreStartup.refreshPreferences(this@CoreRootService)) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Root: storage not ready; aborting start")
+                stopService()
+                return@launch
+            }
             if (!requestedGuid.isNullOrBlank()) {
                 CoreServiceManager.adoptSelectedGuid(this@CoreRootService, requestedGuid)
             }

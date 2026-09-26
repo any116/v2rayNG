@@ -7,6 +7,11 @@ import android.text.TextUtils
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.util.LogUtil
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class TaskerReceiver : BroadcastReceiver() {
 
@@ -27,10 +32,27 @@ class TaskerReceiver : BroadcastReceiver() {
             if (switch == null || TextUtils.isEmpty(guid)) {
                 return
             } else if (switch) {
-                if (guid == AppConfig.TASKER_DEFAULT_GUID) {
-                    LauncherManager.startServiceFromToggle(context)
-                } else {
-                    LauncherManager.startService(context, guid)
+                // The :daemon process may be cold (Tasker wakes it from nowhere), so this must
+                // not pick the run mode from an empty snapshot. goAsync keeps the process alive
+                // while startServiceWhenReady waits for the storage bootstrap.
+                val pendingResult = goAsync()
+                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                    try {
+                        val started = if (guid == AppConfig.TASKER_DEFAULT_GUID) {
+                            LauncherManager.startServiceWhenReady(context)
+                        } else {
+                            LauncherManager.startServiceWhenReady(context, guid)
+                        }
+                        if (!started) {
+                            LogUtil.w(AppConfig.TAG, "Tasker: service start skipped; storage not ready")
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        LogUtil.e(AppConfig.TAG, "Error processing Tasker broadcast", e)
+                    } finally {
+                        pendingResult.finish()
+                    }
                 }
             } else {
                 LauncherManager.stopService(context)

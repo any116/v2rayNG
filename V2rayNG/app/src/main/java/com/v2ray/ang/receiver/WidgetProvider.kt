@@ -8,6 +8,7 @@ import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.updateAll
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.LauncherManager
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.enums.WidgetRunState
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.WidgetStateManager
@@ -64,7 +65,14 @@ class WidgetProvider : GlanceAppWidgetReceiver() {
         }
     }
 
-    private fun start(context: Context) {
+    private suspend fun start(context: Context) {
+        // :bg can be cold (a widget click after reboot): the run mode and the permission
+        // decision must come from a settled snapshot, not from coded defaults.
+        if (!StorageBootstrap.awaitReadyOrNull()) {
+            LogUtil.w(AppConfig.TAG, "Widget: storage not ready; start skipped")
+            WidgetStateManager.publish(WidgetRunState.STOPPED)
+            return
+        }
         if (requiresVpnPermission(context)) {
             // The system consent dialog needs a visible Activity; a receiver cannot show one.
             WidgetStateManager.publish(WidgetRunState.PERMISSION_REQUIRED)
@@ -75,7 +83,7 @@ class WidgetProvider : GlanceAppWidgetReceiver() {
         }
 
         WidgetStateManager.publish(WidgetRunState.STARTING)
-        if (!LauncherManager.startServiceFromToggle(context)) {
+        if (!LauncherManager.startServiceWhenReady(context)) {
             WidgetStateManager.publish(WidgetRunState.STOPPED)
         }
     }

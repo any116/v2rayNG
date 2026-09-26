@@ -49,7 +49,11 @@ class CoreProxyOnlyService : Service(), ServiceControl {
 
         val requestedGuid = intent?.getStringExtra(LauncherManager.EXTRA_SELECTED_GUID)
         serviceScope.launch {
-            CoreStartup.refreshPreferences(this@CoreProxyOnlyService)
+            if (!CoreStartup.refreshPreferences(this@CoreProxyOnlyService)) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Proxy: storage not ready; aborting start")
+                stopSelf()
+                return@launch
+            }
             if (!requestedGuid.isNullOrBlank()) {
                 CoreServiceManager.adoptSelectedGuid(this@CoreProxyOnlyService, requestedGuid)
             }
