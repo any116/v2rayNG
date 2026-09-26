@@ -37,7 +37,7 @@ internal object DatabaseIntegrity {
                 conn.prepare("PRAGMA busy_timeout = 3000").use { st -> st.step() }
 
                 conn.prepare("PRAGMA integrity_check").use { st ->
-                    buildList {
+                    buildList<String> {
                         while (st.step()) {
                             add(st.getText(0))
                         }
