@@ -117,7 +117,7 @@ class MainViewModel @Inject constructor(
         observeGroupRemovals()
     }
 
-    /** Delegates to MainRepository: suspends until the settings snapshot is ready. */
+    /** Delegates to MainRepository: storage bootstrap + settings snapshot must both be ready. */
     suspend fun awaitReady() = repo.awaitReady()
 
     override fun onAction(action: MainAction) {

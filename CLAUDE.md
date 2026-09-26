@@ -103,7 +103,8 @@ UI(Composable) <--Flow<PagingData<T>>------ ViewModel   (大列表，不塞进 U
 ### Source Layout（`V2rayNG/app/src/main/java/com/v2ray/ang/`）
 
 ```
-AngApplication.kt      # @HiltAndroidApp；WorkManager(:bg)、SettingsStore、旧数据导入门初始化
+AngApplication.kt      # @HiltAndroidApp；WorkManager(:bg)、SettingsStore、存储启动屏障
+                       # （完整性检查 → 旧数据导入 → 快照刷新 → 播种，全部成功才放行）
 AppConfig.kt           # 所有常量：pref key、广播 key、MSG_*、端口、URL
 
 core/                  # 与 Xray 内核交互（跨进程，无 UI 依赖）
@@ -112,7 +113,7 @@ core/                  # 与 Xray 内核交互（跨进程，无 UI 依赖）
 data/                  # 唯一持久层（Room 3，数据库 v2rayng.db）
   AppDatabase / AppDao（Profile/Subscription/Asset/Routing/Settings 五个 DAO + 投影）
   SettingsStore（进程内同步快照）/ Prefs（给无注入点的 object 的同步门面）
-  SettingsDefaults / LegacyImporter / LegacyMigrationGate / DatabaseIntegrity
+  SettingsDefaults / LegacyImporter / LegacyMigrationGate / DatabaseIntegrity / StorageBootstrap
   DatabaseCallbacks / DedupeKey
   entities/            # @Entity：ProfileItem / ProfileRaw / ServerAffiliationInfo /
                        # SubscriptionItem / AssetUrlItem / RulesetItem / SettingsEntry
