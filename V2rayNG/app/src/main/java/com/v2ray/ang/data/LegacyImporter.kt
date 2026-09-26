@@ -9,6 +9,24 @@ import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.data.legacy.LegacySnapshot
 import com.v2ray.ang.util.JsonUtil
 
+/** A table a legacy import writes, together with its primary-key column. */
+internal data class ImportedTable(val table: String, val column: String)
+
+/**
+ * Every table [LegacyImporter] writes. LegacyMigrationGate's verification pass walks this same
+ * list; the plan test asserts that [LegacyImporter.ImportPlan.keysOf] knows every entry, so a
+ * new table cannot be added here without a matching key source.
+ */
+internal val IMPORTED_TABLES = listOf(
+    ImportedTable("profiles", "guid"),
+    ImportedTable("profile_stats", "guid"),
+    ImportedTable("profile_raw", "guid"),
+    ImportedTable("subscriptions", "guid"),
+    ImportedTable("assets", "guid"),
+    ImportedTable("routing_rules", "id"),
+    ImportedTable("settings", "key"),
+)
+
 /**
  * The only snapshot -> database transfer implementation. First-time import and old-archive
  * restore share this code path on purpose: two copies would mean two behaviours and one test.
@@ -21,30 +39,72 @@ import com.v2ray.ang.util.JsonUtil
  *     measurable ANR risk on the first process to open the database
  * Orphan cleanup belongs to ProfileDao.cleanupOrphans(), not here.
  *
+ * The transfer is split in two phases on purpose: [plan] is a pure function that computes every
+ * row and the distinct primary keys per table, [importInto] executes exactly that plan. The
+ * gate verifies against the same plan, so "the keys we check" can never drift from "the keys we
+ * write" — and a partially pre-populated database (for example, defaults seeded by an earlier
+ * failed attempt) no longer makes the verification unwinnable.
+ *
  * Called by LegacyMigrationGate inside an immediateTransaction on a writer connection.
  */
 internal object LegacyImporter {
 
-    suspend fun importInto(exec: SqlExec, snapshot: LegacySnapshot) {
-        if (snapshot.isEmpty) return
+    /** One planned row per statement of [importInto], in execution order. */
+    class ImportPlan(
+        val subscriptions: List<SubscriptionRow>,
+        val profiles: List<ProfileRow>,
+        val profileStats: List<StatRow>,
+        val profileRaws: List<RawRow>,
+        val assets: List<AssetUrlItem>,
+        val rules: List<RuleRow>,
+        val settings: List<SettingRow>,
+        private val keysByTable: Map<String, List<String>>,
+    ) {
+        /** Distinct primary keys this plan writes into [table]; empty for unknown tables. */
+        fun keysOf(table: String): List<String> = keysByTable[table].orEmpty()
+    }
+
+    class SubscriptionRow(val guid: String, val sortOrder: Long, val item: SubscriptionItem)
+
+    class ProfileRow(
+        val guid: String,
+        val subscriptionId: String,
+        val sortOrder: Long,
+        val profile: ProfileItem,
+    )
+
+    class StatRow(val guid: String, val delay: Long)
+
+    class RawRow(val guid: String, val content: String)
+
+    class RuleRow(val id: String, val sortOrder: Long, val rule: RulesetItem)
+
+    class SettingRow(val key: String, val value: String?, val kind: String)
+
+    /**
+     * Pure computation of the whole transfer. Mirrors the historical decode order: SUB_IDS
+     * first, then subscriptions outside it, then the synthesized default row, then profiles
+     * group by group (DEFAULT_SUBSCRIPTION_ID leads when absent from SUB_IDS).
+     */
+    fun plan(snapshot: LegacySnapshot): ImportPlan {
         val sortStep = ProfileItem.SORT_STEP
 
         // 1) Subscriptions: the subOrder index becomes sortOrder.
+        val subscriptions = mutableListOf<SubscriptionRow>()
         snapshot.subOrder.forEachIndexed { index, subId ->
             val item = snapshot.subscriptions[subId] ?: return@forEachIndexed
-            insertSubscription(exec, subId, (index + 1) * sortStep, item)
+            subscriptions += SubscriptionRow(subId, (index + 1) * sortStep, item)
         }
         // Subscriptions present in SUB but absent from SUB_IDS still need a row.
         var tail = snapshot.subOrder.size
         snapshot.subscriptions.forEach { (subId, item) ->
             if (subId in snapshot.subOrder) return@forEach
             tail++
-            insertSubscription(exec, subId, tail * sortStep, item)
+            subscriptions += SubscriptionRow(subId, tail * sortStep, item)
         }
 
         if (AppConfig.DEFAULT_SUBSCRIPTION_ID !in snapshot.subscriptions) {
-            insertSubscription(
-                exec,
+            subscriptions += SubscriptionRow(
                 AppConfig.DEFAULT_SUBSCRIPTION_ID,
                 0L,
                 SubscriptionItem(
@@ -55,8 +115,9 @@ internal object LegacyImporter {
         }
 
         // 2) Profiles, group by group; the index inside a group becomes sortOrder.
-        //    DEFAULT_SUBSCRIPTION_ID is emitted first when absent from subOrder, matching
-        //    decodeAllServerList().
+        val profiles = mutableListOf<ProfileRow>()
+        val stats = mutableListOf<StatRow>()
+        val raws = mutableListOf<RawRow>()
         val groupOrder = buildList {
             if (AppConfig.DEFAULT_SUBSCRIPTION_ID !in snapshot.subOrder) {
                 add(AppConfig.DEFAULT_SUBSCRIPTION_ID)
@@ -67,51 +128,63 @@ internal object LegacyImporter {
 
         groupOrder.forEach { subId ->
             snapshot.groups[subId]?.forEachIndexed { index, (guid, profile) ->
-                insertProfile(exec, guid, subId, (index + 1) * sortStep, profile)
-                snapshot.stats[guid]?.let { delay ->
-                    exec("INSERT OR REPLACE INTO profile_stats (guid, testDelayMillis) VALUES (?, ?)") {
-                        bindText(1, guid)
-                        bindLong(2, delay)
-                        step()
-                    }
-                }
-                snapshot.raws[guid]?.let { raw ->
-                    exec("INSERT OR REPLACE INTO profile_raw (guid, content) VALUES (?, ?)") {
-                        bindText(1, guid)
-                        bindText(2, raw)
-                        step()
-                    }
-                }
+                profiles += ProfileRow(guid, subId, (index + 1) * sortStep, profile)
+                snapshot.stats[guid]?.let { stats += StatRow(guid, it) }
+                snapshot.raws[guid]?.let { raws += RawRow(guid, it) }
             }
         }
 
-        // 3) Assets.
-        snapshot.assets.forEach { insertAsset(exec, it) }
-
-        // 4) Routing rules: the array index becomes sortOrder.
-        snapshot.rulesets.forEachIndexed { index, rule ->
-            insertRule(exec, rule, (index + 1) * sortStep)
+        // 3) Routing rules: the array index becomes sortOrder. An id-less legacy rule would
+        //    collide on the primary key; give it a stable synthetic one.
+        val rules = snapshot.rulesets.mapIndexed { index, rule ->
+            val sortOrder = (index + 1) * sortStep
+            RuleRow(rule.id.ifBlank { "legacy-$sortOrder" }, sortOrder, rule)
         }
 
-        // 5) Scalar preferences, SELECTED_SERVER and WEBDAV_CONFIG.
-        snapshot.settings.forEach { entry ->
-            putSetting(exec, entry.key, entry.value, entry.kind)
-        }
+        // 4) Scalar preferences, plus the dedupeKey algorithm version for later comparison.
+        val settings = snapshot.settings.map { SettingRow(it.key, it.value, it.kind) } +
+            SettingRow(
+                SettingsStore.KEY_DEDUPE_ALGO_VERSION,
+                ProfileItem.DEDUPE_ALGO_VERSION.toString(),
+                SettingsStore.KIND_INT,
+            )
 
-        // 6) dedupeKey algorithm version, for later comparison and backfill.
-        putSetting(
-            exec,
-            SettingsStore.KEY_DEDUPE_ALGO_VERSION,
-            ProfileItem.DEDUPE_ALGO_VERSION.toString(),
-            SettingsStore.KIND_INT,
+        val keysByTable = mapOf(
+            "profiles" to profiles.map { it.guid }.distinct(),
+            "profile_stats" to stats.map { it.guid }.distinct(),
+            "profile_raw" to raws.map { it.guid }.distinct(),
+            "subscriptions" to subscriptions.map { it.guid }.distinct(),
+            "assets" to snapshot.assets.map { it.guid }.distinct(),
+            "routing_rules" to rules.map { it.id }.distinct(),
+            "settings" to settings.map { it.key }.distinct(),
         )
+
+        return ImportPlan(
+            subscriptions = subscriptions,
+            profiles = profiles,
+            profileStats = stats,
+            profileRaws = raws,
+            assets = snapshot.assets.toList(),
+            rules = rules,
+            settings = settings,
+            keysByTable = keysByTable,
+        )
+    }
+
+    /** Executes [plan] through [exec]; each callback binds, the executor steps once. */
+    suspend fun importInto(exec: SqlExec, plan: ImportPlan) {
+        plan.subscriptions.forEach { insertSubscription(exec, it) }
+        plan.profiles.forEach { insertProfile(exec, it) }
+        plan.profileStats.forEach { insertStat(exec, it) }
+        plan.profileRaws.forEach { insertRaw(exec, it) }
+        plan.assets.forEach { insertAsset(exec, it) }
+        plan.rules.forEach { insertRule(exec, it) }
+        plan.settings.forEach { putSetting(exec, it) }
     }
 
     private suspend fun insertSubscription(
         exec: SqlExec,
-        guid: String,
-        sortOrder: Long,
-        item: SubscriptionItem,
+        row: SubscriptionRow,
     ) = exec(
         """
         INSERT OR REPLACE INTO subscriptions
@@ -121,38 +194,35 @@ internal object LegacyImporter {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """
     ) {
-        bindText(1, guid)
-        bindLong(2, sortOrder)
-        bindText(3, item.remarks)
-        bindText(4, item.url)
-        bindLong(5, item.enabled.toSqlite())
-        bindLong(6, item.addedTime)
-        bindLong(7, item.lastUpdated)
-        bindLong(8, item.autoUpdate.toSqlite())
-        bindLong(9, item.updateInterval)
-        bindNullableText(10, item.prevProfile)
-        bindNullableText(11, item.nextProfile)
-        bindNullableText(12, item.filter)
-        bindLong(13, item.allowInsecureUrl.toSqlite())
-        bindNullableText(14, item.userAgent)
-        bindNullableText(15, item.requestHeaders)
-        step()
+        bindText(1, row.guid)
+        bindLong(2, row.sortOrder)
+        bindText(3, row.item.remarks)
+        bindText(4, row.item.url)
+        bindLong(5, row.item.enabled.toSqlite())
+        bindLong(6, row.item.addedTime)
+        bindLong(7, row.item.lastUpdated)
+        bindLong(8, row.item.autoUpdate.toSqlite())
+        bindLong(9, row.item.updateInterval)
+        bindNullableText(10, row.item.prevProfile)
+        bindNullableText(11, row.item.nextProfile)
+        bindNullableText(12, row.item.filter)
+        bindLong(13, row.item.allowInsecureUrl.toSqlite())
+        bindNullableText(14, row.item.userAgent)
+        bindNullableText(15, row.item.requestHeaders)
     }
 
     @Suppress("DEPRECATION")
     private suspend fun insertProfile(
         exec: SqlExec,
-        guid: String,
-        subscriptionId: String,
-        sortOrder: Long,
-        p: ProfileItem,
+        row: ProfileRow,
     ) = exec(PROFILE_INSERT) {
-        bindText(1, guid)
-        bindLong(2, sortOrder)
+        val p = row.profile
+        bindText(1, row.guid)
+        bindLong(2, row.sortOrder)
         bindText(3, "")                      // dedupeKey: lazily backfilled
         bindLong(4, p.configVersion.toLong())
         bindLong(5, p.configType.value.toLong())
-        bindText(6, subscriptionId)
+        bindText(6, row.subscriptionId)
         bindLong(7, p.addedTime)
         bindText(8, p.remarks)
         bindNullableText(9, p.description)
@@ -207,7 +277,20 @@ internal object LegacyImporter {
         bindNullableText(58, p.policyGroupFallbackTag)
         bindNullableText(59, p.proxyChainProfiles)
         bindNullableText(60, p.browserDialerMode)
-        step()
+    }
+
+    private suspend fun insertStat(exec: SqlExec, row: StatRow) = exec(
+        "INSERT OR REPLACE INTO profile_stats (guid, testDelayMillis) VALUES (?, ?)"
+    ) {
+        bindText(1, row.guid)
+        bindLong(2, row.delay)
+    }
+
+    private suspend fun insertRaw(exec: SqlExec, row: RawRow) = exec(
+        "INSERT OR REPLACE INTO profile_raw (guid, content) VALUES (?, ?)"
+    ) {
+        bindText(1, row.guid)
+        bindText(2, row.content)
     }
 
     private suspend fun insertAsset(exec: SqlExec, asset: AssetUrlItem) =
@@ -223,13 +306,11 @@ internal object LegacyImporter {
             bindLong(4, asset.addedTime)
             bindLong(5, asset.lastUpdated)
             bindNullableLong(6, asset.locked?.toSqlite())
-            step()
         }
 
     private suspend fun insertRule(
         exec: SqlExec,
-        rule: RulesetItem,
-        sortOrder: Long,
+        row: RuleRow,
     ) = exec(
         """
         INSERT OR REPLACE INTO routing_rules
@@ -238,9 +319,9 @@ internal object LegacyImporter {
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """
     ) {
-        // An id-less legacy rule would collide on the primary key; give it a stable synthetic one.
-        bindText(1, rule.id.ifBlank { "legacy-$sortOrder" })
-        bindLong(2, sortOrder)
+        val rule = row.rule
+        bindText(1, row.id)
+        bindLong(2, row.sortOrder)
         bindNullableText(3, rule.remarks)
         bindNullableText(4, rule.ip?.let(JsonUtil::toJson))
         bindNullableText(5, rule.domain?.let(JsonUtil::toJson))
@@ -251,21 +332,17 @@ internal object LegacyImporter {
         bindNullableText(10, rule.protocol?.let(JsonUtil::toJson))
         bindLong(11, rule.enabled.toSqlite())
         bindNullableLong(12, rule.locked?.toSqlite())
-        step()
     }
 
     private suspend fun putSetting(
         exec: SqlExec,
-        key: String,
-        value: String?,
-        kind: String,
+        row: SettingRow,
     ) = exec(
         "INSERT OR REPLACE INTO settings (key, value, kind) VALUES (?,?,?)"
     ) {
-        bindText(1, key)
-        bindNullableText(2, value)
-        bindText(3, kind)
-        step()
+        bindText(1, row.key)
+        bindNullableText(2, row.value)
+        bindText(3, row.kind)
     }
 
     private fun SQLiteStatement.bindNullableText(index: Int, value: String?) {

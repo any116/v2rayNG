@@ -16,6 +16,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.data.ServerRowProjection
 import com.v2ray.ang.data.SettingsStore
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.data.SubscriptionDao
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.ConnectionTestResponse
@@ -134,8 +135,15 @@ open class MainRepository @Inject constructor(
         }
     }
 
-    /** Suspends until the settings snapshot is ready for the calling process. */
-    open suspend fun awaitReady() = settings.awaitReady()
+    /**
+     * Suspends until this process' storage bootstrap (integrity check, legacy import, settings
+     * refresh) and the settings snapshot are both ready. Throws when the bootstrap failed;
+     * callers must surface that instead of continuing with coded defaults.
+     */
+    open suspend fun awaitReady() {
+        StorageBootstrap.awaitReady()
+        settings.awaitReady()
+    }
 
     // ---- Preferences: snapshot reads, stay synchronous ----
 
