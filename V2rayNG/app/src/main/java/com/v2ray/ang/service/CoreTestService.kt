@@ -19,6 +19,7 @@ import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.AppLocaleManager
+import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
@@ -50,6 +51,16 @@ class CoreTestService : Service() {
     private val units: MutableSet<BatchUnit> =
         Collections.newSetFromMap(ConcurrentHashMap<BatchUnit, Boolean>())
 
+    /**
+     * Requests accepted but still preparing (settings refresh + target lookup), not yet in
+     * [units]. Without this a cancel arriving during preparation found nothing to cancel and
+     * the batch started anyway.
+     */
+    private val pendingRequests: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** Makes "pending -> unit" and "cancel pending" mutually exclusive. */
+    private val claimLock = Any()
+
     private val serviceScope by lazy { CoroutineScope(SupervisorJob() + io) }
     private val resultWriter by lazy {
         TestResultWriter(dao = PlatformDependencies.profileDao(this), scope = serviceScope)
@@ -80,7 +91,7 @@ class CoreTestService : Service() {
     override fun onCreate() {
         super.onCreate()
         CoreNativeManager.initCoreEnv(this)
-        // This service can run in the daemon process, whose snapshot may not be warm yet.
+        // Warm-up only. Each batch start still refreshes explicitly before reading preferences.
         serviceScope.launch {
             runCatching { PlatformDependencies.settingsStore(this@CoreTestService).refresh() }
                 .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: preference refresh failed", it) }
@@ -92,7 +103,11 @@ class CoreTestService : Service() {
 
     /** Service death invalidates every request, so each one gets its own cancel reply. */
     override fun onDestroy() {
-        LogUtil.i(AppConfig.TAG, "CoreTestService destroyed, cancelling ${units.size} units")
+        LogUtil.i(
+            AppConfig.TAG,
+            "CoreTestService destroyed, cancelling ${units.size} units, ${pendingRequests.size} pending"
+        )
+        cancelPending(null)
         cancelUnits(units.toList())
         // Bounded loss on the cancel path only: at most one flush window. The normal finish path
         // always flushes before reporting.
@@ -133,11 +148,21 @@ class CoreTestService : Service() {
         }
         LogUtil.i(AppConfig.TAG, "CoreTestService starting request $requestId for ${message.subscriptionId}")
 
-        // Defence against silently shadowing an older batch: still-registered units are cancelled
-        // and reported, never dropped.
+        // Defence against silently shadowing an older batch: still-registered or still-preparing
+        // requests are cancelled and reported, never dropped.
+        cancelPending(null)
         cancelUnits(units.toList())
+        pendingRequests.add(requestId)
 
         serviceScope.launch {
+            // The :tasks process snapshot may still be cold (bootstrap waits on the legacy gate)
+            // or stale (the user just edited the value in the UI process). Reading before this
+            // returned the coded default 16. refresh() completes the ready signal in finally,
+            // so a failure degrades to defaults instead of hanging.
+            runCatching { PlatformDependencies.settingsStore(this@CoreTestService).refresh() }
+                .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: preference refresh failed", it) }
+            val concurrency = SettingsManager.getRealPingConcurrency()
+
             val dao = PlatformDependencies.profileDao(this@CoreTestService)
             // subscriptionId = '' resolves to the whole visible set, which is what the previous
             // decodeAllServerList() branch produced.
@@ -146,8 +171,10 @@ class CoreTestService : Service() {
                     .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: failed to load targets", it) }
                     .getOrDefault(emptyList())
             }
+
             if (guids.isEmpty()) {
-                sendCanceled(requestId)
+                // Only the party that removes the pending entry may report.
+                if (pendingRequests.remove(requestId)) sendCanceled(requestId)
                 stopIfIdle(startId)
                 return@launch
             }
@@ -157,10 +184,30 @@ class CoreTestService : Service() {
                 context = this@CoreTestService,
                 profileDao = dao,
                 guids = guids,
+                concurrency = concurrency,
                 onlyTcp = message.onlyTcp,
                 onEvent = { event -> handleWorkerEvent(event, unit) }
             )
-            units.add(unit)
+
+            val claimed = synchronized(claimLock) {
+                if (pendingRequests.remove(requestId)) {
+                    units.add(unit)
+                    true
+                } else {
+                    false
+                }
+            }
+            if (!claimed) {
+                // Cancelled while preparing; the cancel reply has already been sent.
+                LogUtil.i(AppConfig.TAG, "CoreTestService request $requestId cancelled before start")
+                stopIfIdle()
+                return@launch
+            }
+
+            LogUtil.i(
+                AppConfig.TAG,
+                "CoreTestService request $requestId: ${guids.size} targets, concurrency $concurrency"
+            )
             unit.worker.start()
         }
     }
@@ -200,14 +247,31 @@ class CoreTestService : Service() {
     }
 
     private fun handleMeasureCancel(message: TestServiceMessage) {
-        val targets = if (message.requestId.isEmpty()) {
+        val requestId = message.requestId.ifEmpty { null }
+        // Pending first, then snapshot units: together with claimLock this guarantees a request
+        // is either cancelled while pending or found in units, never missed in between.
+        val pendingCount = cancelPending(requestId)
+        val targets = if (requestId == null) {
             units.toList()
         } else {
-            units.filter { it.requestId == message.requestId }
+            units.filter { it.requestId == requestId }
         }
-        LogUtil.i(AppConfig.TAG, "CoreTestService cancelling ${targets.size} units")
+        LogUtil.i(AppConfig.TAG, "CoreTestService cancelling ${targets.size} units, $pendingCount pending")
         cancelUnits(targets)
         stopIfIdle()
+    }
+
+    /** @param requestId null cancels every pending request. @return number of cancelled requests. */
+    private fun cancelPending(requestId: String?): Int {
+        val claimed = synchronized(claimLock) {
+            val ids = if (requestId == null) pendingRequests.toList() else listOf(requestId)
+            ids.filter { pendingRequests.remove(it) }
+        }
+        claimed.forEach { id ->
+            runCatching { sendCanceled(id) }
+                .onFailure { LogUtil.e(AppConfig.TAG, "Failed to report cancel of pending $id", it) }
+        }
+        return claimed.size
     }
 
     /** Cancels each unit in isolation, so one failure cannot block the remaining requests. */
@@ -237,8 +301,9 @@ class CoreTestService : Service() {
     private fun sendNotify(key: Int, requestId: String, payload: String = "") =
         MessageHelper.sendMsg2UI(this, key, TestNotification(requestId, payload))
 
+    /** A request still preparing counts as work: stopping now would kill it mid-lookup. */
     private fun stopIfIdle(startId: Int? = null) {
-        if (units.isNotEmpty()) return
+        if (units.isNotEmpty() || pendingRequests.isNotEmpty()) return
         NotificationHelper.stopForeground(this)
         if (startId == null) stopSelf() else stopSelf(startId)
     }

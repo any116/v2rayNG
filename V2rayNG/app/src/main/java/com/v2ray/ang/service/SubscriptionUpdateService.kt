@@ -17,6 +17,7 @@ import com.v2ray.ang.enums.NotificationChannelType
 import com.v2ray.ang.extension.serializable
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.AppLocaleManager
+import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -200,12 +201,19 @@ class SubscriptionUpdateService : Service() {
         val profileDao = PlatformDependencies.profileDao(this)
         val guids = profileDao.guidsInGroup(subId)
         if (guids.isNotEmpty()) {
+            // The :tasks process snapshot may still be cold or stale. Refresh before reading the
+            // concurrency preference, matching CoreTestService. A failure degrades to defaults.
+            runCatching { PlatformDependencies.settingsStore(this@SubscriptionUpdateService).refresh() }
+                .onFailure { LogUtil.e(AppConfig.TAG, "SubscriptionUpdateService: preference refresh failed", it) }
+            val concurrency = SettingsManager.getRealPingConcurrency()
+
             val deferred = CompletableDeferred<Unit>()
             lateinit var worker: RealPingWorkerService
             worker = RealPingWorkerService(
                 context = this,
                 profileDao = profileDao,
                 guids = guids,
+                concurrency = concurrency,
                 onEvent = { event ->
                     handleWorkerEvent(event, sub.remarks) {
                         activeWorkers.remove(worker)
