@@ -8,6 +8,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.di.PlatformDependencies
@@ -21,6 +22,7 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -86,6 +88,10 @@ class SubscriptionUpdateService : Service() {
         CoroutineScope(io).launch {
             try {
                 resultWriter.stop()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "SubscriptionUpdateService: final result flush failed", e)
             } finally {
                 writerScope.cancel()
             }
@@ -131,6 +137,13 @@ class SubscriptionUpdateService : Service() {
         serviceScope.launch {
             updateSemaphore.withPermit {
                 try {
+                    // Before the first DAO access: the :tasks bootstrap may still be running the
+                    // legacy import, and updating against an un-imported database would import
+                    // into a store the next retry does not recognise.
+                    if (!StorageBootstrap.awaitReadyOrNull()) {
+                        LogUtil.w(AppConfig.TAG, "SubscriptionUpdateService: storage not ready; update skipped")
+                        return@withPermit
+                    }
                     message.subIds.forEach { subId ->
                         updateSingle(subId, message.forcedUpdate)
                     }
@@ -164,7 +177,14 @@ class SubscriptionUpdateService : Service() {
         }
 
         if (Prefs.bool(AppConfig.PREF_AUTO_TEST_AFTER_UPDATE_SUBSCRIPTION, false)) {
-            testSubscriptionServers(subItem)
+            if (!testSubscriptionServers(subItem)) {
+                LogUtil.w(
+                    AppConfig.TAG,
+                    "SubscriptionUpdateService: skipping post-processing for ${subItem.remarks}; " +
+                        "test results were not persisted"
+                )
+                return
+            }
 
             if (Prefs.bool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST, false)) {
                 LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: removing invalid servers for ${subItem.remarks}")
@@ -189,7 +209,8 @@ class SubscriptionUpdateService : Service() {
         LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: Finished ${subItem.remarks}")
     }
 
-    private suspend fun testSubscriptionServers(sub: SubscriptionItem) {
+    /** @return false when results could not be persisted; callers must skip post-processing. */
+    private suspend fun testSubscriptionServers(sub: SubscriptionItem): Boolean {
         val subId = sub.guid
         LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: starting test phase for ${sub.remarks}")
         showNotification(
@@ -200,33 +221,50 @@ class SubscriptionUpdateService : Service() {
 
         val profileDao = PlatformDependencies.profileDao(this)
         val guids = profileDao.guidsInGroup(subId)
-        if (guids.isNotEmpty()) {
-            // The :tasks process snapshot may still be cold or stale. Refresh before reading the
-            // concurrency preference, matching CoreTestService. A failure degrades to defaults.
-            runCatching { PlatformDependencies.settingsStore(this@SubscriptionUpdateService).refresh() }
-                .onFailure { LogUtil.e(AppConfig.TAG, "SubscriptionUpdateService: preference refresh failed", it) }
-            val concurrency = SettingsManager.getRealPingConcurrency()
-
-            val deferred = CompletableDeferred<Unit>()
-            lateinit var worker: RealPingWorkerService
-            worker = RealPingWorkerService(
-                context = this,
-                profileDao = profileDao,
-                guids = guids,
-                concurrency = concurrency,
-                onEvent = { event ->
-                    handleWorkerEvent(event, sub.remarks) {
-                        activeWorkers.remove(worker)
-                        deferred.complete(Unit)
-                    }
-                }
-            )
-            activeWorkers.add(worker)
-            worker.start()
-            deferred.await()
-            resultWriter.flush()
+        if (guids.isEmpty()) {
             LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: test phase finished for ${sub.remarks}")
+            return true
         }
+
+        // The :tasks process snapshot may still be cold or stale. Refresh before reading the
+        // concurrency preference, matching CoreTestService. A failure degrades to defaults.
+        runCatching { PlatformDependencies.settingsStore(this@SubscriptionUpdateService).refresh() }
+            .onFailure { LogUtil.e(AppConfig.TAG, "SubscriptionUpdateService: preference refresh failed", it) }
+        val concurrency = SettingsManager.getRealPingConcurrency()
+
+        val deferred = CompletableDeferred<Unit>()
+        lateinit var worker: RealPingWorkerService
+        worker = RealPingWorkerService(
+            context = this,
+            profileDao = profileDao,
+            guids = guids,
+            concurrency = concurrency,
+            onEvent = { event ->
+                handleWorkerEvent(event, sub.remarks) {
+                    activeWorkers.remove(worker)
+                    deferred.complete(Unit)
+                }
+            }
+        )
+        activeWorkers.add(worker)
+        worker.start()
+        deferred.await()
+
+        // Barrier + persistence check: the delay-based post-processing may only run on delays
+        // that actually reached profile_stats.
+        val flushed = try {
+            resultWriter.flush()
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "SubscriptionUpdateService: final test-result flush failed", e)
+            false
+        }
+        if (!flushed) return false
+
+        LogUtil.i(AppConfig.TAG, "SubscriptionUpdateService: test phase finished for ${sub.remarks}")
+        return true
     }
 
     private fun handleWorkerEvent(event: RealPingEvent, remarks: String, onWorkerDone: () -> Unit) {

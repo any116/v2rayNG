@@ -31,6 +31,16 @@
   服务侧把每个 `RealPingEvent.Result` 交给 `service/TestResultWriter` 合并，
   每 400ms（`FLUSH_INTERVAL_MS`，与旧 `DELAY_REFRESH_INTERVAL_MS` 对齐）在**单个事务**里
   `upsertStats` 写入 `profile_stats`。
+- `TestResultWriter.flush()` 是**落盘屏障**：`Mutex` 覆盖"取批次 + 写库"全过程，空队列
+  判断也在锁内，显式最终 flush 不会越过仍在提交中的窗口 flush。写失败会把批次重新入队
+  （`putIfAbsent`，不覆盖写入期间到达的新结果）并向上抛：定时循环记日志、下个窗口重试；
+  完成阶段的显式调用失败时**不得**继续排序/清理/宣告完成。
+- `stop()` 在 `NonCancellable` 里先 `cancelAndJoin` 定时循环、再最终 flush；
+  `CoreTestService.onDestroy` 用 `CoroutineStart.UNDISPATCHED` 启动清理协程后才
+  `serviceScope.cancel()`——否则"launch 后立刻 cancel"可能让清理根本没执行、缓冲结果丢失。
+- 完成阶段的异步后处理计入 `CoreTestService.finalizing`：`stopIfIdle` 只有它归零才允许停服务。
+- `CoreTestService` / `SubscriptionUpdateService` 首次访问 DAO 前先等 `StorageBootstrap`；
+  未就绪时测试请求按取消处理、订阅更新直接跳过，不用冷快照继续。
 - UI 侧刷新是**数据库失效驱动**的：`profile_stats` 变化 → `MainRepository.serverPager`
   的 `PagingSource` 失效 → `LazyPagingItems` 自动重取受影响行。
   因此 `MainViewModel.handleServiceEvent` 里 `MeasureConfigSuccess` 是 **no-op**，

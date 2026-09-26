@@ -10,6 +10,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.dto.RealPingEvent
@@ -24,13 +25,16 @@ import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -60,6 +64,13 @@ class CoreTestService : Service() {
 
     /** Makes "pending -> unit" and "cancel pending" mutually exclusive. */
     private val claimLock = Any()
+
+    /**
+     * Finish handlers that were claimed but have not completed their async tail (final flush +
+     * post-processing + notify) yet. They count as "the service still has work": stopping now
+     * would kill the final flush and drop buffered results.
+     */
+    private val finalizing = AtomicInteger(0)
 
     private val serviceScope by lazy { CoroutineScope(SupervisorJob() + io) }
     private val resultWriter by lazy {
@@ -93,6 +104,7 @@ class CoreTestService : Service() {
         CoreNativeManager.initCoreEnv(this)
         // Warm-up only. Each batch start still refreshes explicitly before reading preferences.
         serviceScope.launch {
+            if (!StorageBootstrap.awaitReadyOrNull()) return@launch
             runCatching { PlatformDependencies.settingsStore(this@CoreTestService).refresh() }
                 .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: preference refresh failed", it) }
         }
@@ -109,9 +121,14 @@ class CoreTestService : Service() {
         )
         cancelPending(null)
         cancelUnits(units.toList())
-        // Bounded loss on the cancel path only: at most one flush window. The normal finish path
-        // always flushes before reporting.
-        serviceScope.launch { resultWriter.stop() }
+        // The final flush must survive serviceScope's cancellation. Launch it undispatched so it
+        // starts synchronously, and stop() itself switches to NonCancellable before the write —
+        // the previous "launch { stop() }; cancel()" pair could cancel the cleanup coroutine
+        // before it ever ran and silently drop the buffered results.
+        serviceScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { resultWriter.stop() }
+                .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: final result flush failed", it) }
+        }
         serviceScope.cancel()
         NotificationHelper.stopForeground(this)
         super.onDestroy()
@@ -155,10 +172,20 @@ class CoreTestService : Service() {
         pendingRequests.add(requestId)
 
         serviceScope.launch {
-            // The :tasks process snapshot may still be cold (bootstrap waits on the legacy gate)
-            // or stale (the user just edited the value in the UI process). Reading before this
-            // returned the coded default 16. refresh() completes the ready signal in finally,
-            // so a failure degrades to defaults instead of hanging.
+            // The :tasks bootstrap runs the same gate as the UI process; a batch must not read
+            // (or later write) through the DAO while the legacy import is still in flight. On
+            // storage failure resolve the request as cancelled instead of testing half-blind.
+            if (!StorageBootstrap.awaitReadyOrNull()) {
+                LogUtil.w(AppConfig.TAG, "CoreTestService: storage not ready; request $requestId cancelled")
+                if (pendingRequests.remove(requestId)) sendCanceled(requestId)
+                stopIfIdle()
+                return@launch
+            }
+
+            // The :tasks process snapshot may still be cold or stale (the user just edited the
+            // value in the UI process). Reading before this returned the coded default 16.
+            // refresh() completes the ready signal in finally, so a failure degrades to
+            // defaults instead of hanging.
             runCatching { PlatformDependencies.settingsStore(this@CoreTestService).refresh() }
                 .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: preference refresh failed", it) }
             val concurrency = SettingsManager.getRealPingConcurrency()
@@ -235,12 +262,26 @@ class CoreTestService : Service() {
             RealPingEvent.Finish -> {
                 // Losing the claim means the unit was already cancelled; do not also finish it.
                 if (!units.remove(unit)) return
+                finalizing.incrementAndGet()
                 serviceScope.launch {
-                    // Must complete before post-processing: sorting reads the delays just written.
-                    resultWriter.flush()
-                    applyPostProcessing(unit.subscriptionId)
-                    sendNotify(AppConfig.MSG_MEASURE_CONFIG_FINISH, unit.requestId)
-                    stopIfIdle()
+                    try {
+                        // Barrier: waits for any windowed flush still in flight, so
+                        // post-processing reads every result recorded before this point.
+                        resultWriter.flush()
+                        applyPostProcessing(unit.subscriptionId)
+                        sendNotify(AppConfig.MSG_MEASURE_CONFIG_FINISH, unit.requestId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Results could not be persisted: do not sort or clean up against stale
+                        // delays, and do not report success. The request ends as cancelled so
+                        // the UI does not stay in "testing".
+                        LogUtil.e(AppConfig.TAG, "CoreTestService: final flush failed for ${unit.requestId}", e)
+                        runCatching { sendCanceled(unit.requestId) }
+                    } finally {
+                        finalizing.decrementAndGet()
+                        stopIfIdle()
+                    }
                 }
             }
         }
@@ -301,9 +342,9 @@ class CoreTestService : Service() {
     private fun sendNotify(key: Int, requestId: String, payload: String = "") =
         MessageHelper.sendMsg2UI(this, key, TestNotification(requestId, payload))
 
-    /** A request still preparing counts as work: stopping now would kill it mid-lookup. */
+    /** A request still preparing or still finalizing counts as work: stopping now would kill it. */
     private fun stopIfIdle(startId: Int? = null) {
-        if (units.isNotEmpty() || pendingRequests.isNotEmpty()) return
+        if (units.isNotEmpty() || pendingRequests.isNotEmpty() || finalizing.get() > 0) return
         NotificationHelper.stopForeground(this)
         if (startId == null) stopSelf() else stopSelf(startId)
     }
