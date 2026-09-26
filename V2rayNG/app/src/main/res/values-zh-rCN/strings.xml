@@ -12,6 +12,9 @@
     <string name="action_cancel">取消</string>
     <string name="migration_fail">数据迁移失败啦!</string>
     <string name="pull_down_to_refresh">请下拉刷新!</string>
+    <string name="action_retry">重试</string>
+    <string name="boot_storage_failed_title">初始化未完成</string>
+    <string name="boot_storage_failed_message">应用数据尚未就绪，请重试；若持续失败，请重启应用。</string>
 
     <!-- Notifications -->
     <string name="notification_action_stop_v2ray">停止</string>
