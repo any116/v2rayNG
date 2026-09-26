@@ -174,9 +174,18 @@ interface ProfileDao {
      * Routing outbound tags, proxy chain nodes and policy-group fallback tags are all resolved
      * by remark. Duplicate remarks are common in subscriptions, so the ORDER BY is not
      * cosmetic: without it the row SQLite happens to return first is unspecified, and the
-     * core config would drift between launches.
+     * core config would drift between launches. The order matches the global list order
+     * (subscription order first, then the in-group order), so reordering subscriptions cannot
+     * silently repoint a remark-based reference at a different node.
      */
-    @Query("SELECT * FROM profiles WHERE remarks = :remarks ORDER BY sortOrder, guid LIMIT 1")
+    @Query(
+        """
+        SELECT * FROM profiles
+         WHERE remarks = :remarks
+         ORDER BY groupSortOrder, sortOrder, guid
+         LIMIT 1
+        """
+    )
     suspend fun findByRemarks(remarks: String): ProfileItem?
 
     @Query(
@@ -326,46 +335,47 @@ interface ProfileDao {
     }
 
     /**
-     * Single-statement renumbering.
+     * Renumbers the group into a dense sequence. Read-then-write on purpose: the former single
+     * UPDATE ranked the same table while rewriting it, and SQLite gives a correlated subquery no
+     * snapshot guarantee — rows updated early were re-read by later ranks, which collapsed
+     * originally distinct sortOrders to duplicates and broke the spacing the drag path relies on.
+     * The read and every write run inside one transaction, so the order cannot change in between.
      */
-    @Query(
-        """
-        UPDATE profiles SET sortOrder = (
-            SELECT rn FROM (
-                SELECT guid AS g,
-                       ROW_NUMBER() OVER (
-                           ORDER BY groupSortOrder, sortOrder, guid
-                       ) * 1024 AS rn
-                  FROM profiles
-                 WHERE subscriptionId = :subscriptionId
-            ) WHERE g = profiles.guid
-        ) WHERE subscriptionId = :subscriptionId
-        """
-    )
-    suspend fun renormalize(subscriptionId: String)
+    @Transaction
+    suspend fun renormalize(subscriptionId: String) {
+        guidsInGroup(subscriptionId).forEachIndexed { index, guid ->
+            setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP)
+        }
+    }
 
     /**
-     * Single-statement re-sort by test delay.
+     * Guids of one group ranked by test delay, failures and untested rows last. Mirrors the
+     * ORDER BY of the former single-statement re-sort, so equal delays keep their list order.
      */
     @Query(
         """
-        UPDATE profiles SET sortOrder = (
-            SELECT new_sort FROM (
-                SELECT p.guid AS g,
-                       ROW_NUMBER() OVER (
-                           ORDER BY CASE WHEN IFNULL(st.testDelayMillis, 0) <= 0
-                                         THEN 9223372036854775807
-                                         ELSE st.testDelayMillis END,
-                                    p.groupSortOrder, p.sortOrder, p.guid
-                       ) * 1024 AS new_sort
-                  FROM profiles p
-                  LEFT JOIN profile_stats st ON st.guid = p.guid
-                 WHERE p.subscriptionId = :subscriptionId
-            ) WHERE g = profiles.guid
-        ) WHERE subscriptionId = :subscriptionId
+        SELECT p.guid FROM profiles AS p
+          LEFT JOIN profile_stats AS st ON st.guid = p.guid
+         WHERE p.subscriptionId = :subscriptionId
+         ORDER BY CASE WHEN IFNULL(st.testDelayMillis, 0) <= 0
+                       THEN 9223372036854775807
+                       ELSE st.testDelayMillis END,
+                  p.groupSortOrder, p.sortOrder, p.guid
         """
     )
-    suspend fun sortByDelay(subscriptionId: String)
+    suspend fun guidsByDelay(subscriptionId: String): List<String>
+
+    /**
+     * Re-sorts the group by test delay. Two-phase for the same reason as [renormalize]: the
+     * rank must be computed against the pre-update order, never against rows this method is
+     * already rewriting.
+     */
+    @Transaction
+    suspend fun sortByDelay(subscriptionId: String) {
+        guidsByDelay(subscriptionId).forEachIndexed { index, guid ->
+            setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP)
+        }
+    }
 
     // ---- Deletion: all three tables together ----
 
