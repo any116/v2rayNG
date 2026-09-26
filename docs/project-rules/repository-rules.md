@@ -86,7 +86,9 @@ open class XxxRepository @Inject constructor(
     placeholders 下 placeholder 行的 key 不是 guid）；
   - 去重：`duplicateGuids`（`dedupeKey` 唯一化，保留最小 `sortOrder`）。
 - 排序是**稀疏 `sortOrder`**（步长 `ProfileItem.SORT_STEP = 1024`），
-  拖拽用中点插入；相邻间隔不足时 `renormalize(subscriptionId)` 单语句重排。
+  拖拽用中点插入；相邻间隔不足时 `renormalize(subscriptionId)` 在事务内先读顺序再逐行重写，
+  按延迟排序同理（`guidsByDelay` + `sortByDelay`）。**不要用"单条 UPDATE 边写边算"的写法**：
+  SQLite 不保证相关子查询读到更新前的排名，实测会产出重复 `sortOrder`、破坏拖拽间距。
   `groupSortOrder` 是订阅顺序的冗余列，由 `data/DatabaseCallbacks.kt` 的
   `GROUP_ORDER_TRIGGERS` 在 SQL 层维护，**不要手写**。
 - 写操作优先用 `@Upsert` / `@Insert(REPLACE)`；跨表一致性用 `@Transaction` 组合方法
@@ -175,10 +177,16 @@ writeJob = launch {
   不覆盖升级路径——升级缺 Migration 就该崩，不能静默丢数据）。
 - 打开前必须先跑 `LegacyMigrationGate.runIfNeeded(...)`：它同时持有
   **进程内 `Mutex`** 与 **跨进程 `FileLock`**（`files/legacy_import.lock`），
-  内层先 `DatabaseIntegrity.verifyOrQuarantine(app)`（`PRAGMA integrity_check`，损坏则隔离重建），
-  再在 `immediateTransaction` 里 `LegacyImporter.importInto(...)`，
-  最后按表计数校验并写 `LEGACY_IMPORT_STATE=done`。计数不符会回滚并下次重试。
-  导入幂等靠 `LEGACY_IMPORT_STATE` + 主键 + 计数校验，不要绕过这个门。
+  内层先 `DatabaseIntegrity.verifyOrThrow(app)`（`PRAGMA integrity_check` + `busy_timeout`；
+  **检查失败只抛异常，绝不移动/删除数据库文件**——"检查没跑成"不等于"库损坏"），
+  再在 `immediateTransaction` 里执行 `LegacyImporter.plan(snapshot)` 生成、`importInto` 执行的计划，
+  最后按计划主键校验：导入前统计已有主键数，导入后要求
+  `行数增量 = 计划主键数 − 已有主键数` 且所有计划主键都存在，并写 `LEGACY_IMPORT_STATE=done`。
+  校验不符会回滚并下次重试；**不要假设目标主键在导入前都不存在**（重试时可能已有种子数据）。
+- `AngApplication` 的启动协程串行执行"完整性检查 → 旧数据导入 → 快照刷新 →（仅主进程）播种默认值"，
+  全部成功才 `StorageBootstrap.complete()`；任何一步失败都 `fail()` 并把等待方阻塞住。
+  读取设置/数据库的入口（服务、Boot/Tasker/Tile/快捷方式、UI）必须先等该屏障，
+  失败时显式跳过或报错重试，**禁止用编码默认值继续**。
 - 改 schema：改实体后递增 `AppDatabase.version`，提供 `Migration`，
   重新导出 `app/schemas/**` 并提交；`DatabaseModule` 的 `onCreate/onOpen` 回调负责安装
   `GROUP_ORDER_TRIGGERS`，新增触发器要同时在 `DatabaseCallbacks.kt` 与回调里可见。
