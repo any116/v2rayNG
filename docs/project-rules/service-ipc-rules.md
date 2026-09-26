@@ -49,6 +49,10 @@ Room 的跨进程一致性靠 `DatabaseModule` 的 `enableMultiInstanceInvalidat
   把"需要什么"描述出去，由 `MainActivity` 决定怎么要。
 - API 版本分支写法：用 `Build.VERSION.SDK_INT >= Build.VERSION_CODES.XXX`
   （如本地网络权限用 `CINNAMON_BUN`），不要用数字字面量。
+- 服务在触碰数据库或设置快照之前必须等待 `StorageBootstrap`（`awaitReady()` /
+  `awaitReadyOrNull()`）：它由 `AngApplication` 的存储启动协程在完整性检查、旧数据导入、
+  快照刷新完成后放行。存储未就绪时模式（VPN / Root / 仅代理）、并发数等都会读成编码默认值，
+  必须显式跳过或报错，不能继续启动。
 - Service 的 `serviceScope` 必须 `by lazy`：`@Inject lateinit var io` 只在 `super.onCreate()` 之后可用，
   属性初始化器会在构造期崩溃（样板：`SubscriptionUpdateService`）。
 - `attachBaseContext` 里只能做 locale 包装（`AppLocaleManager.localizedContext`），不得读注入字段。
@@ -58,6 +62,9 @@ Room 的跨进程一致性靠 `DatabaseModule` 的 `enableMultiInstanceInvalidat
 - manifest 注册的三个：`BootReceiver`（开机自启）、`TaskerReceiver`（第三方自动化）、
   `WidgetProvider`（桌面小组件）。
 - 只允许"翻译 + 转发"，禁止业务判断与 IO。需要耗时工作时启动 Service 或入队 Worker。
+- 冷启动型入口（`BootReceiver`、`TaskerReceiver`、`QSTileService`、快捷方式 Activity）在读取
+  `Prefs` 或启动服务之前先 `StorageBootstrap.awaitReadyOrNull(...)`；等不到就跳过并记日志，
+  绝不用冷快照的编码默认值做决策（自动启动开关、运行模式都会读错）。
 - `WidgetProvider` 继承 `GlanceAppWidgetReceiver`，Glance UI 在
   `ui/widget/SwitchWidget.kt`（包 `com.v2ray.ang.ui.widget`；目录名 `ui/widght` 为历史拼写）。
   **改样式改 Composable，不要新建 `res/layout`。**
