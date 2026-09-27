@@ -64,7 +64,7 @@ class LegacyReadException(message: String, cause: Throwable? = null) :
  * com.tencent.mmkv once MmkvManager is gone.
  *
  * Two consumers:
- *   1. first-time database creation (AppDatabase LegacyImportCallback)
+ *   1. the first-run storage bootstrap (LegacyMigrationGate.runIfNeeded)
  *   2. restoring an old backup archive that carries an MMKV directory but no v2rayng.db
  *
  * readAll() runs the in-memory equivalent of the two historical migrations BEFORE producing the

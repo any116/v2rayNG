@@ -20,6 +20,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.RandomAccessFile
 
+/**
+ * Runs exactly one statement per call. The bind block only binds parameters — the adapter owns
+ * step(), so a callback must never call step() itself: after SQLITE_DONE, calling sqlite3_step()
+ * again re-executes the statement (with REPLACE semantics that silently doubles trigger work).
+ */
 internal fun interface SqlExec {
     suspend operator fun invoke(sql: String, bind: SQLiteStatement.() -> Unit)
 }
@@ -42,15 +47,8 @@ internal object LegacyMigrationGate {
     /** In-process mutex. Cross-process mutual exclusion is handled by [withProcessLock]; both layers are indispensable. */
     private val lock = Mutex()
 
-    private val COUNTED_TABLES = listOf(
-        "profiles",
-        "profile_stats",
-        "profile_raw",
-        "subscriptions",
-        "assets",
-        "routing_rules",
-        "settings",
-    )
+    /** Pure counts, used by the delta check and by the storage-mode log. */
+    private val COUNTED_TABLES = IMPORTED_TABLES.map { it.table }
 
     /**
      * Cross-process mutual exclusion. :daemon / :bg / :tasks each have their own Hilt graph and their own instance of this object,
@@ -82,7 +80,7 @@ internal object LegacyMigrationGate {
         io: CoroutineDispatcher,
     ): Boolean = lock.withLock {
         withProcessLock(context, io) {
-            DatabaseIntegrity.verifyOrQuarantine(context)
+            DatabaseIntegrity.verifyOrThrow(context)
 
             val dao = db.settingsDao()
             if (dao.value(KEY_STATE) == STATE_DONE) return@withProcessLock true
@@ -120,20 +118,41 @@ internal object LegacyMigrationGate {
             try {
                 db.useWriterConnection { conn ->
                     conn.immediateTransaction {
+                        val plan = LegacyImporter.plan(snapshot)
                         val before = readCountsIn(conn)
-                        LegacyImporter.importInto(conn.asSqlExec(), snapshot)
-                        val after = readCountsIn(conn)
 
-                        val expected = snapshot.expectedCounts()
-                        val mismatch = expected.filterKeys { table ->
-                            after.of(table) - before.of(table) != expected.getValue(table)
-                        }
-                        if (mismatch.isNotEmpty()) {
-                            error(
-                                "Legacy import mismatch on ${mismatch.keys.joinToString()}: " +
-                                    "expected[${expected.entries.joinToString { "${it.key}=${it.value}" }}] " +
-                                    "delta[${COUNTED_TABLES.joinToString { "$it=${after.of(it) - before.of(it)}" }}]"
+                        // How many of the planned primary keys already exist. The old check
+                        // assumed every planned row was new; a database that already carries
+                        // seeded defaults (from an earlier failed attempt) made the import fail
+                        // on every retry. The plan is computed before the writes, so these counts
+                        // describe the pre-import state.
+                        val preexisting = IMPORTED_TABLES.associate { table ->
+                            table.table to conn.countPresentKeys(
+                                table.table,
+                                table.column,
+                                plan.keysOf(table.table)
                             )
+                        }
+
+                        LegacyImporter.importInto(conn.asSqlExec(), plan)
+
+                        // Expected delta: planned keys minus the ones already present, plus a
+                        // presence check for every planned key so a silently skipped statement
+                        // cannot pass the verification.
+                        val after = readCountsIn(conn)
+                        val problems = IMPORTED_TABLES.mapNotNull { table ->
+                            val keys = plan.keysOf(table.table)
+                            val expectedNew = keys.size - (preexisting[table.table] ?: 0L)
+                            val delta = after.of(table.table) - before.of(table.table)
+                            val missing = keys.size - conn.countPresentKeys(table.table, table.column, keys)
+                            if (delta == expectedNew && missing == 0L) {
+                                null
+                            } else {
+                                "${table.table}: expectedNew=$expectedNew delta=$delta missing=$missing"
+                            }
+                        }
+                        if (problems.isNotEmpty()) {
+                            error("Legacy import verification failed: ${problems.joinToString()}")
                         }
 
                         conn.usePrepared(
@@ -165,6 +184,42 @@ internal object LegacyMigrationGate {
         )
         settings.poke(KEY_STATE, STATE_DONE)
         staged?.delete()
+    }
+
+    /**
+     * Explicit user escape hatch for an import that can never finish: an unreadable MMKV store,
+     * or a staged snapshot that keeps failing to deserialize. Retrying those leads nowhere, so
+     * the user must be able to get back into the app.
+     *
+     * Writes the same [STATE_DONE] marker the successful path writes, so [runIfNeeded] returns
+     * immediately from now on (the marker is checked before the legacy store is touched), and
+     * drops the staged snapshot that kept failing. Rows imported by earlier attempts stay — the
+     * import is append-only and nothing is deleted here.
+     *
+     * The caller is expected to [StorageBootstrap.retry] afterwards so the barrier opens.
+     *
+     * @return true when the marker was written; false when even that failed (for example a
+     * database that is genuinely unusable), in which case the user needs a restore instead.
+     */
+    suspend fun abandonImport(
+        context: Application,
+        db: AppDatabase,
+        settings: SettingsStore,
+        io: CoroutineDispatcher,
+    ): Boolean = lock.withLock {
+        withProcessLock(context, io) {
+            try {
+                finish(db, settings, staged = BackupRepository.pendingSnapshotFile(context))
+                LogUtil.w(
+                    AppConfig.TAG,
+                    "Legacy import abandoned by the user; LEGACY_IMPORT_STATE=$STATE_DONE"
+                )
+                true
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "Failed to abandon the legacy import", e)
+                false
+            }
+        }
     }
 
     suspend fun logStorageMode(context: Application, db: AppDatabase, isMainProcess: Boolean) {
@@ -206,21 +261,24 @@ internal object LegacyMigrationGate {
     private suspend fun PooledConnection.countOf(table: String): Long =
         usePrepared("SELECT COUNT(*) FROM $table") { st -> if (st.step()) st.getLong(0) else 0L }
 
-    private fun LegacySnapshot.expectedCounts(): Map<String, Long> {
-        val profileGuids = groups.values.flatten().map { it.first }.distinct().size
-        val namedRules = rulesets.filter { it.id.isNotBlank() }.map { it.id }.distinct().size
-        val unnamedRules = rulesets.count { it.id.isBlank() }
-        val subCount = subscriptions.keys.size +
-            if (AppConfig.DEFAULT_SUBSCRIPTION_ID in subscriptions) 0 else 1
-        return mapOf(
-            "profiles" to profileGuids.toLong(),
-            "profile_stats" to stats.keys.size.toLong(),
-            "profile_raw" to raws.keys.size.toLong(),
-            "subscriptions" to subCount.toLong(),
-            "assets" to assets.map { it.guid }.distinct().size.toLong(),
-            "routing_rules" to (namedRules + unnamedRules).toLong(),
-            "settings" to (settings.map { it.key }.distinct().size + 1).toLong()
-        )
+    /**
+     * Counts how many of [keys] currently exist in [table]. IN lists are chunked because
+     * SQLITE_MAX_VARIABLE_NUMBER caps the number of bind parameters per statement.
+     */
+    private suspend fun PooledConnection.countPresentKeys(
+        table: String,
+        column: String,
+        keys: List<String>,
+    ): Long {
+        var present = 0L
+        keys.chunked(ProfileDao.SQLITE_VAR_LIMIT).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            usePrepared("SELECT COUNT(*) FROM $table WHERE $column IN ($placeholders)") { st ->
+                chunk.forEachIndexed { index, key -> st.bindText(index + 1, key) }
+                if (st.step()) present += st.getLong(0)
+            }
+        }
+        return present
     }
 
     private class TableCounts(private val values: Map<String, Long>) {
