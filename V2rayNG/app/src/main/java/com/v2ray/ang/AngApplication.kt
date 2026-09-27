@@ -12,6 +12,7 @@ import com.v2ray.ang.AppConfig.ANG_PACKAGE
 import com.v2ray.ang.data.AppDatabase
 import com.v2ray.ang.data.LegacyMigrationGate
 import com.v2ray.ang.data.SettingsStore
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.di.ApplicationScope
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
@@ -19,6 +20,7 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.compose.ThemeManager
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -59,34 +61,54 @@ class AngApplication : Application() {
 
         WorkManager.initialize(this, buildWorkManagerConfiguration())
 
-        // Settings bootstrap runs off the main thread.
+        // Storage bootstrap runs off the main thread; the order is load-bearing:
+        // integrity check + legacy import first, settings snapshot second, default seeding last.
+        // StorageBootstrap only opens when all of it succeeded — services, receivers and the UI
+        // wait on it instead of racing this coroutine and acting on coded defaults.
         appScope.launch {
             val isMain = isMainProcess()
+            var storageReady = false
             try {
                 // Every process goes through the gate first. :daemon can easily start before
                 // the UI process (Always-on VPN / boot broadcast / Tile / Glance widget), and
                 // an empty database plus coded defaults means SELECTED_SERVER is null and the
                 // core has no profile to start. The file lock makes the concurrent path safe;
                 // when the import has already run, the cost is one settings primary-key read.
-                runCatching { LegacyMigrationGate.runIfNeeded(this@AngApplication, db, settings, io) }
-                    .onFailure { LogUtil.e(AppConfig.TAG, "Legacy import failed", it) }
-                runCatching { settings.refresh() }
-                    .onFailure { LogUtil.e(AppConfig.TAG, "Settings refresh failed", it) }
+                check(LegacyMigrationGate.runIfNeeded(this@AngApplication, db, settings, io)) {
+                    "Legacy import did not finish; will retry next launch"
+                }
+
+                settings.refresh()
+
                 // Seeding is main-process only: these are idempotent writes, and running them
                 // in every process buys nothing but write-lock contention against the import.
+                // Seeding also stays behind a finished migration: rows written after a failed
+                // import would count as pre-existing on the retry.
                 if (isMain) {
-                    runCatching { settings.seedDefaults() }
-                        .onFailure { LogUtil.e(AppConfig.TAG, "Settings seed failed", it) }
-                    runCatching { SettingsManager.ensureRoutingRulesets(this@AngApplication) }
-                        .onFailure { LogUtil.e(AppConfig.TAG, "Routing ruleset seeding failed", it) }
-                    runCatching { SettingsManager.ensureDefaultSubscription() }
-                        .onFailure { LogUtil.e(AppConfig.TAG, "Default subscription seeding failed", it) }
+                    settings.seedDefaults()
+                    SettingsManager.ensureRoutingRulesets(this@AngApplication)
+                    SettingsManager.ensureDefaultSubscription()
                 }
+
+                storageReady = true
+                StorageBootstrap.complete()
+            } catch (e: CancellationException) {
+                StorageBootstrap.fail(e)
+                throw e
+            } catch (e: Exception) {
+                StorageBootstrap.fail(e)
+                LogUtil.e(AppConfig.TAG, "Storage bootstrap failed; waiting callers stay blocked", e)
             } finally {
                 LogUtil.refreshLogLevel()
-                // After refreshLogLevel so the configured level applies to this line too.
-                runCatching { LegacyMigrationGate.logStorageMode(this@AngApplication, db, isMain) }
-                    .onFailure { LogUtil.e(AppConfig.TAG, "Storage mode logging failed", it) }
+            }
+
+            // Diagnostics run either way; a failure benefits from them the most.
+            runCatching { LegacyMigrationGate.logStorageMode(this@AngApplication, db, isMain) }
+                .onFailure { LogUtil.e(AppConfig.TAG, "Storage mode logging failed", it) }
+
+            // Only a settled storage layer may observe further invalidations or read the theme;
+            // on failure the process keeps the barrier closed until the next app start.
+            if (storageReady) {
                 settings.observe(appScope)
                 ThemeManager.refresh()
             }

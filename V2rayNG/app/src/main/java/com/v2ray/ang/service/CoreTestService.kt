@@ -10,6 +10,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.CoreNativeManager
 import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.dto.RealPingEvent
@@ -24,8 +25,10 @@ import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.helper.NotificationHelper
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -58,8 +61,23 @@ class CoreTestService : Service() {
      */
     private val pendingRequests: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
-    /** Makes "pending -> unit" and "cancel pending" mutually exclusive. */
+    /**
+     * Serializes every claim transition that decides whether the service still has work:
+     * "pending -> unit", "cancel pending", "unit -> finalizing" and the idle check in
+     * [stopIfIdle]. They share one lock so the idle check cannot observe a half-finished
+     * transition and stop the service early.
+     */
     private val claimLock = Any()
+
+    /**
+     * Request ids whose finish handler was claimed but has not completed its async tail (final
+     * flush + post-processing + terminal notify) yet. Non-empty means "the service still has
+     * work": stopping now would kill the final flush and drop buffered results. Removing an id
+     * is the atomic claim on the request's terminal message — the party that removes it (the
+     * tail itself, or onDestroy) reports the end, so a request can never be both finished and
+     * cancelled, and a finishing request is never forgotten by the destroy path.
+     */
+    private val finalizingRequests: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     private val serviceScope by lazy { CoroutineScope(SupervisorJob() + io) }
     private val resultWriter by lazy {
@@ -93,6 +111,7 @@ class CoreTestService : Service() {
         CoreNativeManager.initCoreEnv(this)
         // Warm-up only. Each batch start still refreshes explicitly before reading preferences.
         serviceScope.launch {
+            if (!StorageBootstrap.awaitReadyOrNull()) return@launch
             runCatching { PlatformDependencies.settingsStore(this@CoreTestService).refresh() }
                 .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: preference refresh failed", it) }
         }
@@ -105,13 +124,20 @@ class CoreTestService : Service() {
     override fun onDestroy() {
         LogUtil.i(
             AppConfig.TAG,
-            "CoreTestService destroyed, cancelling ${units.size} units, ${pendingRequests.size} pending"
+            "CoreTestService destroyed, cancelling ${units.size} units, " +
+                "${pendingRequests.size} pending, ${finalizingRequests.size} finalizing"
         )
         cancelPending(null)
         cancelUnits(units.toList())
-        // Bounded loss on the cancel path only: at most one flush window. The normal finish path
-        // always flushes before reporting.
-        serviceScope.launch { resultWriter.stop() }
+        cancelFinalizing()
+        // The final flush must survive serviceScope's cancellation. Launch it undispatched so it
+        // starts synchronously, and stop() itself switches to NonCancellable before the write —
+        // the previous "launch { stop() }; cancel()" pair could cancel the cleanup coroutine
+        // before it ever ran and silently drop the buffered results.
+        serviceScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { resultWriter.stop() }
+                .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: final result flush failed", it) }
+        }
         serviceScope.cancel()
         NotificationHelper.stopForeground(this)
         super.onDestroy()
@@ -155,10 +181,20 @@ class CoreTestService : Service() {
         pendingRequests.add(requestId)
 
         serviceScope.launch {
-            // The :tasks process snapshot may still be cold (bootstrap waits on the legacy gate)
-            // or stale (the user just edited the value in the UI process). Reading before this
-            // returned the coded default 16. refresh() completes the ready signal in finally,
-            // so a failure degrades to defaults instead of hanging.
+            // The :tasks bootstrap runs the same gate as the UI process; a batch must not read
+            // (or later write) through the DAO while the legacy import is still in flight. On
+            // storage failure resolve the request as cancelled instead of testing half-blind.
+            if (!StorageBootstrap.awaitReadyOrNull()) {
+                LogUtil.w(AppConfig.TAG, "CoreTestService: storage not ready; request $requestId cancelled")
+                if (pendingRequests.remove(requestId)) sendCanceled(requestId)
+                stopIfIdle()
+                return@launch
+            }
+
+            // The :tasks process snapshot may still be cold or stale (the user just edited the
+            // value in the UI process). Reading before this returned the coded default 16.
+            // refresh() completes the ready signal in finally, so a failure degrades to
+            // defaults instead of hanging.
             runCatching { PlatformDependencies.settingsStore(this@CoreTestService).refresh() }
                 .onFailure { LogUtil.e(AppConfig.TAG, "CoreTestService: preference refresh failed", it) }
             val concurrency = SettingsManager.getRealPingConcurrency()
@@ -234,13 +270,32 @@ class CoreTestService : Service() {
 
             RealPingEvent.Finish -> {
                 // Losing the claim means the unit was already cancelled; do not also finish it.
-                if (!units.remove(unit)) return
+                if (!claimForFinalize(unit)) return
                 serviceScope.launch {
-                    // Must complete before post-processing: sorting reads the delays just written.
-                    resultWriter.flush()
-                    applyPostProcessing(unit.subscriptionId)
-                    sendNotify(AppConfig.MSG_MEASURE_CONFIG_FINISH, unit.requestId)
-                    stopIfIdle()
+                    try {
+                        // Barrier: waits for any windowed flush still in flight, so
+                        // post-processing reads every result recorded before this point.
+                        resultWriter.flush()
+                        applyPostProcessing(unit.subscriptionId)
+                        // The destroy path may have claimed the terminal in the meantime; then it
+                        // has already reported the request as cancelled.
+                        if (claimTerminal(unit.requestId)) {
+                            sendNotify(AppConfig.MSG_MEASURE_CONFIG_FINISH, unit.requestId)
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // Results could not be persisted: do not sort or clean up against stale
+                        // delays, and do not report success. The request ends as cancelled so
+                        // the UI does not stay in "testing".
+                        LogUtil.e(AppConfig.TAG, "CoreTestService: final flush failed for ${unit.requestId}", e)
+                        if (claimTerminal(unit.requestId)) {
+                            runCatching { sendCanceled(unit.requestId) }
+                        }
+                    } finally {
+                        releaseFinalize(unit.requestId)
+                        stopIfIdle()
+                    }
                 }
             }
         }
@@ -285,6 +340,45 @@ class CoreTestService : Service() {
         }
     }
 
+    /**
+     * Claims the unit for finalization. The removal from [units] and the registration in
+     * [finalizingRequests] run under [claimLock] — the same lock the idle check takes — so a
+     * cancel on another thread cannot observe the gap between the two and stop the service
+     * before the finish handler ever ran.
+     */
+    private fun claimForFinalize(unit: BatchUnit): Boolean = synchronized(claimLock) {
+        if (units.remove(unit)) {
+            finalizingRequests.add(unit.requestId)
+            true
+        } else {
+            false
+        }
+    }
+
+    /** @return true when the caller won the terminal claim and must report the request's end. */
+    private fun claimTerminal(requestId: String): Boolean =
+        synchronized(claimLock) { finalizingRequests.remove(requestId) }
+
+    /** Idempotent release for the tail's finally; a claimed terminal is already removed. */
+    private fun releaseFinalize(requestId: String) {
+        synchronized(claimLock) { finalizingRequests.remove(requestId) }
+    }
+
+    /**
+     * Reports still-finalizing requests as cancelled. Called from onDestroy before the scope is
+     * cancelled: without it, cancelling the scope would kill the tail before its own terminal
+     * message and the request would dangle on the UI side.
+     */
+    private fun cancelFinalizing() {
+        val claimed = synchronized(claimLock) {
+            finalizingRequests.toList().also { finalizingRequests.clear() }
+        }
+        claimed.forEach { requestId ->
+            runCatching { sendCanceled(requestId) }
+                .onFailure { LogUtil.e(AppConfig.TAG, "Failed to report cancel of finalizing $requestId", it) }
+        }
+    }
+
     private suspend fun applyPostProcessing(subscriptionId: String) {
         if (subscriptionId.isEmpty()) return
         if (Prefs.bool(AppConfig.PREF_AUTO_REMOVE_INVALID_AFTER_TEST)) {
@@ -301,9 +395,12 @@ class CoreTestService : Service() {
     private fun sendNotify(key: Int, requestId: String, payload: String = "") =
         MessageHelper.sendMsg2UI(this, key, TestNotification(requestId, payload))
 
-    /** A request still preparing counts as work: stopping now would kill it mid-lookup. */
+    /** A request still preparing or still finalizing counts as work: stopping now would kill it. */
     private fun stopIfIdle(startId: Int? = null) {
-        if (units.isNotEmpty() || pendingRequests.isNotEmpty()) return
+        val idle = synchronized(claimLock) {
+            units.isEmpty() && pendingRequests.isEmpty() && finalizingRequests.isEmpty()
+        }
+        if (!idle) return
         NotificationHelper.stopForeground(this)
         if (startId == null) stopSelf() else stopSelf(startId)
     }
