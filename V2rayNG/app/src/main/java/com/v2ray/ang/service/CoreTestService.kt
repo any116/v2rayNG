@@ -84,6 +84,15 @@ class CoreTestService : Service() {
         TestResultWriter(dao = PlatformDependencies.profileDao(this), scope = serviceScope)
     }
 
+    /**
+     * Latest startId handed to onStartCommand. stopIfIdle() reports it through
+     * stopSelfResult(), which refuses to stop when a newer command arrived in the meantime —
+     * the previous parameterless stopSelf() raced the main thread's onStartCommand and could
+     * kill a start that had just been accepted.
+     */
+    @Volatile
+    private var lastStartId = 0
+
     override fun attachBaseContext(newBase: Context?) {
         super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
     }
@@ -144,6 +153,7 @@ class CoreTestService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         NotificationHelper.startForeground(
             this,
             NotificationChannelType.CORE_TEST,
@@ -153,23 +163,23 @@ class CoreTestService : Service() {
         )
         val message = intent?.serializable<TestServiceMessage>("content")
         if (message == null) {
-            stopIfIdle(startId)
+            stopIfIdle()
             return START_NOT_STICKY
         }
 
         when (message.key) {
-            AppConfig.MSG_MEASURE_CONFIG_START -> handleMeasureStart(message, startId)
+            AppConfig.MSG_MEASURE_CONFIG_START -> handleMeasureStart(message)
             AppConfig.MSG_MEASURE_CONFIG_CANCEL -> handleMeasureCancel(message)
-            else -> stopIfIdle(startId)
+            else -> stopIfIdle()
         }
         return START_NOT_STICKY
     }
 
-    private fun handleMeasureStart(message: TestServiceMessage, startId: Int) {
+    private fun handleMeasureStart(message: TestServiceMessage) {
         val requestId = message.requestId
         if (requestId.isEmpty()) {
             LogUtil.w(AppConfig.TAG, "CoreTestService rejected a batch start without a request id")
-            stopIfIdle(startId)
+            stopIfIdle()
             return
         }
         LogUtil.i(AppConfig.TAG, "CoreTestService starting request $requestId for ${message.subscriptionId}")
@@ -184,6 +194,8 @@ class CoreTestService : Service() {
             // The :tasks bootstrap runs the same gate as the UI process; a batch must not read
             // (or later write) through the DAO while the legacy import is still in flight. On
             // storage failure resolve the request as cancelled instead of testing half-blind.
+            // A previous attempt in this process may have failed transiently; retry first.
+            StorageBootstrap.retry()
             if (!StorageBootstrap.awaitReadyOrNull()) {
                 LogUtil.w(AppConfig.TAG, "CoreTestService: storage not ready; request $requestId cancelled")
                 if (pendingRequests.remove(requestId)) sendCanceled(requestId)
@@ -211,7 +223,7 @@ class CoreTestService : Service() {
             if (guids.isEmpty()) {
                 // Only the party that removes the pending entry may report.
                 if (pendingRequests.remove(requestId)) sendCanceled(requestId)
-                stopIfIdle(startId)
+                stopIfIdle()
                 return@launch
             }
 
@@ -285,10 +297,10 @@ class CoreTestService : Service() {
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        // Results could not be persisted: do not sort or clean up against stale
-                        // delays, and do not report success. The request ends as cancelled so
-                        // the UI does not stay in "testing".
-                        LogUtil.e(AppConfig.TAG, "CoreTestService: final flush failed for ${unit.requestId}", e)
+                        // Either the flush or the post-processing failed. Results may not have
+                        // been persisted, so do not report success; the request ends as
+                        // cancelled so the UI does not stay in "testing".
+                        LogUtil.e(AppConfig.TAG, "CoreTestService: finalizing ${unit.requestId} failed", e)
                         if (claimTerminal(unit.requestId)) {
                             runCatching { sendCanceled(unit.requestId) }
                         }
@@ -396,12 +408,16 @@ class CoreTestService : Service() {
         MessageHelper.sendMsg2UI(this, key, TestNotification(requestId, payload))
 
     /** A request still preparing or still finalizing counts as work: stopping now would kill it. */
-    private fun stopIfIdle(startId: Int? = null) {
+    private fun stopIfIdle() {
         val idle = synchronized(claimLock) {
             units.isEmpty() && pendingRequests.isEmpty() && finalizingRequests.isEmpty()
         }
         if (!idle) return
         NotificationHelper.stopForeground(this)
-        if (startId == null) stopSelf() else stopSelf(startId)
+        // stopSelfResult only stops when lastStartId is still the newest start command, so a
+        // command that raced in after the idle check above is not killed with the service.
+        if (!stopSelfResult(lastStartId)) {
+            LogUtil.i(AppConfig.TAG, "CoreTestService: start id $lastStartId is stale; staying up")
+        }
     }
 }
