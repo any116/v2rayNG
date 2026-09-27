@@ -29,19 +29,19 @@ jobs:
       uses: android-actions/setup-android@v4
       with:
         log-accepted-android-sdk-licenses: false
-        cmdline-tools-version: '14742923'
+        cmdline-tools-version: '15859902'
         packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
 
     - name: Install NDK
       run: |
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
           --channel=0 \
-          --install "ndk;29.0.14206865"
-        echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> $GITHUB_ENV
+          --install "ndk;30.0.16248370"
+        echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
         sed -i '17i\
         \
         externalNativeBuild { \
-            ndkVersion = "29.0.14206865" \
+            ndkVersion = "30.0.16248370" \
         }' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
         sed -i 's/JNI_VERSION_1_4/JNI_VERSION_1_6/g' hev-socks5-tunnel/src/hev-jni.c
             
@@ -113,7 +113,6 @@ jobs:
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         echo "TAG=$(grep 'versionName =' ./app/build.gradle.kts | sed 's/.*versionName = "\(.*\)"/\1/')" >> $GITHUB_ENV
         chmod 755 gradlew
-        #./gradlew licenseFdroidReleaseReport
         ./gradlew assembleRelease --build-cache --parallel --daemon --warning-mode all
 
     - name: Delete releases and workflows runs
@@ -123,7 +122,7 @@ jobs:
         releases_keep_latest: 0
         delete_tags: true
         delete_workflows: true
-        workflows_keep_day: 0
+        workflows_keep_day: 5
         gh_token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload Room schemas

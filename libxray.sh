@@ -36,8 +36,6 @@ gomobile init
 
 go get \
     golang.org/x/mobile@latest \
-    github.com/sagernet/sing@v0.5.1 \
-    github.com/sagernet/sing-shadowsocks@v0.2.7 \
     gvisor.dev/gvisor@go
 go mod tidy -v
 
