@@ -35,6 +35,7 @@ import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
 import java.net.URI
+import java.util.Locale
 
 object AngConfigManager {
 
@@ -265,8 +266,9 @@ object AngConfigManager {
     private suspend fun importUrlAsSubscription(url: String): String? {
         val subscriptions = subscriptionDao.all()
         val normalized = normalizeSubUrl(url)
-        // Compare normalized forms: the old raw == check let ".../sub" and ".../sub/" (or the
-        // same link with a different #fragment) both be imported on every paste.
+        // Compare normalized forms: scheme and host are case-folded and the fragment is a
+        // display name, but the request itself keeps its raw form — "/sub" and "/sub/" are not
+        // guaranteed to be the same resource, and path/query encodings carry real meaning.
         if (subscriptions.any { normalizeSubUrl(it.url) == normalized }) {
             return null
         }
@@ -284,20 +286,40 @@ object AngConfigManager {
     }
 
     /**
-     * Scheme and host are case-insensitive, the fragment is a display name and a trailing slash
-     * is not part of the identity. Query and path case are preserved: they frequently carry a
-     * case-sensitive token and folding them would drop genuinely different subscriptions.
+     * Scheme and host are case-insensitive and the fragment is a display name, so those may be
+     * folded or dropped. Everything that belongs to the request keeps its RAW form: the
+     * percent-encoded path and query ("a%2Fb" and "a/b" are different resources, and a query
+     * containing "a%26b" must not collapse into two parameters), the trailing slash, and any
+     * userinfo credentials. Folding those merged genuinely different subscriptions.
      */
     private fun normalizeSubUrl(raw: String): String {
-        val trimmed = raw.trim().substringBefore('#')
-        val uri = runCatching { URI(Utils.fixIllegalUrl(trimmed)) }.getOrNull()
-            ?: return trimmed.trimEnd('/')
-        val scheme = uri.scheme?.lowercase().orEmpty()
-        val host = uri.host?.lowercase().orEmpty()
-        val port = if (uri.port > 0) ":${uri.port}" else ""
-        val path = uri.path.orEmpty().trimEnd('/')
-        val query = uri.query?.let { "?$it" }.orEmpty()
-        return "$scheme://$host$port$path$query"
+        val text = raw.trim().substringBefore('#')
+        val uri = runCatching { URI(Utils.fixIllegalUrl(text)) }.getOrNull() ?: return text
+        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return text
+        val host = uri.host?.lowercase(Locale.ROOT) ?: return text
+
+        val authority = buildString {
+            uri.rawUserInfo?.let {
+                append(it)
+                append('@')
+            }
+            append(host)
+            if (uri.port != -1) {
+                append(':')
+                append(uri.port)
+            }
+        }
+
+        return buildString {
+            append(scheme)
+            append("://")
+            append(authority)
+            append(uri.rawPath.orEmpty())
+            uri.rawQuery?.let {
+                append('?')
+                append(it)
+            }
+        }
     }
 
     /**
