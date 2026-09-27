@@ -3,65 +3,121 @@ package com.v2ray.ang.data
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Process-local startup barrier for the storage layer.
+ * Surfaced to waiters when the bootstrap failed. Deliberately NOT a CancellationException:
+ * a failed bootstrap must never look like the waiting coroutine itself was cancelled.
+ */
+class StorageNotReadyException(cause: Throwable) :
+    IllegalStateException("Storage bootstrap failed: ${cause.message}", cause)
+
+/**
+ * Process-local, retryable startup barrier for the storage layer.
  *
- * AngApplication's bootstrap coroutine completes it only after the database integrity check, the
- * legacy MMKV import, the settings snapshot refresh and (in the main process) the default-value
- * seeding have all succeeded. SettingsStore.awaitReady() is NOT a substitute: any refresh() —
- * including one kicked off by an early service start — completes that signal, so it can return
- * before the legacy import has run and before the snapshot reflects the real database.
- *
- * Failure is terminal for the process: [awaitReady] rethrows the bootstrap cause, and callers
- * must not paper over it with coded defaults (that would silently drop the user's real mode,
- * port, routing and auto-start settings). Callers that can suspend and want a bound use
- * [awaitReadyOrNull]; fire-and-forget entry points (receivers, tile, shortcuts) use it to skip
- * their action instead of proceeding half-initialised.
+ * AngApplication installs the bootstrap block once per process; the barrier opens only when that
+ * block (integrity check, legacy import, snapshot refresh, main-process seeding) returned
+ * normally. A failure keeps the barrier closed — callers never fall back to coded defaults — but
+ * it is no longer terminal: [retry] re-runs the block, so the UI retry button and cold service
+ * starts can recover from transient failures without a process restart.
  */
 internal object StorageBootstrap {
 
     /** Upper bound for callers that must give up rather than suspend forever. */
     const val DEFAULT_TIMEOUT_MS = 20_000L
 
-    private val completion = CompletableDeferred<Unit>()
+    sealed interface State {
+        data object Idle : State
+        data object Running : State
+        data object Ready : State
+        data class Failed(val cause: Throwable) : State
+    }
 
-    /** Suspends until the bootstrap settled; throws when it failed. */
-    suspend fun awaitReady() {
-        completion.await()
+    private val _state = MutableStateFlow<State>(State.Idle)
+    val state: StateFlow<State> = _state.asStateFlow()
+
+    /** Non-suspending fast path for main-thread entry points. */
+    val isReady: Boolean get() = _state.value === State.Ready
+
+    private val lock = Any()
+    private var scope: CoroutineScope? = null
+    private var bootstrap: (suspend () -> Unit)? = null
+
+    /** Called exactly once, from Application.onCreate; starts the first attempt. */
+    fun install(scope: CoroutineScope, bootstrap: suspend () -> Unit) {
+        synchronized(lock) {
+            check(this.bootstrap == null) { "StorageBootstrap already installed" }
+            this.scope = scope
+            this.bootstrap = bootstrap
+        }
+        launchAttempt()
     }
 
     /**
-     * Suspends until the bootstrap settled or [timeoutMillis] elapsed. Returns true only when
-     * the storage layer is fully initialised. Cancellation of the calling coroutine is rethrown,
-     * never turned into "not ready"; a timeout or a bootstrap failure just logs and returns false.
+     * Starts a new attempt when the previous one failed. No-op while an attempt is running or
+     * after success, so it is safe to call unconditionally before waiting.
+     *
+     * @return true when a new attempt was started.
+     */
+    fun retry(): Boolean = launchAttempt()
+
+    private fun launchAttempt(): Boolean = synchronized(lock) {
+        val scope = scope ?: return false
+        val block = bootstrap ?: return false
+        val current = _state.value
+        if (current === State.Ready || current === State.Running) return false
+
+        _state.value = State.Running
+        scope.launch {
+            try {
+                block()
+                _state.value = State.Ready
+            } catch (e: CancellationException) {
+                // Never publish the raw CancellationException: waiters would rethrow it as if
+                // they had been cancelled themselves and silently drop their work.
+                _state.value = State.Failed(IllegalStateException("Storage bootstrap cancelled", e))
+                throw e
+            } catch (e: Exception) {
+                LogUtil.e(AppConfig.TAG, "Storage bootstrap failed; barrier stays closed until retry()", e)
+                _state.value = State.Failed(e)
+            }
+        }
+        true
+    }
+
+    private suspend fun awaitSettled(): State =
+        _state.first { it === State.Ready || it is State.Failed }
+
+    /** Suspends until the current attempt settled; throws [StorageNotReadyException] on failure. */
+    suspend fun awaitReady() {
+        val settled = awaitSettled()
+        if (settled is State.Failed) throw StorageNotReadyException(settled.cause)
+    }
+
+    /**
+     * Bounded wait. Returns true only when storage is fully initialised. The caller's own
+     * cancellation propagates normally; timeout and failure return false.
      */
     suspend fun awaitReadyOrNull(timeoutMillis: Long = DEFAULT_TIMEOUT_MS): Boolean {
-        return try {
-            withTimeout(timeoutMillis) { completion.await() }
-            true
-        } catch (e: TimeoutCancellationException) {
-            LogUtil.w(
-                AppConfig.TAG,
-                "Storage bootstrap did not finish within ${timeoutMillis}ms; continuing is not safe"
-            )
-            false
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Storage bootstrap failed", e)
-            false
+        return when (val settled = withTimeoutOrNull(timeoutMillis) { awaitSettled() }) {
+            State.Ready -> true
+            is State.Failed -> {
+                LogUtil.e(AppConfig.TAG, "Storage bootstrap failed", settled.cause)
+                false
+            }
+            else -> {
+                LogUtil.w(
+                    AppConfig.TAG,
+                    "Storage bootstrap did not finish within ${timeoutMillis}ms; continuing is not safe"
+                )
+                false
+            }
         }
-    }
-
-    fun complete() {
-        completion.complete(Unit)
-    }
-
-    fun fail(cause: Throwable) {
-        completion.completeExceptionally(cause)
     }
 }

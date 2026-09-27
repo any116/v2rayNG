@@ -20,10 +20,9 @@ import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.compose.ThemeManager
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.HiltAndroidApp
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -49,6 +48,9 @@ class AngApplication : Application() {
     @IoDispatcher
     lateinit var io: CoroutineDispatcher
 
+    /** The invalidation observer must be started once per process, not once per attempt. */
+    private val observerStarted = AtomicBoolean(false)
+
     override fun attachBaseContext(base: Context?) {
         super.attachBaseContext(base?.let(ContextCompat::getContextForLanguage))
         application = this
@@ -61,58 +63,47 @@ class AngApplication : Application() {
 
         WorkManager.initialize(this, buildWorkManagerConfiguration())
 
-        // Storage bootstrap runs off the main thread; the order is load-bearing:
-        // integrity check + legacy import first, settings snapshot second, default seeding last.
-        // StorageBootstrap only opens when all of it succeeded — services, receivers and the UI
-        // wait on it instead of racing this coroutine and acting on coded defaults.
-        appScope.launch {
-            val isMain = isMainProcess()
-            var storageReady = false
-            try {
-                // Every process goes through the gate first. :daemon can easily start before
-                // the UI process (Always-on VPN / boot broadcast / Tile / Glance widget), and
-                // an empty database plus coded defaults means SELECTED_SERVER is null and the
-                // core has no profile to start. The file lock makes the concurrent path safe;
-                // when the import has already run, the cost is one settings primary-key read.
-                check(LegacyMigrationGate.runIfNeeded(this@AngApplication, db, settings, io)) {
-                    "Legacy import did not finish; will retry next launch"
-                }
+        // Storage bootstrap runs off the main thread and is retryable. The barrier opens only
+        // when bootstrapStorage() returns normally; services, receivers and the UI wait on it.
+        val isMain = isMainProcess()
+        StorageBootstrap.install(appScope) { bootstrapStorage(isMain) }
+    }
 
-                settings.refresh()
-
-                // Seeding is main-process only: these are idempotent writes, and running them
-                // in every process buys nothing but write-lock contention against the import.
-                // Seeding also stays behind a finished migration: rows written after a failed
-                // import would count as pre-existing on the retry.
-                if (isMain) {
-                    settings.seedDefaults()
-                    SettingsManager.ensureRoutingRulesets(this@AngApplication)
-                    SettingsManager.ensureDefaultSubscription()
-                }
-
-                storageReady = true
-                StorageBootstrap.complete()
-            } catch (e: CancellationException) {
-                StorageBootstrap.fail(e)
-                throw e
-            } catch (e: Exception) {
-                StorageBootstrap.fail(e)
-                LogUtil.e(AppConfig.TAG, "Storage bootstrap failed; waiting callers stay blocked", e)
-            } finally {
-                LogUtil.refreshLogLevel()
+    /**
+     * Order is load-bearing: integrity check + legacy import first, settings snapshot second,
+     * default seeding last. Every step is idempotent, so a retry simply runs the whole chain again.
+     */
+    private suspend fun bootstrapStorage(isMain: Boolean) {
+        try {
+            // Every process goes through the gate first. :daemon can start before the UI process
+            // (Always-on VPN / boot broadcast / Tile / Glance widget). The file lock makes the
+            // concurrent path safe; once imported, the cost is one settings primary-key read.
+            check(LegacyMigrationGate.runIfNeeded(this, db, settings, io)) {
+                "Legacy import did not finish"
             }
 
+            settings.refresh()
+
+            // Main process only, and only behind a finished migration: rows written after a
+            // failed import would count as pre-existing on the retry.
+            if (isMain) {
+                settings.seedDefaults()
+                SettingsManager.ensureRoutingRulesets(this)
+                SettingsManager.ensureDefaultSubscription()
+            }
+        } finally {
+            LogUtil.refreshLogLevel()
             // Diagnostics run either way; a failure benefits from them the most.
-            runCatching { LegacyMigrationGate.logStorageMode(this@AngApplication, db, isMain) }
+            runCatching { LegacyMigrationGate.logStorageMode(this, db, isMain) }
                 .onFailure { LogUtil.e(AppConfig.TAG, "Storage mode logging failed", it) }
-
-            // Only a settled storage layer may observe further invalidations or read the theme;
-            // on failure the process keeps the barrier closed until the next app start.
-            if (storageReady) {
-                settings.observe(appScope)
-                ThemeManager.refresh()
-            }
         }
+
+        // Only reached on success. Neither step may fail the bootstrap after the data is ready.
+        if (observerStarted.compareAndSet(false, true)) {
+            settings.observe(appScope)
+        }
+        runCatching { ThemeManager.refresh() }
+            .onFailure { LogUtil.e(AppConfig.TAG, "Theme refresh failed", it) }
     }
 
     private fun isMainProcess(): Boolean {
