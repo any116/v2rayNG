@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.R
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.core.CoreServiceManager
 import com.v2ray.ang.core.CoreStartup
@@ -12,6 +13,7 @@ import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.NotificationManager
+import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.root.RootProxyManager
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -71,7 +73,18 @@ class CoreRootService : Service(), ServiceControl {
         // must not install a second rule set: cancel the in-flight attempt before replacing it.
         setupJob?.cancel()
         setupJob = serviceScope.launch {
-            CoreStartup.refreshPreferences(this@CoreRootService)
+            if (!CoreStartup.refreshPreferences(this@CoreRootService)) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Root: storage not ready; aborting start")
+                // The start command was already accepted; without a terminal message the UI,
+                // tile and widget would keep waiting for a start that never happens.
+                MessageHelper.sendMsg2UI(
+                    this@CoreRootService,
+                    AppConfig.MSG_STATE_START_FAILURE,
+                    getString(R.string.boot_storage_not_ready)
+                )
+                stopService()
+                return@launch
+            }
             if (!requestedGuid.isNullOrBlank()) {
                 CoreServiceManager.adoptSelectedGuid(this@CoreRootService, requestedGuid)
             }

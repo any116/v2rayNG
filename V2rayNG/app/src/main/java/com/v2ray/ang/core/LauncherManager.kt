@@ -3,10 +3,12 @@ package com.v2ray.ang.core
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Looper
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.extension.toast
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.helper.MessageHelper
@@ -15,11 +17,19 @@ import com.v2ray.ang.service.CoreProxyOnlyService
 import com.v2ray.ang.service.CoreRootService
 import com.v2ray.ang.service.CoreVpnService
 import com.v2ray.ang.util.LogUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object LauncherManager {
 
     /** Guid requested for adoption at startup; persisted by the service, not by the receiver. */
     const val EXTRA_SELECTED_GUID = "launcher_selected_guid"
+
+    /** Owns the deferred starts issued from callbacks that cannot suspend. */
+    private val readyScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     fun startServiceFromToggle(context: Context): Boolean =
         startContextService(context, null)
@@ -27,6 +37,45 @@ object LauncherManager {
     fun startService(context: Context, guid: String? = null) {
         LogUtil.i(AppConfig.TAG, "LauncherManager: startService from ${context::class.java.simpleName}")
         startContextService(context, guid)
+    }
+
+    /**
+     * Storage-aware start for cold entries (receivers, tile, shortcuts). Reads the mode
+     * preferences only after this process' storage bootstrap settled; a failed bootstrap is
+     * retried once before waiting.
+     *
+     * @return false when the start was skipped or refused: storage was not ready in time, root
+     * is required but unavailable, or the system rejected the foreground service. Callers must
+     * not present a start that never happened.
+     */
+    suspend fun startServiceWhenReady(context: Context, guid: String? = null): Boolean {
+        if (!StorageBootstrap.isReady) {
+            StorageBootstrap.retry()
+            if (!StorageBootstrap.awaitReadyOrNull()) {
+                LogUtil.w(AppConfig.TAG, "LauncherManager: storage not ready; service start skipped")
+                return false
+            }
+        }
+        return withContext(Dispatchers.Main.immediate) {
+            LogUtil.i(AppConfig.TAG, "LauncherManager: startServiceWhenReady from ${context::class.java.simpleName}")
+            startContextService(context, guid)
+        }
+    }
+
+    /**
+     * For callbacks that cannot suspend (tile, shortcuts). When storage is already settled the
+     * start happens synchronously, inside the user-interaction window that background
+     * foreground-service restrictions (Android 12+) grant; only a cold process defers.
+     */
+    fun startServiceWhenReadyAsync(context: Context, guid: String? = null) {
+        if (StorageBootstrap.isReady && Looper.myLooper() == Looper.getMainLooper()) {
+            startContextService(context, guid)
+            return
+        }
+        val appContext = context.applicationContext
+        readyScope.launch {
+            startServiceWhenReady(appContext, guid)
+        }
     }
 
     fun stopService(context: Context) {

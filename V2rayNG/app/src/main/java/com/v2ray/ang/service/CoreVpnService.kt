@@ -14,6 +14,7 @@ import android.os.StrictMode
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.AppConfig.LOOPBACK
 import com.v2ray.ang.BuildConfig
+import com.v2ray.ang.R
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.contracts.Tun2SocksControl
 import com.v2ray.ang.core.CoreServiceManager
@@ -24,6 +25,7 @@ import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.handler.SettingsManager
+import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.root.RootLanSharing
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
@@ -119,7 +121,20 @@ class CoreVpnService : VpnService(), ServiceControl {
      *  5. start the core.
      */
     private suspend fun startSequence(requestedGuid: String?): Boolean {
-        CoreStartup.refreshPreferences(this)
+        // Aborts when this process' storage bootstrap (integrity check, legacy import, snapshot
+        // refresh) failed: starting the core on coded defaults would ignore the user's mode,
+        // ports and routing settings.
+        if (!CoreStartup.refreshPreferences(this)) {
+            LogUtil.e(AppConfig.TAG, "StartCore-VPN: storage not ready; aborting start")
+            // The start command was already accepted; without a terminal message the UI, tile
+            // and widget would keep waiting for a start that never happens.
+            MessageHelper.sendMsg2UI(
+                this,
+                AppConfig.MSG_STATE_START_FAILURE,
+                getString(R.string.boot_storage_not_ready)
+            )
+            return false
+        }
 
         if (!requestedGuid.isNullOrBlank()) {
             CoreServiceManager.adoptSelectedGuid(this, requestedGuid)

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.R
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.core.CoreServiceManager
 import com.v2ray.ang.core.CoreStartup
@@ -12,6 +13,7 @@ import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.NotificationManager
+import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
@@ -49,7 +51,18 @@ class CoreProxyOnlyService : Service(), ServiceControl {
 
         val requestedGuid = intent?.getStringExtra(LauncherManager.EXTRA_SELECTED_GUID)
         serviceScope.launch {
-            CoreStartup.refreshPreferences(this@CoreProxyOnlyService)
+            if (!CoreStartup.refreshPreferences(this@CoreProxyOnlyService)) {
+                LogUtil.e(AppConfig.TAG, "StartCore-Proxy: storage not ready; aborting start")
+                // The start command was already accepted; without a terminal message the UI,
+                // tile and widget would keep waiting for a start that never happens.
+                MessageHelper.sendMsg2UI(
+                    this@CoreProxyOnlyService,
+                    AppConfig.MSG_STATE_START_FAILURE,
+                    getString(R.string.boot_storage_not_ready)
+                )
+                stopSelf()
+                return@launch
+            }
             if (!requestedGuid.isNullOrBlank()) {
                 CoreServiceManager.adoptSelectedGuid(this@CoreProxyOnlyService, requestedGuid)
             }
