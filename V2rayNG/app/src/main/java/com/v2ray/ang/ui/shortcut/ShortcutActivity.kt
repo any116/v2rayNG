@@ -53,7 +53,10 @@ abstract class ScServiceActivity(private val command: ShortcutCommand) : BaseAct
         }
 
         ShortcutEvent.StartService -> {
-            LauncherManager.startServiceFromToggle(this)
+            // The ViewModel finishes this activity right after dispatching the event, so the
+            // start cannot run on lifecycleScope; and a cold :daemon must not pick the run mode
+            // from an uninitialised snapshot. startServiceWhenReadyAsync owns both concerns.
+            LauncherManager.startServiceWhenReadyAsync(applicationContext)
             true
         }
 
