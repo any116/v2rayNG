@@ -175,8 +175,21 @@ interface ProfileDao {
      * by remark. Duplicate remarks are common in subscriptions, so the ORDER BY is not
      * cosmetic: without it the row SQLite happens to return first is unspecified, and the
      * core config would drift between launches.
+     *
+     * Resolution deliberately follows the global list order (subscription order first, then
+     * the in-group order): the first row the user sees wins. NOTE: reordering subscriptions
+     * therefore CAN change which node a duplicated remark resolves to. The former
+     * `ORDER BY sortOrder, guid` looked more stable, but it pointed at whatever happened to
+     * share the lowest in-group index, i.e. at a row the user never sees first.
      */
-    @Query("SELECT * FROM profiles WHERE remarks = :remarks ORDER BY sortOrder, guid LIMIT 1")
+    @Query(
+        """
+        SELECT * FROM profiles
+         WHERE remarks = :remarks
+         ORDER BY groupSortOrder, sortOrder, guid
+         LIMIT 1
+        """
+    )
     suspend fun findByRemarks(remarks: String): ProfileItem?
 
     @Query(
@@ -184,7 +197,7 @@ interface ProfileDao {
         SELECT remarks FROM profiles
          WHERE configType NOT IN (:excludeTypes) AND TRIM(remarks) <> ''
          GROUP BY remarks
-         ORDER BY MIN(sortOrder), remarks
+         ORDER BY MIN(groupSortOrder), MIN(sortOrder), remarks
         """
     )
     suspend fun remarks(excludeTypes: List<Int>): List<String>
@@ -192,7 +205,9 @@ interface ProfileDao {
     /**
      * Data source for FormPagedDropdownField. GROUP BY (not SELECT DISTINCT) because SQLite
      * rejects an ORDER BY term that is absent from a DISTINCT select list, and grouping lets us
-     * order by MIN(sortOrder) while still emitting one row per remark for LazyColumn keys.
+     * order by MIN(groupSortOrder), MIN(sortOrder) while still emitting one row per remark for
+     * LazyColumn keys. The same two keys are what findByRemarks() resolves with, so the
+     * dropdown order and the duplicated-remark resolution agree.
      */
     @Query(
         """
@@ -202,7 +217,7 @@ interface ProfileDao {
            AND TRIM(p.remarks) <> ''
            AND (:query = '' OR LOWER(p.remarks) LIKE '%' || :query || '%' ESCAPE '\')
          GROUP BY p.remarks
-         ORDER BY MIN(p.sortOrder), p.remarks
+         ORDER BY MIN(p.groupSortOrder), MIN(p.sortOrder), p.remarks
         """
     )
     fun pageRemarks(excludeTypes: List<Int>, query: String): PagingSource<Int, RemarkRow>
@@ -326,46 +341,47 @@ interface ProfileDao {
     }
 
     /**
-     * Single-statement renumbering.
+     * Renumbers the group into a dense sequence. Read-then-write on purpose: the former single
+     * UPDATE ranked the same table while rewriting it, and SQLite gives a correlated subquery no
+     * snapshot guarantee — rows updated early were re-read by later ranks, which collapsed
+     * originally distinct sortOrders to duplicates and broke the spacing the drag path relies on.
+     * The read and every write run inside one transaction, so the order cannot change in between.
      */
-    @Query(
-        """
-        UPDATE profiles SET sortOrder = (
-            SELECT rn FROM (
-                SELECT guid AS g,
-                       ROW_NUMBER() OVER (
-                           ORDER BY groupSortOrder, sortOrder, guid
-                       ) * 1024 AS rn
-                  FROM profiles
-                 WHERE subscriptionId = :subscriptionId
-            ) WHERE g = profiles.guid
-        ) WHERE subscriptionId = :subscriptionId
-        """
-    )
-    suspend fun renormalize(subscriptionId: String)
+    @Transaction
+    suspend fun renormalize(subscriptionId: String) {
+        guidsInGroup(subscriptionId).forEachIndexed { index, guid ->
+            setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP)
+        }
+    }
 
     /**
-     * Single-statement re-sort by test delay.
+     * Guids of one group ranked by test delay, failures and untested rows last. Mirrors the
+     * ORDER BY of the former single-statement re-sort, so equal delays keep their list order.
      */
     @Query(
         """
-        UPDATE profiles SET sortOrder = (
-            SELECT new_sort FROM (
-                SELECT p.guid AS g,
-                       ROW_NUMBER() OVER (
-                           ORDER BY CASE WHEN IFNULL(st.testDelayMillis, 0) <= 0
-                                         THEN 9223372036854775807
-                                         ELSE st.testDelayMillis END,
-                                    p.groupSortOrder, p.sortOrder, p.guid
-                       ) * 1024 AS new_sort
-                  FROM profiles p
-                  LEFT JOIN profile_stats st ON st.guid = p.guid
-                 WHERE p.subscriptionId = :subscriptionId
-            ) WHERE g = profiles.guid
-        ) WHERE subscriptionId = :subscriptionId
+        SELECT p.guid FROM profiles AS p
+          LEFT JOIN profile_stats AS st ON st.guid = p.guid
+         WHERE p.subscriptionId = :subscriptionId
+         ORDER BY CASE WHEN IFNULL(st.testDelayMillis, 0) <= 0
+                       THEN 9223372036854775807
+                       ELSE st.testDelayMillis END,
+                  p.groupSortOrder, p.sortOrder, p.guid
         """
     )
-    suspend fun sortByDelay(subscriptionId: String)
+    suspend fun guidsByDelay(subscriptionId: String): List<String>
+
+    /**
+     * Re-sorts the group by test delay. Two-phase for the same reason as [renormalize]: the
+     * rank must be computed against the pre-update order, never against rows this method is
+     * already rewriting.
+     */
+    @Transaction
+    suspend fun sortByDelay(subscriptionId: String) {
+        guidsByDelay(subscriptionId).forEachIndexed { index, guid ->
+            setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP)
+        }
+    }
 
     // ---- Deletion: all three tables together ----
 
