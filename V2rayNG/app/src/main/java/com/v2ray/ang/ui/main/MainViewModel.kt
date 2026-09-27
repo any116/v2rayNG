@@ -39,11 +39,14 @@ class MainViewModel @Inject constructor(
     private val repo: MainRepository,
     private val subRepo: SubRepository,
 ) : BaseViewModel<MainUiState, MainAction>(
+    // Storage may still be bootstrapping when the ViewModel is created: reading the snapshot
+    // here would bake coded defaults into the state and nothing would re-read them.
+    // onStorageReady() fills these in once the barrier has opened.
     MainUiState(
         selectedGroupId = "",
-        selectedGuid = repo.selectedGuid(),
-        confirmRemove = repo.confirmRemove(),
-        doubleColumnDisplay = repo.doubleColumnDisplay(),
+        selectedGuid = null,
+        confirmRemove = false,
+        doubleColumnDisplay = false,
     )
 ) {
 
@@ -111,14 +114,47 @@ class MainViewModel @Inject constructor(
     private val firstPageReady = CompletableDeferred<Unit>()
     private var selectionSeeded = false
 
+    /** Main-thread only (called from MainActivity's LaunchedEffect). */
+    private var storageReadyHandled = false
+
     init {
         observeServiceEvents()
-        observeGroups()
         observeGroupRemovals()
+        // observeGroups() moved to onStorageReady(): started before the barrier, a failed
+        // bootstrap killed it for good and a successful retry never restarted it.
     }
 
-    /** Delegates to MainRepository: suspends until the settings snapshot is ready. */
-    suspend fun awaitReady() = repo.awaitReady()
+    /** Waits for storage; on the first success seeds snapshot-backed state and starts observers. */
+    suspend fun awaitReady() {
+        repo.awaitReady()
+        onStorageReady()
+    }
+
+    /** Re-runs a failed storage bootstrap; the caller then awaits again. */
+    fun retryStorage() {
+        repo.retryBootstrap()
+    }
+
+    /**
+     * Escape hatch for an import that can never finish: mark the legacy import done so the
+     * barrier can open on the next retry. The caller retries afterwards.
+     *
+     * @return true when the marker was written.
+     */
+    suspend fun abandonLegacyImport(): Boolean = repo.abandonLegacyImport()
+
+    private fun onStorageReady() {
+        if (storageReadyHandled) return
+        storageReadyHandled = true
+        setState {
+            copy(
+                selectedGuid = repo.selectedGuid(),
+                confirmRemove = repo.confirmRemove(),
+                doubleColumnDisplay = repo.doubleColumnDisplay(),
+            )
+        }
+        observeGroups()
+    }
 
     override fun onAction(action: MainAction) {
         when (action) {
@@ -186,7 +222,6 @@ class MainViewModel @Inject constructor(
 
     /** Subscription-table changes push new tabs; the selection is re-resolved on every emission. */
     private fun observeGroups() = launch(onError = {}) {
-        repo.awaitReady()
         repo.observeGroups().collect { groups ->
             val validIds = groups.mapTo(HashSet()) { it.id }
             synchronized(pagers) {
