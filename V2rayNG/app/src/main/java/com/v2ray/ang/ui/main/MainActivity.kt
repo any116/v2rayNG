@@ -50,6 +50,9 @@ class MainActivity : BaseHelperActivity() {
 
     private var pendingLocalNetwork = false
 
+    /** The permission request moved behind the storage barrier; ask at most once per Activity. */
+    private var notificationAsked = false
+
     private val vpnPermission =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode == RESULT_OK) launchCore(pendingLocalNetwork)
@@ -57,7 +60,8 @@ class MainActivity : BaseHelperActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestPermission(PermissionType.POST_NOTIFICATIONS) {}
+        // The notification permission request moved behind the storage barrier (see
+        // ScreenContent): a system dialog on the very first frame competes with first draw.
         viewModel.onAction(MainAction.Initialize)
     }
 
@@ -66,13 +70,20 @@ class MainActivity : BaseHelperActivity() {
         // An attempt that does not end in "ready" shows an explicit failure/retry surface
         // instead of the main UI. Retry really re-runs the storage bootstrap now.
         var attempt by remember { mutableIntStateOf(0) }
-        var ready by remember { mutableStateOf(false) }
+        // Pure, side-effect-free check: a recreated Activity in a live process starts out ready
+        // and never draws the spinner frame. State seeding and observer startup still happen
+        // exactly once, inside awaitReady() below — never during composition.
+        var ready by remember { mutableStateOf(viewModel.isStorageReadyNow()) }
         var failed by remember { mutableStateOf(false) }
         LaunchedEffect(attempt) {
-            ready = false
             failed = false
             // No-op while an attempt is still running (timeout case) or after success.
-            if (attempt > 0) viewModel.retryStorage()
+            if (attempt > 0) {
+                ready = false
+                viewModel.retryStorage()
+            }
+            // Always awaited, even on the fast path: awaitReady() returns immediately when the
+            // barrier is already open, and it is the single seeding entry point.
             val cause: Throwable? = try {
                 val done = withTimeoutOrNull(BOOT_TIMEOUT_MS) { viewModel.awaitReady() }
                 if (done == null) TimeoutException() else null
@@ -84,15 +95,24 @@ class MainActivity : BaseHelperActivity() {
             if (cause == null) {
                 ready = true
             } else {
+                ready = false
                 failed = true
                 LogUtil.w(AppConfig.TAG, "Storage initialization failed; showing retry surface", cause)
             }
         }
         when {
-            ready -> MainScreen(
-                viewModel = viewModel,
-                onPlatformEvent = ::handlePlatformEvent,
-            )
+            ready -> {
+                LaunchedEffect(Unit) {
+                    if (!notificationAsked) {
+                        notificationAsked = true
+                        requestPermission(PermissionType.POST_NOTIFICATIONS) {}
+                    }
+                }
+                MainScreen(
+                    viewModel = viewModel,
+                    onPlatformEvent = ::handlePlatformEvent
+                )
+            }
 
             failed -> BootFailureContent(
                 onRetry = { attempt++ },
@@ -104,7 +124,7 @@ class MainActivity : BaseHelperActivity() {
                         if (viewModel.abandonLegacyImport()) attempt++ else toast(R.string.boot_storage_failed_message)
                     }
                 },
-                onRestoreFromWebdav = { startActivity(AppRoute.Backup.intent(this)) },
+                onRestoreFromWebdav = { startActivity(AppRoute.Backup.intent(this)) }
             )
 
             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -120,7 +140,7 @@ class MainActivity : BaseHelperActivity() {
     private fun BootFailureContent(
         onRetry: () -> Unit,
         onSkipLegacyImport: () -> Unit,
-        onRestoreFromWebdav: () -> Unit,
+        onRestoreFromWebdav: () -> Unit
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -175,6 +195,9 @@ class MainActivity : BaseHelperActivity() {
         MainEvent.PickConfigFile -> {
             pickFile { uri -> uri?.let { viewModel.onAction(MainAction.ConfigFileSelected(it)) } }
             true
+        }
+        MainEvent.ReportFullyDrawn -> {
+            reportFullyDrawn(); true
         }
         is MainEvent.ShowQrCode -> false
         is MainEvent.LocateProfile -> false

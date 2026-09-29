@@ -182,7 +182,14 @@ private fun MainContent(
     val groups = args.groups
     if (groups.isEmpty()) return
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(pageCount = { groups.size })
+    // Start on the selected page. Starting at page 0 and scrolling afterwards composed page 0
+    // first (a wasted paging query + COUNT on cold start) and let settledPage report 0, which
+    // could momentarily re-select and persist the first group.
+    // Keyless remember is intentional: this only seeds PagerState, and observeGroups() publishes
+    // `groups` and the seeded `selectedGroupId` in one setState, so the first non-empty
+    // composition already sees a consistent pair.
+    val initialPage = remember { groups.indexOfFirst { it.id == args.selectedGroupId }.coerceAtLeast(0) }
+    val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { groups.size })
     val scrollStates = handles.scrollStates
 
     LaunchedEffect(groups) {

@@ -15,7 +15,12 @@ import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,6 +31,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
@@ -34,55 +40,88 @@ private const val SEARCH_DEBOUNCE_MS = 300L
 private const val COUNT_SHARING_TIMEOUT_MS = 5_000L
 private const val MAX_CACHED_PAGERS = 6
 
+/** Upper bound for holding back prepare() when the first page never reports. */
+private const val FIRST_PAGE_TIMEOUT_MS = 3_000L
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val repo: MainRepository,
-    private val subRepo: SubRepository,
+    private val subRepo: SubRepository
 ) : BaseViewModel<MainUiState, MainAction>(
-    // Storage may still be bootstrapping when the ViewModel is created: reading the snapshot
-    // here would bake coded defaults into the state and nothing would re-read them.
-    // onStorageReady() fills these in once the barrier has opened.
+    // Storage may still be bootstrapping: onStorageReady() fills snapshot-backed fields.
     MainUiState(
         selectedGroupId = "",
         selectedGuid = null,
         confirmRemove = false,
-        doubleColumnDisplay = false,
+        doubleColumnDisplay = false
     )
 ) {
 
     private val query = MutableStateFlow("")
 
-    /**
-     * Empty query passes through immediately: debounce also delays the MutableStateFlow's
-     * initial value, so the first screen would otherwise sit empty for SEARCH_DEBOUNCE_MS.
-     */
+    /** Empty query passes through immediately so the first screen is not delayed. */
     private val debouncedQuery = query
         .debounce { if (it.isEmpty()) 0L else SEARCH_DEBOUNCE_MS }
         .distinctUntilChanged()
 
     /**
-     * One cached Pager flow per group, so swiping back and forth in HorizontalPager does not
-     * rebuild the PagingSource. A new search term swaps the PagingSource, not the flow.
+     * cachedIn() shares through shareIn(scope, Lazily): once started, the upstream lives as long
+     * as the scope. Under viewModelScope that meant two problems: dropping an entry from the map
+     * did NOT stop it, so an evicted group kept its PagingSource alive and re-queried on every
+     * table invalidation; and the scope ran on Main.immediate, so the PagingData.map row
+     * assembly in MainRepository.serverPager (generateDescription for the initial 80-row load)
+     * executed on the main thread right before the first frame. Note that flowOn() upstream of
+     * cachedIn does NOT fix the thread — it only moves the outer Flow<PagingData<T>>; the
+     * page-event flow is collected inside the cachedIn scope. Each entry therefore owns a child
+     * scope on Dispatchers.Default that is cancelled on eviction.
      *
-     * Access-ordered with a capacity bound: cachedIn keeps the last PagingData alive, and with
-     * dozens of groups retaining every one of them is wasted resident memory. LinkedHashMap is
-     * not thread-safe — servers() runs from a Composable on the main thread, observeGroups()
-     * from a coroutine, so every access goes through @Synchronized.
+     * Eviction safety: HorizontalPager uses beyondViewportPageCount = 0, so at most two pages are
+     * composed and those two are always the two most recent accesses (servers() is called from
+     * remember(groupId, handles), once per page composition). An entry can only become eldest
+     * after MAX_CACHED_PAGERS other groups were composed after it.
+     * IF beyondViewportPageCount IS EVER RAISED, RAISE MAX_CACHED_PAGERS TOO: a cancelled scope
+     * leaves its page stuck on an empty list — silently, without an error state.
      */
-    private val pagers = object :
-        LinkedHashMap<String, Flow<PagingData<ServerRowItem>>>(MAX_CACHED_PAGERS, 0.75f, true) {
-        override fun removeEldestEntry(
-            eldest: MutableMap.MutableEntry<String, Flow<PagingData<ServerRowItem>>>,
-        ): Boolean = size > MAX_CACHED_PAGERS
+    private class CachedPager(
+        val scope: CoroutineScope,
+        val flow: Flow<PagingData<ServerRowItem>>
+    )
+
+    /** Single lock for [pagers]. Previously @Synchronized (this) and synchronized(pagers) mixed. */
+    private val pagerLock = Any()
+
+    private val pagers = object : LinkedHashMap<String, CachedPager>(MAX_CACHED_PAGERS, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedPager>): Boolean {
+            val evict = size > MAX_CACHED_PAGERS
+            if (evict) eldest.value.scope.cancel()
+            return evict
+        }
     }
 
-    @Synchronized
-    fun servers(groupId: String): Flow<PagingData<ServerRowItem>> =
+    fun servers(groupId: String): Flow<PagingData<ServerRowItem>> = synchronized(pagerLock) {
         pagers.getOrPut(groupId) {
-            debouncedQuery
-                .flatMapLatest { repo.serverPager(groupId, it) }
-                .cachedIn(viewModelScope)
+            val scope = CoroutineScope(
+                SupervisorJob(viewModelScope.coroutineContext[Job]) + Dispatchers.Default
+            )
+            CachedPager(
+                scope = scope,
+                flow = debouncedQuery
+                    .flatMapLatest { repo.serverPager(groupId, it) }
+                    .cachedIn(scope)
+            )
+        }.flow
+    }
+
+    private fun retainPagers(validIds: Set<String>) = synchronized(pagerLock) {
+        val iterator = pagers.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.key !in validIds) {
+                entry.value.scope.cancel()
+                iterator.remove()
+            }
         }
+    }
 
     private val counts: StateFlow<Map<String, Int>> =
         debouncedQuery
@@ -111,36 +150,37 @@ class MainViewModel @Inject constructor(
     private var batchGroupId: String? = null
 
     private var initialized = false
-    private val firstPageReady = CompletableDeferred<Unit>()
+    private val groupsReady = CompletableDeferred<Unit>()
+    private val firstPageShown = CompletableDeferred<Unit>()
     private var selectionSeeded = false
 
-    /** Main-thread only (called from MainActivity's LaunchedEffect). */
+    /** Main-thread only: awaitReady() is always called from MainActivity's LaunchedEffect. */
     private var storageReadyHandled = false
 
     init {
         observeServiceEvents()
         observeGroupRemovals()
-        // observeGroups() moved to onStorageReady(): started before the barrier, a failed
-        // bootstrap killed it for good and a successful retry never restarted it.
     }
 
-    /** Waits for storage; on the first success seeds snapshot-backed state and starts observers. */
+    /**
+     * Pure predicate. Lets MainActivity seed `ready = true` for a recreated Activity whose
+     * process already finished the bootstrap, so no spinner frame is drawn. It performs NO
+     * seeding: that happens exactly once, in [awaitReady] — the former version seeded state
+     * from a remember{} block, a side effect in composition that also ran on compositions that
+     * were then discarded. awaitReady() returns immediately once the barrier is open, so the
+     * fast path survives with the seeding moved back behind LaunchedEffect.
+     */
+    fun isStorageReadyNow(): Boolean = repo.isReadyNow()
+
     suspend fun awaitReady() {
         repo.awaitReady()
         onStorageReady()
     }
 
-    /** Re-runs a failed storage bootstrap; the caller then awaits again. */
     fun retryStorage() {
         repo.retryBootstrap()
     }
 
-    /**
-     * Escape hatch for an import that can never finish: mark the legacy import done so the
-     * barrier can open on the next retry. The caller retries afterwards.
-     *
-     * @return true when the marker was written.
-     */
     suspend fun abandonLegacyImport(): Boolean = repo.abandonLegacyImport()
 
     private fun onStorageReady() {
@@ -150,7 +190,7 @@ class MainViewModel @Inject constructor(
             copy(
                 selectedGuid = repo.selectedGuid(),
                 confirmRemove = repo.confirmRemove(),
-                doubleColumnDisplay = repo.doubleColumnDisplay(),
+                doubleColumnDisplay = repo.doubleColumnDisplay()
             )
         }
         observeGroups()
@@ -159,6 +199,7 @@ class MainViewModel @Inject constructor(
     override fun onAction(action: MainAction) {
         when (action) {
             MainAction.Initialize -> initialize()
+            MainAction.FirstPageShown -> onFirstPageShown()
             MainAction.RefreshGroups -> repo.refreshGroups()
             MainAction.ToggleService -> if (state.isRunning) platform(MainEvent.StopService) else startCore()
             MainAction.RestartService -> restartCore()
@@ -193,7 +234,7 @@ class MainViewModel @Inject constructor(
                 AppRoute.ServerEdit(
                     configType = action.configType,
                     subscriptionId = state.selectedGroupId,
-                    isRunning = state.isRunning,
+                    isRunning = state.isRunning
                 )
             )
             is MainAction.EditServer -> navigate(
@@ -201,7 +242,7 @@ class MainViewModel @Inject constructor(
                     configType = action.configType,
                     guid = action.guid,
                     subscriptionId = state.selectedGroupId,
-                    isRunning = state.isRunning,
+                    isRunning = state.isRunning
                 )
             )
             is MainAction.ShareQrCode -> launch {
@@ -220,13 +261,10 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Subscription-table changes push new tabs; the selection is re-resolved on every emission. */
     private fun observeGroups() = launch(onError = {}) {
         repo.observeGroups().collect { groups ->
             val validIds = groups.mapTo(HashSet()) { it.id }
-            synchronized(pagers) {
-                pagers.keys.removeAll { it !in validIds }
-            }
+            retainPagers(validIds)
             countFlows.keys.removeAll { it !in validIds }
 
             val seededId = if (!selectionSeeded && groups.isNotEmpty()) {
@@ -242,10 +280,14 @@ class MainViewModel @Inject constructor(
                 copy(
                     groups = groups,
                     selectedGroupId = seededId ?: selectedGroupId,
-                    selectedGuid = repo.selectedGuid(),
+                    selectedGuid = repo.selectedGuid()
                 )
             }
-            if (!firstPageReady.isCompleted) firstPageReady.complete(Unit)
+            if (!groupsReady.isCompleted) groupsReady.complete(Unit)
+            // No groups means MainContent returns early and no GroupPagerPage ever composes,
+            // so nothing would ever report the first page: prepare() would sit out the full
+            // timeout and reportFullyDrawn() would never fire.
+            if (groups.isEmpty()) onFirstPageShown()
         }
     }
 
@@ -258,13 +300,24 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /**
+     * prepare() (asset copy + subscription worker sync) is I/O heavy. It used to start as soon
+     * as the group list arrived, i.e. racing the first page query on the same dispatcher. It
+     * now waits for the first page to settle, bounded by FIRST_PAGE_TIMEOUT_MS. Core startup
+     * does not depend on this having run — CoreStartup copies the assets itself.
+     */
     private fun initialize() {
         if (initialized) return
         initialized = true
         launch(onError = {}) {
-            firstPageReady.await()
+            groupsReady.await()
+            withTimeoutOrNull(FIRST_PAGE_TIMEOUT_MS) { firstPageShown.await() }
             repo.prepare()
         }
+    }
+
+    private fun onFirstPageShown() {
+        if (firstPageShown.complete(Unit)) platform(MainEvent.ReportFullyDrawn)
     }
 
     private fun handleResult(result: BaseResult) {
@@ -283,7 +336,7 @@ class MainViewModel @Inject constructor(
         platform(
             MainEvent.StartService(
                 requireVpnPermission = repo.isVpnMode(),
-                requireLocalNetwork = repo.isProxySharing(),
+                requireLocalNetwork = repo.isProxySharing()
             )
         )
     }
@@ -297,7 +350,7 @@ class MainViewModel @Inject constructor(
             MainEvent.RestartService(
                 stopFirst = state.isRunning,
                 requireVpnPermission = repo.isVpnMode(),
-                requireLocalNetwork = repo.isProxySharing(),
+                requireLocalNetwork = repo.isProxySharing()
             )
         )
     }
@@ -340,7 +393,7 @@ class MainViewModel @Inject constructor(
                     keepTestingText && isTesting -> status
                     running -> MainStatus.Connected
                     else -> MainStatus.Disconnected
-                },
+                }
             )
         }
     }
@@ -464,7 +517,10 @@ class MainViewModel @Inject constructor(
     }
 
     private suspend fun importBatchConfig(configText: String) {
-        if (configText.isBlank()) { toastError(); return }
+        if (configText.isBlank()) {
+            toastError()
+            return
+        }
         val (count, countSub) = repo.importBatchConfig(configText, state.selectedGroupId)
         when {
             count > 0 -> toast(BaseText.of(R.string.title_import_config_count, count))
@@ -483,7 +539,7 @@ class MainViewModel @Inject constructor(
             else -> toast(
                 BaseText.of(
                     R.string.title_update_subscription_result,
-                    result.configCount, result.successCount, result.failureCount, result.skipCount,
+                    result.configCount, result.successCount, result.failureCount, result.skipCount
                 )
             )
         }
@@ -549,6 +605,9 @@ class MainViewModel @Inject constructor(
         currentTestId = null
         batchTestId = null
         batchGroupId = null
+        // Every CachedPager scope is a child of viewModelScope's Job, which ViewModel.clear()
+        // has already cancelled by the time onCleared() runs; clear() also cancels each scope.
+        synchronized(pagerLock) { pagers.clear() }
         super.onCleared()
     }
 }

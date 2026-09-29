@@ -25,8 +25,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,6 +38,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
@@ -47,6 +50,7 @@ import com.v2ray.ang.ui.compose.LocalAppColors
 import com.v2ray.ang.ui.compose.ReorderableGridItem
 import com.v2ray.ang.ui.compose.ReorderableListItem
 import com.v2ray.ang.ui.compose.verticalScrollbar
+import kotlinx.coroutines.flow.first
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -74,6 +78,19 @@ fun GroupPagerPage(
 ) {
     val items = remember(groupId, handles) { handles.slices.servers(groupId) }
         .collectAsLazyPagingItems()
+
+    // Report the first settled page (rows, an empty result, or an error). LazyPagingItems starts
+    // with NotLoading(endOfPaginationReached = false) before any load, so "not Loading" alone
+    // would fire too early. The ViewModel ignores repeats and gates prepare()/reportFullyDrawn().
+    LaunchedEffect(items) {
+        snapshotFlow {
+            items.itemCount > 0 ||
+                items.loadState.refresh is LoadState.Error ||
+                items.loadState.append.endOfPaginationReached
+        }.first { it }
+        handles.dispatch(MainAction.FirstPageShown)
+    }
+
     val callbacks = remember(handles) {
         ServerRowCallbacks(
             onSelect = { guid -> handles.dispatch(MainAction.SelectServer(guid)) },
