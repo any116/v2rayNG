@@ -49,6 +49,13 @@ internal object CoreStartup {
         // Randomise the dynamic SOCKS port once per core launch.
         runCatching { SettingsManager.refreshRuntimeSocksPort() }
             .onFailure { LogUtil.e(AppConfig.TAG, "CoreStartup: failed to refresh runtime socks port", it) }
+        // Idempotent (skips files that already exist) and cheap. Duplicated from
+        // MainRepository.prepare() on purpose: that call is deferred until the first list page
+        // settles, and a fresh install with an empty list can take up to the full grace period
+        // — the core must never build a config whose geosite/geoip rules point at files that
+        // have not been copied out of the apk yet.
+        runCatching { SettingsManager.initAssets(context, context.assets) }
+            .onFailure { LogUtil.e(AppConfig.TAG, "CoreStartup: asset copy failed", it) }
         runCatching { SettingsManager.ensureRoutingRulesets(context) }
             .onFailure { LogUtil.e(AppConfig.TAG, "CoreStartup: failed to seed routing rulesets", it) }
         return true

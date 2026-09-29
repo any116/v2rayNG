@@ -45,6 +45,13 @@ data class MainUiState(
 
 sealed interface MainAction : BaseAction {
     data object Initialize : MainAction
+
+    /**
+     * The first list page has settled (rows, an empty result, or an error) — or the group list
+     * itself is empty, so no page will ever compose. Gates the deferred prepare() work and
+     * reportFullyDrawn(); repeats are ignored by the ViewModel.
+     */
+    data object FirstPageShown : MainAction
     data object RefreshGroups : MainAction
     data object ToggleService : MainAction
     data object RestartService : MainAction
@@ -96,4 +103,7 @@ sealed interface MainEvent : BaseEvent.Platform {
     data object PickConfigFile : MainEvent
     data class ShowQrCode(val bitmap: Bitmap) : MainEvent
     data class LocateProfile(val target: LocateTarget) : MainEvent
+
+    /** Host calls Activity.reportFullyDrawn(); emitted at most once per ViewModel. */
+    data object ReportFullyDrawn : MainEvent
 }
