@@ -149,6 +149,14 @@ open class MainRepository @Inject constructor(
         settings.awaitReady()
     }
 
+    /**
+     * Non-suspending, SIDE-EFFECT-FREE fast path: lets a recreated Activity seed its
+     * `ready = true` and skip the boot spinner frame. It must stay pure — the state seeding and
+     * the observer start belong to [awaitReady], which runs from a LaunchedEffect, never during
+     * composition.
+     */
+    open fun isReadyNow(): Boolean = StorageBootstrap.isReady && settings.isReady
+
     /** Re-runs a failed storage bootstrap. No-op while running or after success. */
     open fun retryBootstrap(): Boolean = StorageBootstrap.retry()
 
@@ -204,16 +212,18 @@ open class MainRepository @Inject constructor(
             }
         }.flowIO()
 
-    /** Includes the "All" bucket and empty subscriptions (count 0). */
+    /**
+     * Includes the "All" bucket and empty subscriptions (count 0). The two branches of
+     * ProfileDao.observeCounts partition the profiles table, so the "All" total is their sum:
+     * one table scan per invalidation instead of two — and, more importantly, the "All" badge
+     * and the per-group badges now come from the SAME snapshot. The previous two-Flow combine
+     * could publish a total that did not match the sum of the badges.
+     */
     open fun observeCounts(query: String): Flow<Map<String, Int>> {
         val escaped = query.trim().normalizeLike()
-        return combine(
-            profileDao.observeCounts(escaped),
-            profileDao.observeTotalCount(escaped),
-            groupRefresh
-        ) { perGroup, total, _ ->
+        return combine(profileDao.observeCounts(escaped), groupRefresh) { perGroup, _ ->
             buildMap {
-                if (settings.bool(AppConfig.PREF_GROUP_ALL_DISPLAY)) put("", total)
+                if (settings.bool(AppConfig.PREF_GROUP_ALL_DISPLAY)) put("", perGroup.sumOf { it.count })
                 perGroup.forEach { put(it.groupId, it.count) }
             }
         }.flowIO()
@@ -385,6 +395,12 @@ open class MainRepository @Inject constructor(
         _serviceEvents.tryEmit(MainServiceEvent.MeasureDelayCanceled(requestId))
     }
 
+    /**
+     * Deferred startup work (asset copy + subscription worker sync) is I/O heavy; the ViewModel
+     * now holds it back until the first list page settles. NOTE: initAssets is also called
+     * (idempotently) from CoreStartup.refreshPreferences — core startup must never depend on
+     * this having run, because a fresh install with an empty list settles the first page late.
+     */
     open suspend fun prepare() = withIO {
         SettingsManager.initAssets(app, app.assets)
         SubscriptionUpdater.sync(app)

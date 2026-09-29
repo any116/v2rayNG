@@ -45,83 +45,125 @@ data class SortAnchor(val guid: String, val sortOrder: Long)
 
 data class DefaultGroupRepair(val createdDefault: Boolean, val adoptedProfiles: Int)
 
+// ---- Shared SQL fragments (compile-time constants, legal inside @Query) ----
+
+/**
+ * Search predicate on alias `p`. CONTRACT: :query must already be lowercased and LIKE-escaped
+ * by String.normalizeLike() before it reaches any DAO method that embeds this fragment.
+ * Semantics unchanged from the former inline copies (remarks / description / server).
+ */
+private const val MATCH_P = """(:query = ''
+             OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
+             OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
+             OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')"""
+
+private const val LIST_ORDER = " ORDER BY p.groupSortOrder, p.sortOrder, p.guid "
+
+private const val ROW_BASE_COLUMNS = """
+    SELECT p.guid           AS guid,
+           p.remarks        AS remarks,
+           p.description    AS description,
+           p.server         AS server,
+           p.serverPort     AS serverPort,
+           p.configType     AS configType,
+           p.network        AS network,
+           p.security       AS security,
+           p.insecure       AS insecure,
+           p.subscriptionId AS subscriptionId,
+           IFNULL(st.testDelayMillis, 0)  AS testDelayMillis,
+    """
+
 @Dao
 @DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)
 interface ProfileDao {
 
+    // =====================================================================================
+    // Scope splitting.
+    //
+    // The former single-statement shape `(:subscriptionId = '' OR p.subscriptionId = :id)`
+    // cannot drive an index: SQLite only applies the OR optimisation when EVERY disjunct is
+    // indexable, and `:subscriptionId = ''` is not a column constraint. A group page therefore
+    // walked the global order and filtered row by row — and Room's paging COUNT repeated the
+    // scan on every invalidation. Each scoped query now has a group variant that hits
+    // Index(subscriptionId, groupSortOrder, sortOrder, guid) (equality on the leading column
+    // narrows the range AND satisfies the ORDER BY, so no temp B-tree) and an "All" variant
+    // that hits Index(groupSortOrder, sortOrder, guid). The old names stay as dispatching
+    // default methods so no caller changes.
+    //
+    // NOTE: the paging COUNT is still O(rows in scope); it walks index pages now instead of
+    // scanning and sorting the whole table. Do not describe it as constant-time.
+    // =====================================================================================
+
     // ---- Paging: the only entry point for the main list ----
-    // subscriptionId = '' means the "All" group.
-    // query is already lowercased and LIKE-escaped; callers must use String.normalizeLike().
+
+    /** subscriptionId = '' means the "All" group. */
+    fun pageServers(subscriptionId: String, query: String): PagingSource<Int, ServerRowProjection> =
+        if (subscriptionId.isEmpty()) pageAllServers(query) else pageGroupServers(subscriptionId, query)
+
+    /**
+     * No subscriptions JOIN: the badge is only rendered in "All"
+     * (MainRepository.toRowItem drops subscriptionInitial whenever groupId is non-empty).
+     * Besides saving the join, this removes `subscriptions` from the table set Room watches
+     * for this PagingSource, so SubscriptionDao.touch(lastUpdated) during a subscription
+     * update no longer invalidates every group page.
+     *
+     * CAST(NULL AS TEXT), not a bare NULL: a NULL literal has no type affinity, and Room's
+     * compile-time column-type resolution then has nothing to bind the String? property to.
+     */
     @Query(
-        """
-        SELECT p.guid           AS guid,
-               p.remarks        AS remarks,
-               p.description    AS description,
-               p.server         AS server,
-               p.serverPort     AS serverPort,
-               p.configType     AS configType,
-               p.network        AS network,
-               p.security       AS security,
-               p.insecure       AS insecure,
-               p.subscriptionId AS subscriptionId,
-               UPPER(SUBSTR(s.remarks, 1, 1)) AS subscriptionInitial,
-               IFNULL(st.testDelayMillis, 0)  AS testDelayMillis
-          FROM profiles AS p
-          LEFT JOIN subscriptions AS s  ON s.guid = p.subscriptionId
-          LEFT JOIN profile_stats AS st ON st.guid = p.guid
-         WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
-           AND (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-         ORDER BY p.groupSortOrder, p.sortOrder, p.guid
-        """
+        ROW_BASE_COLUMNS + """
+           CAST(NULL AS TEXT) AS subscriptionInitial
+      FROM profiles AS p
+      LEFT JOIN profile_stats AS st ON st.guid = p.guid
+     WHERE p.subscriptionId = :subscriptionId
+       AND """ + MATCH_P + LIST_ORDER
     )
-    fun pageServers(subscriptionId: String, query: String): PagingSource<Int, ServerRowProjection>
+    fun pageGroupServers(subscriptionId: String, query: String): PagingSource<Int, ServerRowProjection>
+
+    @Query(
+        ROW_BASE_COLUMNS + """
+           UPPER(SUBSTR(s.remarks, 1, 1)) AS subscriptionInitial
+      FROM profiles AS p
+      LEFT JOIN subscriptions AS s  ON s.guid = p.subscriptionId
+      LEFT JOIN profile_stats AS st ON st.guid = p.guid
+     WHERE """ + MATCH_P + LIST_ORDER
+    )
+    fun pageAllServers(query: String): PagingSource<Int, ServerRowProjection>
 
     // ---- Counts: drives the group tab badges ----
-    // LEFT JOIN rather than a correlated subquery per subscription: the previous shape was
-    // O(groups x profiles) with three LIKEs each, re-evaluated on every invalidation. The
-    // LIKEs must live in ON, not WHERE, or the LEFT JOIN degrades into an INNER JOIN and
-    // empty groups disappear.
+    // LEFT JOIN rather than a correlated subquery per subscription: the LIKEs must live in ON,
+    // not WHERE, or the LEFT JOIN degrades into an INNER JOIN and empty groups disappear.
+    //
+    // The two branches partition the profiles table (branch 2 excludes every subscriptionId
+    // present in `subscriptions`), so sum(counts) == total matching rows. MainRepository
+    // derives the "All" badge from that sum, which also removes a real defect: the "All"
+    // count and the per-group counts now come from ONE snapshot instead of two Flows that
+    // could be momentarily out of step.
     @Query(
         """
         SELECT s.guid AS groupId, COUNT(p.guid) AS count
           FROM subscriptions AS s
           LEFT JOIN profiles AS p
             ON p.subscriptionId = s.guid
-           AND (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
+           AND """ + MATCH_P + """
          GROUP BY s.guid
         UNION ALL
         SELECT p.subscriptionId AS groupId, COUNT(*) AS count
           FROM profiles AS p
          WHERE p.subscriptionId NOT IN (SELECT guid FROM subscriptions)
-           AND (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
+           AND """ + MATCH_P + """
          GROUP BY p.subscriptionId
         """
     )
     fun observeCounts(query: String): Flow<List<GroupCount>>
 
-    @Query(
-        """
-        SELECT COUNT(*) FROM profiles AS p
-         WHERE (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-        """
-    )
-    fun observeTotalCount(query: String): Flow<Int>
-
     // ---- Locate: ROW_NUMBER needs SQLite >= 3.25, guaranteed by BundledSQLiteDriver ----
     // Must take :query — pageServers' itemCount is post-filter, so an index computed without
     // the search term jumps to the wrong row while searching.
+
+    suspend fun indexOf(subscriptionId: String, query: String, guid: String): Int? =
+        if (subscriptionId.isEmpty()) indexOfInAll(query, guid) else indexOfInGroup(subscriptionId, query, guid)
+
     @Query(
         """
         SELECT rn - 1 FROM (
@@ -130,45 +172,84 @@ interface ProfileDao {
                        ORDER BY p.groupSortOrder, p.sortOrder, p.guid
                    ) AS rn
               FROM profiles AS p
-             WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
-               AND (:query = ''
-                    OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                    OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                    OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
+             WHERE p.subscriptionId = :subscriptionId
+               AND """ + MATCH_P + """
         ) WHERE g = :guid
         """
     )
-    suspend fun indexOf(subscriptionId: String, query: String, guid: String): Int?
+    suspend fun indexOfInGroup(subscriptionId: String, query: String, guid: String): Int?
+
+    @Query(
+        """
+        SELECT rn - 1 FROM (
+            SELECT p.guid AS g,
+                   ROW_NUMBER() OVER (
+                       ORDER BY p.groupSortOrder, p.sortOrder, p.guid
+                   ) AS rn
+              FROM profiles AS p
+             WHERE """ + MATCH_P + """
+        ) WHERE g = :guid
+        """
+    )
+    suspend fun indexOfInAll(query: String, guid: String): Int?
 
     /**
      * Two guids starting at :offset in list order, excluding the dragged row. Drag targets are
      * resolved here rather than from LazyColumn layoutInfo: with placeholders enabled a
      * placeholder row's key is a PagingPlaceholderKey, not the profile guid.
      */
+    suspend fun neighboursAt(
+        subscriptionId: String,
+        query: String,
+        excludeGuid: String,
+        offset: Int,
+    ): List<String> =
+        if (subscriptionId.isEmpty()) {
+            neighboursInAll(query, excludeGuid, offset)
+        } else {
+            neighboursInGroup(subscriptionId, query, excludeGuid, offset)
+        }
+
     @Query(
         """
         SELECT p.guid FROM profiles AS p
-         WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
+         WHERE p.subscriptionId = :subscriptionId
            AND p.guid <> :excludeGuid
-           AND (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-         ORDER BY p.groupSortOrder, p.sortOrder, p.guid
+           AND """ + MATCH_P + LIST_ORDER + """
          LIMIT 2 OFFSET :offset
         """
     )
-    suspend fun neighboursAt(
+    suspend fun neighboursInGroup(
         subscriptionId: String,
         query: String,
         excludeGuid: String,
         offset: Int,
     ): List<String>
 
+    /**
+     * Currently unreachable: moveProfileToIndex refuses the "All" scope outright, because
+     * neighbours there can live in different subscriptions and one sortOrder update cannot
+     * express that position. Kept so the neighboursAt dispatcher stays symmetric with the
+     * other scoped pairs — do not delete one half of a pair.
+     */
+    @Query(
+        """
+        SELECT p.guid FROM profiles AS p
+         WHERE p.guid <> :excludeGuid
+           AND """ + MATCH_P + LIST_ORDER + """
+         LIMIT 2 OFFSET :offset
+        """
+    )
+    suspend fun neighboursInAll(query: String, excludeGuid: String, offset: Int): List<String>
+
     // ---- Single row ----
 
     @Query("SELECT * FROM profiles WHERE guid = :guid")
     suspend fun findByGuid(guid: String): ProfileItem?
+
+    /** Existence probe; avoids materialising ~60 columns just to test for null. */
+    @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE guid = :guid)")
+    suspend fun profileExists(guid: String): Boolean
 
     /**
      * Routing outbound tags, proxy chain nodes and policy-group fallback tags are all resolved
@@ -228,37 +309,59 @@ interface ProfileDao {
     )
     suspend fun guidsInGroup(subscriptionId: String): List<String>
 
+    /** First row of a group; replaces guidsInGroup(...).firstOrNull() on fallback paths. */
+    @Query(
+        "SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId " +
+            "ORDER BY groupSortOrder, sortOrder, guid LIMIT 1"
+    )
+    suspend fun firstGuidInGroup(subscriptionId: String): String?
+
+    /** First row in global list order; replaces allGuidsInOrder().firstOrNull() on fallback paths. */
+    @Query("SELECT guid FROM profiles ORDER BY groupSortOrder, sortOrder, guid LIMIT 1")
+    suspend fun firstGuid(): String?
+
     /**
      * Profiles of one scope, complex types excluded. Replaces the pre-Room
      * decodeAllServerList() + per-guid decode loop used for POLICYGROUP resolution, which walked
      * the entire table. subscriptionId = '' means "all groups".
      */
+    suspend fun profilesOfScope(subscriptionId: String, complexTypes: List<Int>): List<ProfileItem> =
+        if (subscriptionId.isEmpty()) profilesOfAll(complexTypes) else profilesOfGroup(subscriptionId, complexTypes)
+
     @Query(
         """
         SELECT * FROM profiles
-         WHERE (:subscriptionId = '' OR subscriptionId = :subscriptionId)
+         WHERE subscriptionId = :subscriptionId
            AND configType NOT IN (:complexTypes)
          ORDER BY groupSortOrder, sortOrder, guid
         """
     )
-    suspend fun profilesOfScope(subscriptionId: String, complexTypes: List<Int>): List<ProfileItem>
+    suspend fun profilesOfGroup(subscriptionId: String, complexTypes: List<Int>): List<ProfileItem>
+
+    @Query(
+        """
+        SELECT * FROM profiles
+         WHERE configType NOT IN (:complexTypes)
+         ORDER BY groupSortOrder, sortOrder, guid
+        """
+    )
+    suspend fun profilesOfAll(complexTypes: List<Int>): List<ProfileItem>
 
     @Query("SELECT guid FROM profiles ORDER BY groupSortOrder, sortOrder, guid")
     suspend fun allGuidsInOrder(): List<String>
 
     /** Guids of the currently visible set, in list order. Backs export / batch test / scoped delete. */
+    suspend fun guidsInScope(subscriptionId: String, query: String): List<String> =
+        if (subscriptionId.isEmpty()) guidsInAllScope(query) else guidsInGroupScope(subscriptionId, query)
+
     @Query(
-        """
-        SELECT p.guid FROM profiles AS p
-         WHERE (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
-           AND (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-         ORDER BY p.groupSortOrder, p.sortOrder, p.guid
-        """
+        "SELECT p.guid FROM profiles AS p WHERE p.subscriptionId = :subscriptionId AND " +
+            MATCH_P + LIST_ORDER
     )
-    suspend fun guidsInScope(subscriptionId: String, query: String): List<String>
+    suspend fun guidsInGroupScope(subscriptionId: String, query: String): List<String>
+
+    @Query("SELECT p.guid FROM profiles AS p WHERE " + MATCH_P + LIST_ORDER)
+    suspend fun guidsInAllScope(query: String): List<String>
 
     @Query("SELECT subscriptionId FROM profiles WHERE guid = :guid")
     suspend fun subscriptionIdOf(guid: String): String?
@@ -299,8 +402,16 @@ interface ProfileDao {
     suspend fun setSortOrder(guid: String, sortOrder: Long)
 
     /**
+     * Owning subscription's sortOrder; null for an orphan group. Read with the exact expression
+     * GROUP_ORDER_TRIGGERS compare against, so a pre-filled groupSortOrder matches what the
+     * trigger would have written (see [replaceGroup]).
+     */
+    @Query("SELECT sortOrder FROM subscriptions WHERE guid = :subscriptionId")
+    suspend fun groupSortOrderOf(subscriptionId: String): Long?
+
+    /**
      * Drag drop. targetIndex is the index AFTER removing the dragged row (reorderable's
-     * to.index). Neighbours come from neighboursAt, not from the UI.
+     * to.index). Neighbours come from neighboursInGroup, not from the UI.
      *
      * Only valid for a concrete group: in the "All" view neighbours can live in different
      * subscriptions and a single sortOrder update cannot express that position, so the caller
@@ -317,7 +428,7 @@ interface ProfileDao {
         if (subscriptionIdOf(movedGuid) != subscriptionId) return
 
         val offset = (targetIndex - 1).coerceAtLeast(0)
-        val window = neighboursAt(subscriptionId, query, movedGuid, offset)
+        val window = neighboursInGroup(subscriptionId, query, movedGuid, offset)
         val prevGuid = if (targetIndex == 0) null else window.getOrNull(0)
         val nextGuid = if (targetIndex == 0) window.getOrNull(0) else window.getOrNull(1)
 
@@ -396,7 +507,8 @@ interface ProfileDao {
 
     /**
      * The only profile deletion exit. Also repairs the long-standing "selection dangles after
-     * deleting the selected profile" bug, inside the same transaction.
+     * deleting the selected profile" bug, inside the same transaction. Only the first fallback
+     * guid is read (LIMIT 1), not the whole group.
      */
     @Transaction
     suspend fun deleteProfiles(guids: List<String>): Int {
@@ -411,7 +523,7 @@ interface ProfileDao {
         }
 
         if (group != null) {
-            writeSelectedGuid(guidsInGroup(group).firstOrNull() ?: allGuidsInOrder().firstOrNull())
+            writeSelectedGuid(firstGuidInGroup(group) ?: firstGuid())
         }
         return guids.size
     }
@@ -441,65 +553,100 @@ interface ProfileDao {
     // ---- Cleanup: invalid / duplicate ----
     // Both carry :query so "only act on currently visible rows" keeps the pre-Room semantics.
 
+    suspend fun invalidGuids(subscriptionId: String, query: String): List<String> =
+        if (subscriptionId.isEmpty()) invalidGuidsInAll(query) else invalidGuidsInGroup(subscriptionId, query)
+
     @Query(
         """
         SELECT p.guid FROM profiles AS p
           JOIN profile_stats AS st ON st.guid = p.guid
          WHERE st.testDelayMillis < 0
-           AND (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
-           AND (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-        """
+           AND p.subscriptionId = :subscriptionId
+           AND """ + MATCH_P
     )
-    suspend fun invalidGuids(subscriptionId: String, query: String): List<String>
+    suspend fun invalidGuidsInGroup(subscriptionId: String, query: String): List<String>
 
-    /**
-     * Duplicates: per dedupeKey keep the lowest sortOrder. The correlated subquery repeats the
-     * scope filters so the surviving row is chosen from the SAME visible set — otherwise a
-     * keeper in another group or filtered out by the search term would cause every visible
-     * copy to be deleted.
-     */
     @Query(
         """
         SELECT p.guid FROM profiles AS p
-         WHERE p.configType NOT IN (:complexTypes)
-           AND p.dedupeKey <> ''
-           AND (:subscriptionId = '' OR p.subscriptionId = :subscriptionId)
-           AND (:query = ''
-                OR LOWER(p.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                OR LOWER(IFNULL(p.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-           AND p.guid <> (
-                 SELECT q.guid FROM profiles AS q
-                  WHERE q.dedupeKey = p.dedupeKey
-                    AND q.configType NOT IN (:complexTypes)
-                    AND (:subscriptionId = '' OR q.subscriptionId = :subscriptionId)
-                    AND (:query = ''
-                         OR LOWER(q.remarks)                LIKE '%' || :query || '%' ESCAPE '\'
-                         OR LOWER(IFNULL(q.description,'')) LIKE '%' || :query || '%' ESCAPE '\'
-                         OR LOWER(IFNULL(q.server,''))      LIKE '%' || :query || '%' ESCAPE '\')
-                  ORDER BY q.sortOrder, q.guid LIMIT 1)
+          JOIN profile_stats AS st ON st.guid = p.guid
+         WHERE st.testDelayMillis < 0
+           AND """ + MATCH_P
+    )
+    suspend fun invalidGuidsInAll(query: String): List<String>
+
+    /**
+     * Duplicates: per dedupeKey keep the lowest (sortOrder, guid) inside the SAME visible set —
+     * otherwise a keeper in another group or filtered out by the search term would cause every
+     * visible copy to be deleted. One window pass instead of the former correlated subquery
+     * per row; the keeper rule is identical to the former `ORDER BY q.sortOrder, q.guid LIMIT 1`.
+     */
+    suspend fun duplicateGuids(
+        subscriptionId: String,
+        query: String,
+        complexTypes: List<Int>,
+    ): List<String> =
+        if (subscriptionId.isEmpty()) {
+            duplicateGuidsInAll(query, complexTypes)
+        } else {
+            duplicateGuidsInGroup(subscriptionId, query, complexTypes)
+        }
+
+    @Query(
+        """
+        SELECT guid FROM (
+            SELECT p.guid AS guid,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY p.dedupeKey
+                       ORDER BY p.sortOrder, p.guid
+                   ) AS rn
+              FROM profiles AS p
+             WHERE p.configType NOT IN (:complexTypes)
+               AND p.dedupeKey <> ''
+               AND p.subscriptionId = :subscriptionId
+               AND """ + MATCH_P + """
+        ) WHERE rn > 1
         """
     )
-    suspend fun duplicateGuids(
+    suspend fun duplicateGuidsInGroup(
         subscriptionId: String,
         query: String,
         complexTypes: List<Int>,
     ): List<String>
 
-    // ---- dedupeKey lazy backfill ----
-
     @Query(
         """
-        SELECT * FROM profiles
-         WHERE dedupeKey = ''
-           AND (:subscriptionId = '' OR subscriptionId = :subscriptionId)
-         LIMIT :limit
+        SELECT guid FROM (
+            SELECT p.guid AS guid,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY p.dedupeKey
+                       ORDER BY p.sortOrder, p.guid
+                   ) AS rn
+              FROM profiles AS p
+             WHERE p.configType NOT IN (:complexTypes)
+               AND p.dedupeKey <> ''
+               AND """ + MATCH_P + """
+        ) WHERE rn > 1
         """
     )
-    suspend fun profilesMissingDedupeKey(subscriptionId: String, limit: Int): List<ProfileItem>
+    suspend fun duplicateGuidsInAll(query: String, complexTypes: List<Int>): List<String>
+
+    // ---- dedupeKey lazy backfill ----
+
+    suspend fun profilesMissingDedupeKey(subscriptionId: String, limit: Int): List<ProfileItem> =
+        if (subscriptionId.isEmpty()) {
+            profilesMissingDedupeKeyInAll(limit)
+        } else {
+            profilesMissingDedupeKeyInGroup(subscriptionId, limit)
+        }
+
+    @Query(
+        "SELECT * FROM profiles WHERE dedupeKey = '' AND subscriptionId = :subscriptionId LIMIT :limit"
+    )
+    suspend fun profilesMissingDedupeKeyInGroup(subscriptionId: String, limit: Int): List<ProfileItem>
+
+    @Query("SELECT * FROM profiles WHERE dedupeKey = '' LIMIT :limit")
+    suspend fun profilesMissingDedupeKeyInAll(limit: Int): List<ProfileItem>
 
     @Query("UPDATE profiles SET dedupeKey = :key WHERE guid = :guid")
     suspend fun setDedupeKey(guid: String, key: String)
@@ -507,7 +654,11 @@ interface ProfileDao {
     @Query("UPDATE profiles SET dedupeKey = ''")
     suspend fun clearAllDedupeKeys()
 
-    /** One transaction per batch so the write lock is never held for thousands of digests. */
+    /**
+     * One transaction per batch so the write lock is never held for thousands of digests. The
+     * digest stays INSIDE the transaction on purpose: computing it outside would let a
+     * concurrent edit slip in between read and write and persist a stale key.
+     */
     @Transaction
     suspend fun backfillDedupeKeyBatch(subscriptionId: String, limit: Int): Int {
         val rows = profilesMissingDedupeKey(subscriptionId, limit)
@@ -543,6 +694,10 @@ interface ProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putRaw(raw: ProfileRaw)
 
+    /** Batch variant: one prepared statement reused for the whole list. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putRaws(raws: List<ProfileRaw>)
+
     // ---- Orphan cleanup (replaces OrphanProfileCleaner / StoredProfileReference) ----
 
     @Query("DELETE FROM profile_stats WHERE guid NOT IN (SELECT guid FROM profiles)")
@@ -561,10 +716,22 @@ interface ProfileDao {
      * When append is false the group's old rows are dropped first. If the selected profile is
      * among them and the incoming set carries an identical configuration, the selection is
      * repointed inside the same transaction and that guid is returned so the repository can
-     * poke its snapshot.
+     * poke its snapshot. Replacement matching compares duplicateIdentity() objects directly
+     * instead of hashing every incoming profile: both sides are already in memory, so SHA-256
+     * would be pure cost.
      *
-     * Replacement matching compares duplicateIdentity() objects directly instead of hashing
-     * every incoming profile: both sides are already in memory, so SHA-256 would be pure cost.
+     * groupSortOrder is pre-filled with the owning subscription's sortOrder, read in this same
+     * transaction via [groupSortOrderOf] — the exact expression GROUP_ORDER_TRIGGERS compare
+     * against. This is a DELIBERATE, DOCUMENTED exception to "never write groupSortOrder by
+     * hand" (repository-rules.md section 3, amended): every row here takes the INSERT path of
+     * @Upsert (append = false deletes the group first, append = true carries fresh UUIDs), and
+     * without the hint the AFTER INSERT trigger fired one extra single-row UPDATE per imported
+     * row — measurable on five-thousand-node subscription refreshes.
+     *
+     * GROUP_ORDER_TRIGGERS remain the source of truth: their WHEN clause only skips the
+     * corrective UPDATE when the value already matches, so a wrong hint is still repaired. Do
+     * NOT remove that corrective UPDATE on the assumption that this hint is authoritative.
+     * Covered by ProfileDaoQueryTest (existing subscription / orphan group / later reorder).
      */
     @Transaction
     suspend fun replaceGroup(
@@ -590,21 +757,23 @@ interface ProfileDao {
         }
 
         val base = if (append) maxSortOrder(subscriptionId) else 0L
+        val groupOrder = groupSortOrderOf(subscriptionId) ?: Long.MAX_VALUE
         upsertAll(
             profiles.mapIndexed { index, profile ->
                 profile.copy(
                     subscriptionId = subscriptionId,
                     sortOrder = base + (index + 1) * ProfileItem.SORT_STEP,
+                    groupSortOrder = groupOrder,
                     dedupeKey = "",
                 )
             }
         )
-        raws.forEach { putRaw(it) }
+        if (raws.isNotEmpty()) putRaws(raws)
 
         if (replacement != null) {
             writeSelectedGuid(replacement)
-        } else if (selected != null && findByGuid(selected) == null) {
-            writeSelectedGuid(guidsInGroup(subscriptionId).firstOrNull() ?: allGuidsInOrder().firstOrNull())
+        } else if (selected != null && !profileExists(selected)) {
+            writeSelectedGuid(firstGuidInGroup(subscriptionId) ?: firstGuid())
         }
         return replacement
     }
@@ -712,9 +881,12 @@ interface SubscriptionDao {
     suspend fun repairDefault(defaultRemarks: String, force: Boolean): DefaultGroupRepair {
         var exists = find(AppConfig.DEFAULT_SUBSCRIPTION_ID) != null
         val orphans = orphanProfileCount()
-        val created = !exists && (force || orphans > 0 || count() == 0)
+        // Read once; both former call sites read it before the upsert below, so one read is
+        // equivalent — and unlike the old shape the two checks can never disagree.
+        val total = count()
+        val created = !exists && (force || orphans > 0 || total == 0)
         if (created) {
-            val head = if (count() == 0) {
+            val head = if (total == 0) {
                 ProfileItem.SORT_STEP
             } else {
                 minSortOrder() - ProfileItem.SORT_STEP

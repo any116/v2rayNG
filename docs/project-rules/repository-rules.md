@@ -77,20 +77,30 @@ open class XxxRepository @Inject constructor(
   投影是一个普通 `data class`（如 `ServerRowProjection`），列名与 SQL 别名一一对应。
 - 搜索语义是 **SQL `LIKE`**（不区分大小写），**不是正则**：先 `normalizeLike()`，
   再 `LOWER(col) LIKE '%' || :query || '%' ESCAPE '\'`。
-  搜索字段固定为 `remarks / description / server`，改语义必须先写"搜索真值测试"。
+  搜索字段固定为 `remarks / description / server`，改语义必须先写“搜索真值测试”。
 - 计数、去重、定位都用 SQL 完成，不要在 Kotlin 里遍历：
-  - 计数：`observeCounts` / `observeTotalCount`（`LEFT JOIN` 而非相关子查询，
-    否则空分组会消失）；
+  - 计数：`observeCounts`（`LEFT JOIN` 而非相关子查询，否则空分组会消失）。两个 UNION
+    分支划分了整张 `profiles` 表（第二个分支排除所有已存在的订阅 id），所以
+    `sumOf { it.count }` 就是总数；**“全部”角标必须从求和得出**，不要再单独查一条
+    `COUNT(*)` Flow——两条 Flow 合并时可能出现“总数与分组数之和不一致”的瞬时快照；
   - 定位：`indexOf` 用 `ROW_NUMBER() OVER (...)`（依赖 BundledSQLiteDriver，SQLite ≥ 3.25）；
   - 拖拽邻居：`neighboursAt`（不要用 `LazyColumn` 的 `layoutInfo`，
     placeholders 下 placeholder 行的 key 不是 guid）；
-  - 去重：`duplicateGuids`（`dedupeKey` 唯一化，保留最小 `sortOrder`）。
+  - 去重：`duplicateGuids`（`dedupeKey` 唯一化，`ROW_NUMBER() OVER (PARTITION BY dedupeKey
+    ORDER BY sortOrder, guid)`，保留可见集合内最小 `(sortOrder, guid)` 的一行）。
+- 可选过滤条件（`subscriptionId` / 搜索词）**不要**写成 `(:id = '' OR col = :id)`：OR 的另一
+  项不是列约束，SQLite 不会走索引，等于全局扫描。带 scope 的查询拆成两条 SQL
+  （`XxxInGroup` / `XxxInAll`），对外保留一个无注解默认方法内部分派，调用方不改。
 - 排序是**稀疏 `sortOrder`**（步长 `ProfileItem.SORT_STEP = 1024`），
   拖拽用中点插入；相邻间隔不足时 `renormalize(subscriptionId)` 在事务内先读顺序再逐行重写，
-  按延迟排序同理（`guidsByDelay` + `sortByDelay`）。**不要用"单条 UPDATE 边写边算"的写法**：
+  按延迟排序同理（`guidsByDelay` + `sortByDelay`）。**不要用“单条 UPDATE 边写边算”的写法**：
   SQLite 不保证相关子查询读到更新前的排名，实测会产出重复 `sortOrder`、破坏拖拽间距。
   `groupSortOrder` 是订阅顺序的冗余列，由 `data/DatabaseCallbacks.kt` 的
-  `GROUP_ORDER_TRIGGERS` 在 SQL 层维护，**不要手写**。
+  `GROUP_ORDER_TRIGGERS` 在 SQL 层维护，**不要手写**。唯一例外：`ProfileDao.replaceGroup`
+  可以预填，且取值必须与触发器 WHEN 子句同源
+  （`groupSortOrderOf(subscriptionId) ?: Long.MAX_VALUE`）；触发器仍是最终权威，
+  预填错了会被纠正 UPDATE 修复——**不得**因此删掉触发器的纠正逻辑。
+  `ProfileDaoQueryTest` 钉死了这三个场景（订阅存在 / 孤儿 / 导入后改订阅顺序）。
 - 写操作优先用 `@Upsert` / `@Insert(REPLACE)`；跨表一致性用 `@Transaction` 组合方法
   （样板：`ProfileDao.deleteProfiles`、`replaceGroup`、`SubscriptionDao.removeWithDefault`）。
   投影删除必须同时清理 `profiles` / `profile_stats` / `profile_raw` 三张表。
@@ -130,7 +140,7 @@ DAO 层另外用 Room 3 的 testing 支持做真库测试：
 （JVM 单元测试里用 `BundledSQLiteDriver` 打开内存库），
 Paging 用 `androidx.paging.testing` 的 `LoadState`/`asSnapshot()` 断言。
 
-不要为了"接口纯洁"给每个 Repository 抽 interface——当前唯一一例是
+不要为了“接口纯洁”给每个 Repository 抽 interface——当前唯一一例是
 `ThemeStore` ← `ThemeRepository`（因为它要跨 Hilt 内外共享，见 `hilt-rules.md` §4）。
 
 ## 6. 新增偏好项的标准流程
@@ -146,7 +156,7 @@ Paging 用 `androidx.paging.testing` 的 `LoadState`/`asSnapshot()` 断言。
 
 ## 7. 写入串行化
 
-同一 key 的连续写入必须串行，避免"后发先至"。ViewModel 侧用 Job 链
+同一 key 的连续写入必须串行，避免“后发先至”。ViewModel 侧用 Job 链
 （样板：`SettingsViewModel.persist()`）：
 
 ```kotlin
@@ -157,7 +167,7 @@ writeJob = launch {
 }
 ```
 
-需要"页面关闭前必须写完"的场景，在 `exit()` 里 `writeJob?.join()` 之后再 `finishWith(...)`。
+需要“页面关闭前必须写完”的场景，在 `exit()` 里 `writeJob?.join()` 之后再 `finishWith(...)`。
 单条 SQL UPDATE 已在 DAO 事务内完成排序的（如 `ProfileDao.moveProfileToIndex`），
 调用方**不需要**再建 Job 链。
 
@@ -173,18 +183,18 @@ writeJob = launch {
 
 - 数据库构建在 `di/DatabaseModule.kt`：`BundledSQLiteDriver`、`setQueryCoroutineContext(io)`、
   `enableMultiInstanceInvalidation()`（**每个进程都要开**，否则跨进程 Flow/Paging 不失效）、
-  `fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)`（只覆盖"用户装回旧版"，
+  `fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)`（只覆盖“用户装回旧版”，
   不覆盖升级路径——升级缺 Migration 就该崩，不能静默丢数据）。
 - 打开前必须先跑 `LegacyMigrationGate.runIfNeeded(...)`：它同时持有
   **进程内 `Mutex`** 与 **跨进程 `FileLock`**（`files/legacy_import.lock`），
   内层先 `DatabaseIntegrity.verifyOrThrow(app)`（`PRAGMA quick_check` + `busy_timeout`；
-  **检查失败只抛异常，绝不移动/删除数据库文件**——"检查没跑成"不等于"库损坏"），
+  **检查失败只抛异常，绝不移动/删除数据库文件**——“检查没跑成”不等于“库损坏”），
   再在 `immediateTransaction` 里执行 `LegacyImporter.plan(snapshot)` 生成、`importInto` 执行的计划，
   最后按计划主键校验：导入前统计已有主键数，导入后要求
   `行数增量 = 计划主键数 − 已有主键数` 且所有计划主键都存在，并写 `LEGACY_IMPORT_STATE=done`。
   校验不符会回滚并下次重试；**不要假设目标主键在导入前都不存在**（重试时可能已有种子数据）。
-- `AngApplication` 通过 `StorageBootstrap.install(...)` 注册启动块，串行执行"完整性检查 → 旧数据导入 →
-  快照刷新 →（仅主进程）播种默认值"；全部成功才进入 `Ready`，任何一步失败进入 `Failed` 且屏障保持关闭。
+- `AngApplication` 通过 `StorageBootstrap.install(...)` 注册启动块，串行执行“完整性检查 → 旧数据导入 →
+  快照刷新 →（仅主进程）播种默认值”；全部成功才进入 `Ready`，任何一步失败进入 `Failed` 且屏障保持关闭。
   失败不是终态：`StorageBootstrap.retry()` 会重跑整条链（UI 重试按钮、核心服务冷启动都会先调一次），
   `Running` / `Ready` 时调用是 no-op；等待方用 `awaitReady()`（失败抛 `StorageNotReadyException`，
   **不是** `CancellationException`）或 `awaitReadyOrNull(timeout)`（失败/超时返回 false，调用方自身取消照常传播）。
