@@ -1,5 +1,7 @@
 package com.v2ray.ang.ui.main
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
@@ -31,10 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
-import kotlin.time.TimeSource
 
 private val TabRowEdgePadding = 16.dp
 private val TabMinWidth = 56.dp
@@ -49,8 +48,15 @@ private const val TabRowContainerAlpha = 0.95f
  */
 private val TabAlignSettleDelay = 48.milliseconds
 
-/** Inside this window the correction is instant, so no second visible slide is drawn. */
-private val ColdStartAlignWindow = 1.seconds
+/**
+ * Mirrors Material3's internal ScrollableTabRowScrollSpec (tween / 250ms / FastOutSlowInEasing).
+ * Using the same curve is what makes the correction read as a single motion: the user cannot tell
+ * that the animation changed hands, only that it landed in the right place.
+ */
+private val TabScrollSpec = tween<Float>(
+    durationMillis = 250,
+    easing = FastOutSlowInEasing
+)
 
 @Composable
 fun GroupTabBar(
@@ -140,6 +146,10 @@ private fun GroupTabItem(
  * Re-aligns the scroll offset whenever the measured tab strip changes. It only corrects a
  * selected tab that is actually clipped, so a scroll the user performed by hand is never undone:
  * dragging changes neither the widths, the viewport nor maxValue, and therefore emits nothing.
+ *
+ * animateScrollTo is a MutatorMutex(Default): it preempts Material3's own in-flight
+ * Default-priority animation (same priority, latest wins) and waits out any UserInput drag/fling.
+ * One takeover, one motion - no manual stop needed.
  */
 @Composable
 private fun KeepSelectedTabFullyVisible(
@@ -152,7 +162,6 @@ private fun KeepSelectedTabFullyVisible(
     val index by rememberUpdatedState(selectedIndex)
     val padding by rememberUpdatedState(edgePaddingPx)
     val widths by rememberUpdatedState(tabWidths)
-    val coldStart = remember(scrollState) { TimeSource.Monotonic.markNow() }
 
     LaunchedEffect(scrollState, tabCount) {
         snapshotFlow {
@@ -170,16 +179,8 @@ private fun KeepSelectedTabFullyVisible(
             .collectLatest { metrics ->
                 if (!metrics.isMeasured) return@collectLatest
                 delay(TabAlignSettleDelay)
-                // Never fight an in-flight fling, drag or Material3 animation.
-                if (scrollState.isScrollInProgress) {
-                    snapshotFlow { scrollState.isScrollInProgress }.first { !it }
-                }
                 val target = metrics.offsetToReveal(scrollState.value) ?: return@collectLatest
-                if (coldStart.elapsedNow() > ColdStartAlignWindow) {
-                    scrollState.animateScrollTo(target)
-                } else {
-                    scrollState.scrollTo(target)
-                }
+                scrollState.animateScrollTo(target, TabScrollSpec)
             }
     }
 }
