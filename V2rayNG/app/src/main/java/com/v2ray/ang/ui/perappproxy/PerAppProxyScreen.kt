@@ -43,15 +43,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppDivider
-import com.v2ray.ang.ui.compose.AppDropdownMenuItems
-import com.v2ray.ang.ui.compose.AppListItem
-import com.v2ray.ang.ui.compose.AppSearchState
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.ItemDivider
-import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppDivider
+import com.v2ray.ang.ui.components.AppDropdownMenuItems
+import com.v2ray.ang.ui.components.AppListItem
+import com.v2ray.ang.ui.components.AppSearchState
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.ItemDivider
+import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 private val HeaderHorizontalPad = 16.dp
 private val HeaderVerticalPad = 8.dp

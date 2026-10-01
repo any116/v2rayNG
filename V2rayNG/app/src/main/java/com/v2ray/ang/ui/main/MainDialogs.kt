@@ -6,8 +6,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.ui.res.stringResource
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.EConfigType
-import com.v2ray.ang.ui.compose.DeleteConfirmDialog
-import com.v2ray.ang.ui.compose.QRCodeDialog
+import com.v2ray.ang.ui.components.DeleteConfirmDialog
+import com.v2ray.ang.ui.components.QRCodeDialog
 
 @Immutable
 sealed interface MainDialog {

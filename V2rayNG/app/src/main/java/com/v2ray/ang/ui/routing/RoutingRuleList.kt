@@ -34,14 +34,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.RoutingRuleRow
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.ItemDivider
-import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
-import com.v2ray.ang.ui.compose.ReorderableListItem
-import com.v2ray.ang.ui.compose.SettingsListItem
-import com.v2ray.ang.ui.compose.StringOptions
-import com.v2ray.ang.ui.compose.colorConfigType
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.ItemDivider
+import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.ReorderableListItem
+import com.v2ray.ang.ui.components.SettingsListItem
+import com.v2ray.ang.ui.components.StringOptions
+import com.v2ray.ang.ui.components.colorConfigType
+import com.v2ray.ang.ui.components.verticalScrollbar
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 

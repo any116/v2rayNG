@@ -22,7 +22,7 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.RoutingType
 import com.v2ray.ang.extension.normalizeLike
 import com.v2ray.ang.handler.SettingsManager
-import com.v2ray.ang.ui.compose.DropdownOption
+import com.v2ray.ang.ui.components.DropdownOption
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher

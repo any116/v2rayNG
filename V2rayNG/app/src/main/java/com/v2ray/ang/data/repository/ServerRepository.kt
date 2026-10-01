@@ -22,7 +22,7 @@ import com.v2ray.ang.extension.normalizeLike
 import com.v2ray.ang.fmt.CustomFmt
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.CertificateFingerprintManager
-import com.v2ray.ang.ui.compose.DropdownOption
+import com.v2ray.ang.ui.components.DropdownOption
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow

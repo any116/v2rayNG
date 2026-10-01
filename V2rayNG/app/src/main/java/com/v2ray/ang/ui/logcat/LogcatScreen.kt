@@ -40,12 +40,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppSearchState
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.ItemDivider
-import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppSearchState
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.ItemDivider
+import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 

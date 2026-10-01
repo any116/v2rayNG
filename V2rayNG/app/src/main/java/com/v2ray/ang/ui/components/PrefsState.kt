@@ -1,4 +1,4 @@
-package com.v2ray.ang.ui.compose
+package com.v2ray.ang.ui.components
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect

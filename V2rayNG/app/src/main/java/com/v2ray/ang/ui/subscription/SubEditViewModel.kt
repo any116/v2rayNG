@@ -13,7 +13,7 @@ import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.EditFormSaver
-import com.v2ray.ang.ui.compose.ToastType
+import com.v2ray.ang.ui.components.ToastType
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import dagger.hilt.android.lifecycle.HiltViewModel

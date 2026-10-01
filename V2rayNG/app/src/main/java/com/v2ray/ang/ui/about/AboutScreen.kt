@@ -41,13 +41,13 @@ import com.v2ray.ang.R
 import com.v2ray.ang.data.repository.TranslatorGroup
 import com.v2ray.ang.data.repository.TranslatorRow
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
-import com.v2ray.ang.ui.compose.NavigationBarsSpacer
-import com.v2ray.ang.ui.compose.SettingsMenuItem
-import com.v2ray.ang.ui.compose.VersionInfoBlock
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.NavigationBarsSpacer
+import com.v2ray.ang.ui.components.SettingsMenuItem
+import com.v2ray.ang.ui.components.VersionInfoBlock
+import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 

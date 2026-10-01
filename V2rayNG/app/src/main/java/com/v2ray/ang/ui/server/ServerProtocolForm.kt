@@ -20,8 +20,8 @@ import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
-import com.v2ray.ang.ui.compose.FormTextField
-import com.v2ray.ang.ui.compose.SettingsSwitchItem
+import com.v2ray.ang.ui.components.FormTextField
+import com.v2ray.ang.ui.components.SettingsSwitchItem
 
 private data class ProtocolSpec(
     val showNetwork: Boolean = false,

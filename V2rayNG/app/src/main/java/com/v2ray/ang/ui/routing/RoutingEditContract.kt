@@ -11,7 +11,7 @@ import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseUiState
-import com.v2ray.ang.ui.compose.DropdownOption
+import com.v2ray.ang.ui.components.DropdownOption
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 

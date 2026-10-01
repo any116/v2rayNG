@@ -39,14 +39,14 @@ import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.base.LocalPlatformActions
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.DeleteConfirmDialog
-import com.v2ray.ang.ui.compose.ItemDivider
-import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
-import com.v2ray.ang.ui.compose.SettingsListItem
-import com.v2ray.ang.ui.compose.StringOptions
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.DeleteConfirmDialog
+import com.v2ray.ang.ui.components.ItemDivider
+import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.SettingsListItem
+import com.v2ray.ang.ui.components.StringOptions
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 private val RowPad = 8.dp
 private val HeaderPad = 16.dp

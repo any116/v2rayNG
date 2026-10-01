@@ -26,13 +26,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.NavigationBarsSpacer
-import com.v2ray.ang.ui.compose.SettingsMenuItem
-import com.v2ray.ang.ui.compose.SettingsSwitchItem
-import com.v2ray.ang.ui.compose.VersionInfoBlock
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.NavigationBarsSpacer
+import com.v2ray.ang.ui.components.SettingsMenuItem
+import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.VersionInfoBlock
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 private val ReleaseNotesMaxHeight = 500.dp
 

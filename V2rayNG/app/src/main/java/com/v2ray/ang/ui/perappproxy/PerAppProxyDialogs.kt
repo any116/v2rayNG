@@ -7,7 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import com.v2ray.ang.R
-import com.v2ray.ang.ui.compose.ConfirmDialog
+import com.v2ray.ang.ui.components.ConfirmDialog
 
 /** Dialogs of this screen.*/
 internal sealed interface PerAppProxyDialog {

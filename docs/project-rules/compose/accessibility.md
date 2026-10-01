@@ -35,7 +35,7 @@
 
 - 最小 48.dp × 48.dp。图标本身 24.dp 时，用 `IconButton`（默认 48.dp）或
   给容器加 `Modifier.minimumInteractiveComponentSize()`。
-- 列表行高不足 48.dp 时增加垂直 padding（`Components.kt` 的 `ItemVerticalPad = 12.dp`
+- 列表行高不足 48.dp 时增加垂直 padding（`Common.kt` 的 `ItemVerticalPad = 12.dp`
   配 24.dp 图标正好 48.dp；`MainServerPager` 的行图标按钮用 `RowIconButtonSize = 36.dp`，
   靠行内 padding 补足触控目标）。
 - 拖拽手柄要足够大，且必须提供非拖拽的替代路径（长按菜单里的上移/下移或排序动作）。

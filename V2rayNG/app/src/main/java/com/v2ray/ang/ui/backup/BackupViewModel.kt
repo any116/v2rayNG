@@ -6,7 +6,7 @@ import com.v2ray.ang.data.repository.BackupRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
-import com.v2ray.ang.ui.compose.ToastType
+import com.v2ray.ang.ui.components.ToastType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable

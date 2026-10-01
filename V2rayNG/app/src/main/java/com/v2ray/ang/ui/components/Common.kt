@@ -1,11 +1,10 @@
-package com.v2ray.ang.ui.compose
+package com.v2ray.ang.ui.components
 
 import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -65,7 +64,6 @@ import sh.calvin.reorderable.ReorderableCollectionItemScope
 private val DividerThickness = 1.dp
 private val DividerInset = 12.dp
 private val AppIconSize = 40.dp
-private val IconSize = 24.dp
 private val ItemHorizontalPad = 16.dp
 private val ItemVerticalPad = 12.dp
 private val DragElevation = 4.dp

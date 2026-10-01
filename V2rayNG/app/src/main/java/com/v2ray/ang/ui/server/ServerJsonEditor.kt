@@ -52,9 +52,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
-import com.v2ray.ang.ui.compose.FormTextField
-import com.v2ray.ang.ui.compose.horizontalScrollbar
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.FormTextField
+import com.v2ray.ang.ui.components.horizontalScrollbar
+import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.collectLatest
 
 private object EditorDimens {

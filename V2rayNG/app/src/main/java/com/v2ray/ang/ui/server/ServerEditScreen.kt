@@ -36,12 +36,12 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.DeleteConfirmDialog
-import com.v2ray.ang.ui.compose.DropdownOption
-import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
-import com.v2ray.ang.ui.compose.NavigationBarsSpacer
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.DeleteConfirmDialog
+import com.v2ray.ang.ui.components.DropdownOption
+import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.NavigationBarsSpacer
+import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.collectLatest
 

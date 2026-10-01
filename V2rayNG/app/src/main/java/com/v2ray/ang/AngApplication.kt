@@ -17,7 +17,7 @@ import com.v2ray.ang.di.ApplicationScope
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.SettingsManager
-import com.v2ray.ang.ui.compose.ThemeManager
+import com.v2ray.ang.ui.components.ThemeManager
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineDispatcher

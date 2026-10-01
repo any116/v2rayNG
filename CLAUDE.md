@@ -148,7 +148,7 @@ ui/                    # 全部 Compose UI
   base/                # BaseActivity / BaseHelperActivity / BaseContract / BaseScreen /
                        # BaseViewModel / BaseEditViewModel / BaseResult / EditFormSaver
                        # （BaseViewModelFactory 为遗留死代码，生产路径禁止使用）
-  compose/             # 跨屏共享组件：Theme / Components / Dialog / FormFields /
+  components/          # 跨屏共享组件：Theme / Common / Dialog / FormFields /
                        # FormPagedDropdownField / PrefsState / SettingsItem / Menu /
                        # Scrollbar / SnackBar
   main/ settings/ server/ subscription/ routing/ perappproxy/ apppicker/

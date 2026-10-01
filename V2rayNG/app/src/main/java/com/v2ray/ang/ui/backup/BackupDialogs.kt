@@ -13,11 +13,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import com.v2ray.ang.R
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.DeleteConfirmDialog
-import com.v2ray.ang.ui.compose.InputDialog
-import com.v2ray.ang.ui.compose.InputField
-import com.v2ray.ang.ui.compose.SelectListDialog
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.DeleteConfirmDialog
+import com.v2ray.ang.ui.components.InputDialog
+import com.v2ray.ang.ui.components.InputField
+import com.v2ray.ang.ui.components.SelectListDialog
 
 @Immutable
 sealed interface BackupDialog {

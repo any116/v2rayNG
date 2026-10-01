@@ -4,8 +4,8 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import com.v2ray.ang.ui.compose.AppSnackbarManager
-import com.v2ray.ang.ui.compose.ToastType
+import com.v2ray.ang.ui.components.AppSnackbarManager
+import com.v2ray.ang.ui.components.ToastType
 
 private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
 

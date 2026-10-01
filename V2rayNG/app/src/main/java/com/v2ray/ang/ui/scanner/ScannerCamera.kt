@@ -43,8 +43,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.LocalAppColors
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.LocalAppColors
 import com.v2ray.ang.util.LogUtil
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.util.concurrent.Executors

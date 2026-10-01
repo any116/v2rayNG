@@ -5,7 +5,7 @@ import android.content.Intent
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
-import com.v2ray.ang.ui.compose.ToastType
+import com.v2ray.ang.ui.components.ToastType
 
 /**
  * Screen state contract.

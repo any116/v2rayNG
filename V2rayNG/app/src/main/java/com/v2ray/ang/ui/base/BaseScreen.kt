@@ -23,8 +23,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.AppRoute
-import com.v2ray.ang.ui.compose.LocalAppSnackbar
-import com.v2ray.ang.ui.compose.ToastType
+import com.v2ray.ang.ui.components.LocalAppSnackbar
+import com.v2ray.ang.ui.components.ToastType
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.flow.Flow
 

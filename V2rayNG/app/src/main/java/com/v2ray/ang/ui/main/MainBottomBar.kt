@@ -28,8 +28,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
-import com.v2ray.ang.ui.compose.AppDivider
-import com.v2ray.ang.ui.compose.LocalAppColors
+import com.v2ray.ang.ui.components.AppDivider
+import com.v2ray.ang.ui.components.LocalAppColors
 
 private val StatusBarHeight = 64.dp
 private val BarHorizontalPadding = 16.dp

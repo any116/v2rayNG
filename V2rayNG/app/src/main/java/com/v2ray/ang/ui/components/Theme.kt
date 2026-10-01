@@ -1,4 +1,4 @@
-package com.v2ray.ang.ui.compose
+package com.v2ray.ang.ui.components
 
 import android.app.Activity
 import android.os.Build

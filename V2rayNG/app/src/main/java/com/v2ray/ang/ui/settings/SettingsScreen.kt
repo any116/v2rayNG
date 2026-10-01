@@ -23,16 +23,16 @@ import com.v2ray.ang.R
 import com.v2ray.ang.data.repository.BoolPref
 import com.v2ray.ang.data.repository.StringPref
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.CollapsiblePreferenceGroupHeader
-import com.v2ray.ang.ui.compose.NavigationBarsSpacer
-import com.v2ray.ang.ui.compose.SettingsEditItem
-import com.v2ray.ang.ui.compose.SettingsListItem
-import com.v2ray.ang.ui.compose.SettingsMenuItem
-import com.v2ray.ang.ui.compose.SettingsSwitchItem
-import com.v2ray.ang.ui.compose.StringOptions
-import com.v2ray.ang.ui.compose.rememberStringOptions
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.CollapsiblePreferenceGroupHeader
+import com.v2ray.ang.ui.components.NavigationBarsSpacer
+import com.v2ray.ang.ui.components.SettingsEditItem
+import com.v2ray.ang.ui.components.SettingsListItem
+import com.v2ray.ang.ui.components.SettingsMenuItem
+import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.StringOptions
+import com.v2ray.ang.ui.components.rememberStringOptions
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 @Composable
 fun SettingsScreen(

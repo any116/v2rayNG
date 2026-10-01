@@ -4,7 +4,7 @@
 
 只有两个来源：
 
-1. `MaterialTheme.colorScheme.*` —— M3 语义色，`ui/compose/Theme.kt` 里已定义完整的
+1. `MaterialTheme.colorScheme.*` —— M3 语义色，`ui/components/Theme.kt` 里已定义完整的
    `LightColor` / `DarkColor`（含 `surfaceContainer*` 全系列）。
 2. `LocalAppColors.current` —— `AppSemanticColors`（`pingBad`、`fabInactive`、`fabContent`、
    `divider`、`toastBackground/Success/Error/Info/Content`、`onCameraPreview`），
@@ -34,26 +34,26 @@
 正确做法——**文件内私有常量**，命名表达用途。现有样例：
 
 ```kotlin
-// ui/compose/Components.kt
+// ui/components/Common.kt
 private val ItemHorizontalPad = 16.dp
 private val ItemVerticalPad = 12.dp
 private val AppIconSize = 40.dp
 private val DividerInset = 12.dp
 private val DragElevation = 4.dp
 
-// ui/compose/SettingsItem.kt
+// ui/components/SettingsItem.kt
 private val ItemPad = 16.dp
 private const val DisabledAlpha = 0.38f
 private const val SwitchScale = 0.8f
 
-// ui/compose/FormFields.kt
+// ui/components/FormFields.kt
 internal val FieldHorizontalPad = 16.dp
 internal val FieldVerticalPad = 4.dp
 ```
 
 - 只在本文件用 → `private val` 放文件顶部。
 - 同 feature 多文件用 → `internal val` 放该 feature 的一个文件里。
-- 跨 feature 用 → 才放 `ui/compose/` 对应组件文件里（`Components.kt` 的
+- 跨 feature 用 → 才放 `ui/components/` 对应组件文件里（`Common.kt` 的
   `AppIconSize`、`ItemHorizontalPad`；`FormFields.kt` 的 `FieldHorizontalPad`）。
 - 数值不得内联在布局代码中间（`padding(16.dp)` 只在一次性、无语义的场合允许）。
 - 触控目标最小 48.dp，见 `accessibility.md`。

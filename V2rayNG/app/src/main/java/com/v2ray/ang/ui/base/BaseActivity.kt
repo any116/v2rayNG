@@ -9,7 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import com.v2ray.ang.handler.AppLocaleManager
-import com.v2ray.ang.ui.compose.AppTheme
+import com.v2ray.ang.ui.components.AppTheme
 
 abstract class BaseActivity : AppCompatActivity() {
 

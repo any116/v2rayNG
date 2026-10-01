@@ -24,14 +24,14 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.compose.LazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.BalancerStrategyType
-import com.v2ray.ang.ui.compose.DropdownOption
-import com.v2ray.ang.ui.compose.FormDropdownField
-import com.v2ray.ang.ui.compose.FormPagedDropdownField
-import com.v2ray.ang.ui.compose.FormTextField
-import com.v2ray.ang.ui.compose.ReorderableListItem
-import com.v2ray.ang.ui.compose.SettingsSwitchItem
-import com.v2ray.ang.ui.compose.StringOptions
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.DropdownOption
+import com.v2ray.ang.ui.components.FormDropdownField
+import com.v2ray.ang.ui.components.FormPagedDropdownField
+import com.v2ray.ang.ui.components.FormTextField
+import com.v2ray.ang.ui.components.ReorderableListItem
+import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.StringOptions
+import com.v2ray.ang.ui.components.verticalScrollbar
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 

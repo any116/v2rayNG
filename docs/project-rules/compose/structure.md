@@ -9,10 +9,10 @@ Kotlin `2.4.20` + `org.jetbrains.kotlin.plugin.compose`。
 ui/base/       屏幕基座（BaseScreen / BaseActivity / BaseHelperActivity /
                BaseViewModel / BaseEditViewModel / BaseContract / BaseResult /
                EditFormSaver / PlatformActions），不可随意扩充
-ui/compose/    跨屏共享组件与主题
+ui/components/ 跨屏共享组件与主题
   Theme.kt                    AppTheme、色板、AppSemanticColors、LocalAppColors、
                               LocalDarkTheme、ThemeManager、resolveDarkTheme
-  Components.kt               AppTopBar、AppListItem、ItemDivider、VersionInfoBlock、拖拽包装
+  Common.kt                   AppTopBar、AppListItem、ItemDivider、VersionInfoBlock、拖拽包装
   Dialog.kt                   ConfirmDialog、DeleteConfirmDialog、InputDialog、QRCodeDialog、SelectListDialog
   FormFields.kt               FormTextField、FormDropdownField、appFieldColors、StringOptions、
                               rememberStringOptions
@@ -27,7 +27,7 @@ ui/<feature>/  该屏专属
 ui/widght/     Glance 桌面组件（包名 com.v2ray.ang.ui.widget；目录名是历史拼写）
 ```
 
-**放 `ui/compose/` 的门槛：被两个及以上 feature 使用。** 只有一个 feature 用的组件留在该
+**放 `ui/components/` 的门槛：被两个及以上 feature 使用。** 只有一个 feature 用的组件留在该
 feature 目录，宁可以后再上提，不要预先泛化。
 
 ## 2. 文件与函数命名
@@ -98,7 +98,7 @@ fun XxxScreen(viewModel: XxxViewModel) {
 - 有抽屉/侧栏时把 `BaseScreen` 包在 `ModalNavigationDrawer` 里，不要反过来。
 - **insets 职责**：`BaseScreen` 已固定 `Scaffold.contentWindowInsets = WindowInsets(0)`
   （inset0），所以**内容不会被自动内边距保护**。每屏负责自己的底部 inset，
-  统一使用 `ui/compose/Components.kt` 提供的 `NavigationBarsSpacer()` /
+  统一使用 `ui/components/Common.kt` 提供的 `NavigationBarsSpacer()` /
   `NavigationBarsBottomPadding()`，不得内联固定 dp 硬编码导航栏高度。
 
 ## 5. Content 层

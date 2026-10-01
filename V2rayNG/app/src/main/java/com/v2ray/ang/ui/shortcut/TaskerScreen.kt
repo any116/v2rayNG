@@ -37,11 +37,11 @@ import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.asString
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.NavigationBarsBottomPadding
-import com.v2ray.ang.ui.compose.SettingsSwitchItem
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 private const val CONTENT_TYPE_PROFILE = "tasker_profile"
 

@@ -45,11 +45,11 @@ import androidx.paging.compose.itemKey
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.enums.EConfigType
-import com.v2ray.ang.ui.compose.ItemDivider
-import com.v2ray.ang.ui.compose.LocalAppColors
-import com.v2ray.ang.ui.compose.ReorderableGridItem
-import com.v2ray.ang.ui.compose.ReorderableListItem
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.ItemDivider
+import com.v2ray.ang.ui.components.LocalAppColors
+import com.v2ray.ang.ui.components.ReorderableGridItem
+import com.v2ray.ang.ui.components.ReorderableListItem
+import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.first
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState

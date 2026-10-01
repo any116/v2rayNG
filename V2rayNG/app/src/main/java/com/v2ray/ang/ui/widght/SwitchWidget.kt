@@ -37,7 +37,7 @@ import com.v2ray.ang.R
 import com.v2ray.ang.enums.WidgetRunState
 import com.v2ray.ang.handler.WidgetStateManager
 import com.v2ray.ang.receiver.WidgetProvider
-import com.v2ray.ang.ui.compose.colorFabActive
+import com.v2ray.ang.ui.components.colorFabActive
 
 private val ButtonSize = 48.dp
 private val IconSize = 24.dp

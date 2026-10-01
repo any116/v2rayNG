@@ -16,10 +16,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.SubUpdateOptions
-import com.v2ray.ang.ui.compose.DeleteConfirmDialog
-import com.v2ray.ang.ui.compose.QRCodeDialog
-import com.v2ray.ang.ui.compose.SelectListDialog
-import com.v2ray.ang.ui.compose.SettingsSwitchItem
+import com.v2ray.ang.ui.components.DeleteConfirmDialog
+import com.v2ray.ang.ui.components.QRCodeDialog
+import com.v2ray.ang.ui.components.SelectListDialog
+import com.v2ray.ang.ui.components.SettingsSwitchItem
 
 sealed interface SubDialog {
     data object UpdateOptions : SubDialog

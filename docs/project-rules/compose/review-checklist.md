@@ -77,7 +77,7 @@
 - [ ] 每个可复用 Composable 有 `modifier: Modifier = Modifier` 且作用在最外层
 - [ ] 参数顺序正确（必填数据 → 必填回调 → modifier → 可选参数）
 - [ ] Content 层是无状态的，能被 Preview 直接调用
-- [ ] 只放进 `ui/compose/` 的组件确实被 ≥2 个 feature 使用
+- [ ] 只放进 `ui/components/` 的组件确实被 ≥2 个 feature 使用
 - [ ] 复用了既有共享组件（`AppTopBar`/`ConfirmDialog`/`SelectListDialog`/`SettingsXxxItem`/
       `FormTextField`/`FormDropdownField`/`FormPagedDropdownField`/`AppDropdownMenuItems`/
       `verticalScrollbar`），没有重复造轮子
@@ -162,7 +162,7 @@
 ## M. 需要讨论（Discuss，非阻断）
 
 - [ ] 新增了 handler：是否真的跨进程复用？能否直接写进 Repository？
-- [ ] 新增了 `ui/compose/` 共享组件：现在是否已有 ≥2 个使用方？
+- [ ] 新增了 `ui/components/` 共享组件：现在是否已有 ≥2 个使用方？
 - [ ] 新增了 Action：是否与已有 Action 语义重叠？
 - [ ] 新增了 dto：是否只服务一屏（应下沉到 `XxxContract.kt`）？
 - [ ] 新增了 Room 表/列：是否真的需要索引？查询计划是否走索引？

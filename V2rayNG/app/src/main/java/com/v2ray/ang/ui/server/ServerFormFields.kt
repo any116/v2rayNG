@@ -7,10 +7,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
-import com.v2ray.ang.ui.compose.FormDropdownField
-import com.v2ray.ang.ui.compose.FormTextField
-import com.v2ray.ang.ui.compose.StringOptions
-import com.v2ray.ang.ui.compose.rememberStringOptions
+import com.v2ray.ang.ui.components.FormDropdownField
+import com.v2ray.ang.ui.components.FormTextField
+import com.v2ray.ang.ui.components.StringOptions
+import com.v2ray.ang.ui.components.rememberStringOptions
 
 /**
  * Shared dimensions and field helpers used by every server form section.

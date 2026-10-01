@@ -25,9 +25,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
-import com.v2ray.ang.ui.compose.AppSearchState
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppSearchState
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 @Composable
 fun MainTopBar(

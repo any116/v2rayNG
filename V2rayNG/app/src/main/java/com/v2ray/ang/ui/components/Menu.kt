@@ -1,4 +1,4 @@
-package com.v2ray.ang.ui.compose
+package com.v2ray.ang.ui.components
 
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text

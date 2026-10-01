@@ -8,8 +8,8 @@ import androidx.compose.ui.res.stringResource
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
-import com.v2ray.ang.ui.compose.AppDropdownMenuItems
-import com.v2ray.ang.ui.compose.SelectListDialog
+import com.v2ray.ang.ui.components.AppDropdownMenuItems
+import com.v2ray.ang.ui.components.SelectListDialog
 
 private enum class ImportMenuItem(@StringRes val labelRes: Int, val action: MainAction) {
     QrCode(R.string.menu_item_import_config_qrcode, MainAction.ImportFromQrCode),

@@ -27,7 +27,7 @@ import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SubscriptionUpdater
 import com.v2ray.ang.helper.MessageHelper
-import com.v2ray.ang.ui.compose.DropdownOption
+import com.v2ray.ang.ui.components.DropdownOption
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher

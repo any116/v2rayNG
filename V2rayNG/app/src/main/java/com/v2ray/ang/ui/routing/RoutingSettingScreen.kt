@@ -23,10 +23,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.RoutingType
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.ConfirmDialog
-import com.v2ray.ang.ui.compose.SelectListDialog
-import com.v2ray.ang.ui.compose.rememberStringOptions
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.ConfirmDialog
+import com.v2ray.ang.ui.components.SelectListDialog
+import com.v2ray.ang.ui.components.rememberStringOptions
 
 private enum class RoutingPreset(val type: RoutingType, @StringRes val labelRes: Int) {
     ChinaWhitelist(RoutingType.WHITE, R.string.routing_preset_china_whitelist),

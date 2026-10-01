@@ -31,9 +31,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.AppRoute
-import com.v2ray.ang.ui.compose.AppDivider
-import com.v2ray.ang.ui.compose.LocalDarkTheme
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppDivider
+import com.v2ray.ang.ui.components.LocalDarkTheme
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 private val DrawerWidthFraction = 0.75f
 private val DrawerHeaderHeight = 180.dp

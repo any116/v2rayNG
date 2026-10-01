@@ -30,16 +30,16 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.compose.AppTheme
-import com.v2ray.ang.ui.compose.AppTopBar
-import com.v2ray.ang.ui.compose.DeleteConfirmDialog
-import com.v2ray.ang.ui.compose.DropdownOption
-import com.v2ray.ang.ui.compose.FormPagedDropdownField
-import com.v2ray.ang.ui.compose.FormTextField
-import com.v2ray.ang.ui.compose.NavigationBarsSpacer
-import com.v2ray.ang.ui.compose.SettingsSwitchItem
-import com.v2ray.ang.ui.compose.rememberPreviewDropdownItems
-import com.v2ray.ang.ui.compose.verticalScrollbar
+import com.v2ray.ang.ui.components.AppTheme
+import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.DeleteConfirmDialog
+import com.v2ray.ang.ui.components.DropdownOption
+import com.v2ray.ang.ui.components.FormPagedDropdownField
+import com.v2ray.ang.ui.components.FormTextField
+import com.v2ray.ang.ui.components.NavigationBarsSpacer
+import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.rememberPreviewDropdownItems
+import com.v2ray.ang.ui.components.verticalScrollbar
 
 private val FormVerticalPad = 8.dp
 private val FormBottomGap = 36.dp
