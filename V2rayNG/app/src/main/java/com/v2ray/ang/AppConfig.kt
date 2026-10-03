@@ -250,6 +250,13 @@ object AppConfig {
 
     /** hev-sock5-tunnel read-write-timeout value */
     const val HEVTUN_RW_TIMEOUT = "300,60"
+    /** hev-socks5-tunnel log level; must be one of R.array.hev_tunnel_loglevel. */
+    const val HEVTUN_LOGLEVEL = "warn"
+    /** hev relays UDP only via standard SOCKS5 UDP ASSOCIATE; SOCKS inbound must accept UDP. */
+    const val SOCKS_ENABLE_UDP_DEFAULT = true
+
+    /** "0" none, "1" resolve into dns.hosts, "2" replace the domain. */
+    const val OUTBOUND_DOMAIN_RESOLVE_DEFAULT = "1"
 
     // Google API rule constants
     const val GOOGLEAPIS_CN_DOMAIN = "domain:googleapis.cn"

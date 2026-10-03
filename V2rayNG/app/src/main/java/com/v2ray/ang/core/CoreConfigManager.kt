@@ -514,6 +514,10 @@ object CoreConfigManager {
 
         val enableLocalProxy = forcedByHev || forcedBySocksRoot || Prefs.bool(AppConfig.PREF_ENABLE_LOCAL_PROXY, true)
 
+        // hev relays UDP only via SOCKS5 UDP ASSOCIATE; "udp": false drops every packet (DNS first).
+        val enableSocksUdp = forcedByHev || forcedBySocksRoot
+                || Prefs.bool(AppConfig.PREF_SOCKS_ENABLE_UDP, AppConfig.SOCKS_ENABLE_UDP_DEFAULT)
+
         val socksPort = SettingsManager.getSocksPort()
         val socksUsername = SettingsManager.getSocksUsername()
         val socksPassword = SettingsManager.getSocksPassword()
@@ -526,7 +530,7 @@ object CoreConfigManager {
             inbound1.listen = AppConfig.LOOPBACK
         }
         inbound1.port = socksPort
-        inbound1.settings?.udp = Prefs.bool(AppConfig.PREF_SOCKS_ENABLE_UDP, true)
+        inbound1.settings?.udp = enableSocksUdp
         if (socksUsername != null && socksPassword != null) {
             inbound1.settings?.auth = "password"
             inbound1.settings?.accounts = listOf(
@@ -887,7 +891,11 @@ object CoreConfigManager {
      * Resolve outbound domains to IPs and write resolved hosts to DNS map.
      */
     private fun resolveOutboundDomainsToHosts(v2rayConfig: V2rayConfig) {
-        if (Prefs.string(AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, "1") != "1") {
+        if (Prefs.string(
+                AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD,
+                AppConfig.OUTBOUND_DOMAIN_RESOLVE_DEFAULT
+            ) != "1"
+        ) {
             return
         }
 

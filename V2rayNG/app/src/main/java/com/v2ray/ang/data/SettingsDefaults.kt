@@ -19,11 +19,21 @@ internal object SettingsDefaults {
         Entry(AppConfig.PREF_VPN_DNS, AppConfig.DNS_VPN),
         Entry(AppConfig.PREF_VPN_MTU, AppConfig.VPN_MTU.toString()),
         Entry(AppConfig.PREF_SOCKS_PORT, AppConfig.PORT_SOCKS),
+        // hev UDP ASSOCIATE needs the SOCKS inbound to accept UDP; this row used to be missing.
+        Entry(
+            AppConfig.PREF_SOCKS_ENABLE_UDP,
+            AppConfig.SOCKS_ENABLE_UDP_DEFAULT.toString(),
+            SettingsStore.KIND_BOOL
+        ),
         Entry(AppConfig.PREF_REMOTE_DNS, AppConfig.DNS_PROXY),
         Entry(AppConfig.PREF_DOMESTIC_DNS, AppConfig.DNS_DIRECT),
         Entry(AppConfig.PREF_DELAY_TEST_URL, AppConfig.DELAY_TEST_URL),
         Entry(AppConfig.PREF_IP_API_URL, AppConfig.IP_API_URL),
+        // "warning" is not a member of R.array.hev_tunnel_loglevel.
+        Entry(AppConfig.PREF_HEV_TUNNEL_LOGLEVEL, AppConfig.HEVTUN_LOGLEVEL),
         Entry(AppConfig.PREF_HEV_TUNNEL_RW_TIMEOUT, AppConfig.HEVTUN_RW_TIMEOUT),
+        // Behaviour has always been "1"; only the UI claimed "0".
+        Entry(AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, AppConfig.OUTBOUND_DOMAIN_RESOLVE_DEFAULT),
         Entry(AppConfig.PREF_MUX_CONCURRENCY, "8"),
         Entry(AppConfig.PREF_MUX_XUDP_CONCURRENCY, "8"),
         Entry(AppConfig.PREF_FRAGMENT_LENGTH, "50-100"),

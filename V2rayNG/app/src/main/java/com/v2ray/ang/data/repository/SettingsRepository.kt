@@ -28,7 +28,7 @@ enum class BoolPref(val key: String, val default: Boolean) {
     ENABLE_LOCAL_PROXY(AppConfig.PREF_ENABLE_LOCAL_PROXY, true),
     PROXY_SHARING(AppConfig.PREF_PROXY_SHARING, false),
     DYNAMIC_SOCKS_PORT(AppConfig.PREF_DYNAMIC_SOCKS_PORT, false),
-    SOCKS_ENABLE_UDP(AppConfig.PREF_SOCKS_ENABLE_UDP, false),
+    SOCKS_ENABLE_UDP(AppConfig.PREF_SOCKS_ENABLE_UDP, AppConfig.SOCKS_ENABLE_UDP_DEFAULT),
 
     MUX_ENABLED(AppConfig.PREF_MUX_ENABLED, false),
     FRAGMENT_ENABLED(AppConfig.PREF_FRAGMENT_ENABLED, false),
@@ -52,7 +52,7 @@ enum class StringPref(val key: String, val default: String) {
     VPN_BYPASS_LAN(AppConfig.PREF_VPN_BYPASS_LAN, "0"),
     VPN_INTERFACE_ADDRESS(AppConfig.PREF_VPN_INTERFACE_ADDRESS_CONFIG_INDEX, "0"),
     VPN_MTU(AppConfig.PREF_VPN_MTU, ""),
-    HEV_LOGLEVEL(AppConfig.PREF_HEV_TUNNEL_LOGLEVEL, "warning"),
+    HEV_LOGLEVEL(AppConfig.PREF_HEV_TUNNEL_LOGLEVEL, AppConfig.HEVTUN_LOGLEVEL),
     HEV_RW_TIMEOUT(AppConfig.PREF_HEV_TUNNEL_RW_TIMEOUT, ""),
 
     SOCKS_PORT(AppConfig.PREF_SOCKS_PORT, ""),
@@ -62,7 +62,10 @@ enum class StringPref(val key: String, val default: String) {
     DOMESTIC_DNS(AppConfig.PREF_DOMESTIC_DNS, ""),
     DNS_HOSTS(AppConfig.PREF_DNS_HOSTS, ""),
     CORE_LOGLEVEL(AppConfig.PREF_LOGLEVEL, "warning"),
-    OUTBOUND_RESOLVE(AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, "0"),
+    // Was "0" while both read sites fell back to "1".
+    OUTBOUND_RESOLVE(
+        AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, AppConfig.OUTBOUND_DOMAIN_RESOLVE_DEFAULT
+    ),
 
     MUX_CONCURRENCY(AppConfig.PREF_MUX_CONCURRENCY, "8"),
     MUX_XUDP_CONCURRENCY(AppConfig.PREF_MUX_XUDP_CONCURRENCY, "8"),

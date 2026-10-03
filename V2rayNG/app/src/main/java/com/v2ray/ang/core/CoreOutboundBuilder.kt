@@ -668,7 +668,11 @@ object CoreOutboundBuilder {
         }
 
         val domain = HttpUtil.toIdnDomain(profileItem.server.orEmpty())
-        if (Prefs.string(AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD, "1") != "2") {
+        if (Prefs.string(
+                AppConfig.PREF_OUTBOUND_DOMAIN_RESOLVE_METHOD,
+                AppConfig.OUTBOUND_DOMAIN_RESOLVE_DEFAULT
+            ) != "2"
+        ) {
             return domain
         }
         //Resolve and replace domain
