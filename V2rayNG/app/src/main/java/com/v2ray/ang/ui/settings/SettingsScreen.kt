@@ -453,12 +453,13 @@ private fun CoreSection(state: SettingsUiState, onAction: (SettingsAction) -> Un
         isPassword = true,
         onAction = onAction
     )
+    // the tunnel can only relay UDP through SOCKS5 UDP ASSOCIATE.
     BoolItem(
         BoolPref.SOCKS_ENABLE_UDP,
-        state[BoolPref.SOCKS_ENABLE_UDP],
+        state.socksUdp,
         R.string.title_pref_socks_enable_udp,
         R.string.summary_pref_socks_enable_udp,
-        enabled = localProxy,
+        enabled = localProxy && !state.socksUdpForced,
         onAction = onAction
     )
     TextItem(

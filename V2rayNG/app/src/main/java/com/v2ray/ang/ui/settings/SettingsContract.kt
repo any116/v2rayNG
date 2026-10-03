@@ -23,15 +23,30 @@ data class SettingsUiState(
     operator fun get(pref: BoolPref): Boolean = bools[pref] ?: pref.default
     operator fun get(pref: StringPref): String = strings[pref] ?: pref.default
 
-    /** Derived instead of a loading field: renders nothing rather than a frame of defaults. */
     val loaded: Boolean get() = bools.isNotEmpty()
 
     val isVpn: Boolean get() = get(StringPref.MODE) == VPN
     val hevTunnel: Boolean get() = isVpn && get(BoolPref.USE_HEV_TUNNEL)
 
-    /** hev-tunnel cannot work without the local proxy, so the switch is locked on. */
-    val localProxyForced: Boolean get() = hevTunnel
+    val rootProxy: Boolean
+        get() = get(BoolPref.ROOT_MODE_ENABLE) || get(BoolPref.ROOT_LAN_SHARING)
+
+    /**
+     * Kept in sync with CoreConfigManager.configureInbounds()'s `forcedByHev ||
+     * forcedBySocksRoot`. It used to be `hevTunnel` only, so with root mode on the menu let the
+     * user switch the local proxy off while the core kept building the inbound anyway.
+     */
+    val localProxyForced: Boolean get() = hevTunnel || rootProxy
     val localProxy: Boolean get() = get(BoolPref.ENABLE_LOCAL_PROXY) || localProxyForced
+
+    /**
+     * Same condition, separate name because the reason differs: hev-socks5-tunnel only speaks
+     * standard SOCKS5 UDP ASSOCIATE, so a SOCKS inbound with "udp": false silently drops every
+     * UDP packet it forwards — DNS included, which looks like "connected but nothing loads".
+     */
+    val socksUdpForced: Boolean get() = localProxyForced
+    val socksUdp: Boolean get() = get(BoolPref.SOCKS_ENABLE_UDP) || socksUdpForced
+
     val xudpQuicEnabled: Boolean
         get() = get(BoolPref.MUX_ENABLED) &&
             (get(StringPref.MUX_XUDP_CONCURRENCY).toIntOrNull() ?: 8) >= 0

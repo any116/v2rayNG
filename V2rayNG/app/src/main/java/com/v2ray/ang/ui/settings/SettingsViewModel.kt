@@ -71,16 +71,23 @@ class SettingsViewModel @Inject constructor(
         when (pref) {
             BoolPref.ROOT_MODE_ENABLE, BoolPref.ROOT_LAN_SHARING -> requireRoot(pref, value)
 
-            // hev-tunnel needs the local proxy; turn both on instead of failing silently later.
+            // hev-tunnel needs the local proxy AND its UDP relay; turn both on instead of
+            // failing silently later.
             BoolPref.USE_HEV_TUNNEL -> {
                 applyBool(pref, value)
-                if (value) applyBool(BoolPref.ENABLE_LOCAL_PROXY, true)
+                if (value && state.isVpn) applySocksInboundRequirements()
             }
 
             BoolPref.ENABLE_LOCAL_PROXY -> {
                 if (state.localProxyForced) return
                 applyBool(pref, value)
                 if (!value) applyBool(BoolPref.APPEND_HTTP_PROXY, false)
+            }
+
+            // Disabling this under hev/root would drop every forwarded UDP packet, DNS first.
+            BoolPref.SOCKS_ENABLE_UDP -> {
+                if (state.socksUdpForced) return
+                applyBool(pref, value)
             }
 
             BoolPref.DYNAMIC_COLOR -> {
@@ -98,8 +105,18 @@ class SettingsViewModel @Inject constructor(
             return
         }
         launch(loading = true) {
-            if (repo.ensureRoot()) applyBool(pref, true) else toastError(R.string.toast_root_required)
+            if (repo.ensureRoot()) {
+                applyBool(pref, true)
+                applySocksInboundRequirements()
+            } else {
+                toastError(R.string.toast_root_required)
+            }
         }
+    }
+
+    private fun applySocksInboundRequirements() {
+        applyBool(BoolPref.ENABLE_LOCAL_PROXY, true)
+        applyBool(BoolPref.SOCKS_ENABLE_UDP, true)
     }
 
     // ===== string rules =====
@@ -112,6 +129,14 @@ class SettingsViewModel @Inject constructor(
             StringPref.OBS_LEAST_LOAD_TIMEOUT -> applyString(pref, validDuration(text) ?: return)
 
             StringPref.OBS_LEAST_LOAD_SAMPLING -> applyString(pref, validSampling(text) ?: return)
+
+            // Switching back to VPN re-arms the hev requirements.
+            StringPref.MODE -> {
+                applyString(pref, text)
+                if (text == AppConfig.VPN && state[BoolPref.USE_HEV_TUNNEL]) {
+                    applySocksInboundRequirements()
+                }
+            }
 
             else -> applyString(pref, text)
         }

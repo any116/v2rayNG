@@ -316,7 +316,7 @@ object SettingsManager {
 
     fun canUseProcessRouting(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
-        if (isUsingHevTun()) return false
+        if (isVpnMode() && isUsingHevTun()) return false
         return Prefs.bool(AppConfig.PREF_ROUTE_ONLY_ENABLED, false)
     }
 }

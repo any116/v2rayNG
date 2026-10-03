@@ -56,15 +56,15 @@ class SettingsStore @Inject constructor(
      */
     private val snapshotLock = Any()
 
+    /**
+     * Keys whose asynchronous write has not reached the database yet. refresh() must not
+     * discard them: a dao.all() taken before the write lands would otherwise erase the value
+     * that writeAsync already poked into the snapshot.
+     */
+    private val pendingWrites: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     /** Completed by the first refresh(), success or failure; awaitReady() suspends on it. */
     private val readySignal = CompletableDeferred<Unit>()
-
-    /** Cause of the last refresh failure, or null when the snapshot reflects the database. */
-    @Volatile
-    var degradedCause: Throwable? = null
-        private set
-
-    val isDegraded: Boolean get() = degradedCause != null
 
     /** Owns fire and forget writes issued from non suspend call sites. */
     private val writeScope = CoroutineScope(SupervisorJob() + io)
@@ -83,11 +83,10 @@ class SettingsStore @Inject constructor(
             rows.forEach { row -> row.value?.let { fresh[row.key] = it } }
             synchronized(snapshotLock) {
                 snapshot.putAll(fresh)
-                snapshot.keys.retainAll(fresh.keys)
+                val keep = if (pendingWrites.isEmpty()) fresh.keys else fresh.keys + pendingWrites
+                snapshot.keys.retainAll(keep)
             }
-            degradedCause = null
         } catch (t: Throwable) {
-            degradedCause = t
             LogUtil.e(AppConfig.TAG, "SettingsStore.refresh failed; running on coded defaults", t)
             throw t
         } finally {
@@ -172,10 +171,17 @@ class SettingsStore @Inject constructor(
      * synchronous read right after this call already sees the new value.
      */
     fun writeAsync(key: String, value: String?, kind: String): Job {
-        poke(key, value)
+        synchronized(snapshotLock) {
+            pendingWrites.add(key)
+            if (value == null) snapshot.remove(key) else snapshot[key] = value
+        }
         return writeScope.launch {
-            runCatching { put(key, value, kind) }
-                .onFailure { LogUtil.e(AppConfig.TAG, "Failed to persist setting $key", it) }
+            try {
+                runCatching { put(key, value, kind) }
+                    .onFailure { LogUtil.e(AppConfig.TAG, "Failed to persist setting $key", it) }
+            } finally {
+                pendingWrites.remove(key)
+            }
         }
     }
 

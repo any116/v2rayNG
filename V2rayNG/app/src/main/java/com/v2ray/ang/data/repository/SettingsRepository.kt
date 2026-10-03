@@ -114,8 +114,9 @@ open class SettingsRepository @Inject constructor(
     @IoDispatcher io: CoroutineDispatcher
 ) : BaseRepository(io) {
 
-    /** Snapshot reads, no IO hop. Still suspend because the hev-tunnel repair may write. */
     open suspend fun load(): SettingsPrefs {
+        settings.awaitReady()
+
         val bools = BoolPref.entries.associateWithTo(LinkedHashMap()) {
             settings.bool(it.key, it.default)
         }
@@ -123,12 +124,34 @@ open class SettingsRepository @Inject constructor(
             settings.string(it.key, it.default) ?: it.default
         }
         bools[BoolPref.DYNAMIC_COLOR] = theme.isDynamicColorEnabled()
-        if (strings[StringPref.MODE] == VPN && bools[BoolPref.USE_HEV_TUNNEL] == true
-            && bools[BoolPref.ENABLE_LOCAL_PROXY] != true) {
-            settings.putBool(AppConfig.PREF_ENABLE_LOCAL_PROXY, true)
-            bools[BoolPref.ENABLE_LOCAL_PROXY] = true
+
+        if (socksInboundForced(bools, strings)) {
+            repairForced(bools, BoolPref.ENABLE_LOCAL_PROXY)
+            repairForced(bools, BoolPref.SOCKS_ENABLE_UDP)
         }
         return SettingsPrefs(bools, strings, theme.isDynamicColorSupported)
+    }
+
+    /**
+     * hev-socks5-tunnel (VPN) and root mode both push the whole device's traffic into the core's
+     * SOCKS inbound. Mirrors CoreConfigManager.configureInbounds() exactly — if the two ever
+     * disagree the menu shows a switch the core ignores.
+     */
+    private fun socksInboundForced(
+        bools: Map<BoolPref, Boolean>,
+        strings: Map<StringPref, String>,
+    ): Boolean {
+        val hevTunnel = strings[StringPref.MODE] == VPN && bools[BoolPref.USE_HEV_TUNNEL] == true
+        val rootProxy = bools[BoolPref.ROOT_MODE_ENABLE] == true ||
+            bools[BoolPref.ROOT_LAN_SHARING] == true
+        return hevTunnel || rootProxy
+    }
+
+    private suspend fun repairForced(bools: MutableMap<BoolPref, Boolean>, pref: BoolPref) {
+        if (bools[pref] == true) return
+        settings.putBool(pref.key, true)
+        bools[pref] = true
+        SettingsChangeManager.notifySettingChanged(pref.key)
     }
 
     open suspend fun setBool(pref: BoolPref, value: Boolean) {
