@@ -18,6 +18,9 @@
     <string name="toast_permission_denied">تعذر الحصول على الإذن</string>
     <string name="toast_permission_denied_notification">تعذر الحصول على إذن الإشعارات</string>
     <string name="notification_action_more">انقر للمزيد</string>
+    <string name="notification_channel_core_background_service">خدمة النواة في الخلفية</string>
+    <string name="notification_channel_subscription_update">خدمة تحديث الاشتراك</string>
+    <string name="notification_channel_core_test">خدمة اختبار النواة</string>
     <string name="toast_services_start">بدء الخدمات</string>
     <string name="toast_services_stop">إيقاف الخدمات</string>
     <string name="toast_services_success">نجاح بدء الخدمات</string>

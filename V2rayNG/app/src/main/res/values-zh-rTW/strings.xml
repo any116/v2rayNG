@@ -18,6 +18,9 @@
     <string name="toast_permission_denied">無法取得此權限</string>
     <string name="toast_permission_denied_notification">無法取得此通知權限</string>
     <string name="notification_action_more">瞭解更多</string>
+    <string name="notification_channel_core_background_service">核心背景服務</string>
+    <string name="notification_channel_subscription_update">訂閱更新服務</string>
+    <string name="notification_channel_core_test">核心測試服務</string>
     <string name="toast_services_start">啟動服務</string>
     <string name="toast_services_stop">停止服務</string>
     <string name="toast_services_success">啟動服務成功</string>

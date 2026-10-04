@@ -128,16 +128,22 @@ object NotificationHelper {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (notificationManager.getNotificationChannel(channelType.channelId) != null) return
-
-        val channel = NotificationChannel(
-            channelType.channelId,
-            channelType.channelName,
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        val channelName = context.getString(channelType.channelNameRes)
+        val channel = notificationManager.getNotificationChannel(channelType.channelId)
+        if (channel == null) {
+            notificationManager.createNotificationChannel(
+                NotificationChannel(
+                    channelType.channelId,
+                    channelName,
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                }
+            )
+        } else if (channel.name != channelName) {
+            channel.name = channelName
+            notificationManager.createNotificationChannel(channel)
         }
-        notificationManager.createNotificationChannel(channel)
     }
 
     private fun buildNotificationBuilder(

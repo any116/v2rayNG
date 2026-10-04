@@ -158,7 +158,7 @@ object NotificationManager {
     @RequiresApi(Build.VERSION_CODES.O)
     private fun createNotificationChannel(): String {
         val channelId = AppConfig.RAY_NG_CHANNEL_ID
-        val channelName = AppConfig.RAY_NG_CHANNEL_NAME
+        val channelName = getService()?.getString(R.string.notification_channel_core_background_service) ?: return channelId
         // Foreground-service notifications must remain visible; LOW is silent but valid.
         val chan = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW)
         chan.lightColor = Color.DKGRAY

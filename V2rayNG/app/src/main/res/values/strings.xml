@@ -25,6 +25,9 @@
     <string name="toast_permission_denied">Permission denied</string>
     <string name="toast_permission_denied_notification">Notification permission denied</string>
     <string name="notification_action_more">Tap for more</string>
+    <string name="notification_channel_core_background_service">Core Background Service</string>
+    <string name="notification_channel_subscription_update">Subscription Update Service</string>
+    <string name="notification_channel_core_test">Core Test Service</string>
     <string name="toast_services_start">Starting service</string>
     <string name="toast_services_stop">Stopping service</string>
     <string name="toast_services_success">Service started successfully</string>

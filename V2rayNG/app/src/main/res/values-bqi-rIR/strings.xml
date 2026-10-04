@@ -18,6 +18,9 @@
     <string name="toast_permission_denied">گرؽڌن موجوز مومکن نؽڌ</string>
     <string name="toast_permission_denied_notification">گرؽڌن موجوز وارسۊوی مومکن نؽڌ</string>
     <string name="notification_action_more">سی دووسمندیا قلوه کیلیک کوݩ</string>
+    <string name="notification_channel_core_background_service">خدمت پشتیبان هسته</string>
+    <string name="notification_channel_subscription_update">خدمت نوکردن اشتراک</string>
+    <string name="notification_channel_core_test">خدمت آزمایش هسته</string>
     <string name="toast_services_start">ره وستن سرویس</string>
     <string name="toast_services_stop">واڌاشتن سرویس</string>
     <string name="toast_services_success">ره وستن سرویس وا مووفقیت ٱنجوم وابی</string>
