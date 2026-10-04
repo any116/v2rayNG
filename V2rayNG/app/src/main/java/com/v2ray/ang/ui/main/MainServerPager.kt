@@ -320,30 +320,34 @@ private fun ServerRow(
                 )
             }
             Spacer(Modifier.height(RowLineSpacing))
+            val delayText = if (row.testDelayMillis == 0L) {
+                ""
+            } else {
+                stringResource(R.string.server_test_delay_value, row.testDelayMillis)
+            }
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     row.typeDescription,
+                    modifier = Modifier.weight(1f, fill = false),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val delayText = if (row.testDelayMillis == 0L) {
-                    ""
-                } else {
-                    stringResource(R.string.server_test_delay_value, row.testDelayMillis)
+                if (delayText.isNotBlank()) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        delayText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (row.testDelayMillis < 0L) LocalAppColors.current.pingBad
+                                else MaterialTheme.colorScheme.tertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-                Text(
-                    delayText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (row.testDelayMillis < 0L) LocalAppColors.current.pingBad
-                            else MaterialTheme.colorScheme.tertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
