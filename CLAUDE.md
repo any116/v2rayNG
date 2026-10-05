@@ -42,7 +42,7 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 ## SDK / 版本
 
 - `compileSdk 37`、`targetSdk 37`、`minSdk 24`、JVM 17（`coreLibraryDesugaring` 已开启）
-- Kotlin 2.4.20、AGP 9.4.1、KSP 2.3.11
+- Kotlin 2.4.20、AGP 9.4.1、KSP 2.3.12
 - `versionCode 746` / `versionName 2.3.6`（`app/build.gradle.kts`）
 - 渠道维度 `distribution`：`fdroid`（`applicationIdSuffix .fdroid`）与 `playstore`
 - `generateLocaleConfig = true`，`localeFilters` = en / zh-rCN / zh-rTW / vi / ru / fa / ar / bn / bqi-rIR
@@ -57,18 +57,18 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | 依赖 | 版本 | 说明 |
 | --- | --- | --- |
 | Compose BOM | `2026.09.00` | foundation / ui / tooling 都由 BOM 定版 |
-| Material3 | `1.5.0-alpha28` | **显式覆盖 BOM**，因为用到 `nonInteractiveScrollbar` 等 alpha API |
+| Material3 | `1.5.0-alpha29` | **显式覆盖 BOM**，因为用到 `nonInteractiveScrollbar` 等 alpha API |
 | Room 3 | `3.0.3` | `androidx.room3:room3-runtime/compiler/paging/testing`，KSP only |
-| SQLite driver | `sqlite-bundled` `2.6.2` | `BundledSQLiteDriver`；单测用 `sqlite-bundled-jvm` |
+| SQLite driver | `sqlite-bundled` `2.7.1` | `BundledSQLiteDriver`；单测用 `sqlite-bundled-jvm` |
 | Paging | `3.5.1` | runtime / compose / common / testing |
 | Hilt | `2.60.1` | `hilt-android` + `hilt-android-compiler`(KSP) |
 | androidx.hilt | `1.4.0` | `hilt-work` + `hilt-compiler`，@HiltWorker 用 |
-| MMKV | 1.3.16 | **仅只读**：`data/legacy/MmkvLegacyReader.kt` 一次性导入旧数据，禁止新增写入 |
+| MMKV | 1.3.17 | **仅只读**：`data/legacy/MmkvLegacyReader.kt` 一次性导入旧数据，禁止新增写入 |
 | Glance | `1.3.0-alpha02` | 桌面组件（`:bg` 进程） |
 | AboutLibraries | `15.2.0` | 许可页；Gradle 插件 `offlineMode = true` 生成 `res/raw/aboutlibraries.json` |
 | OkHttp | `5.5.0` | 订阅拉取、测速、更新检查 |
 | Coroutines | `1.11.0` | |
-| WorkManager | `2.11.2` | 含 `work-multiprocess` |
+| WorkManager | `2.12.0` | 含 `work-multiprocess` |
 | CameraX | `1.6.2` | 扫码，配合 zxing core 3.5.4 |
 | Coil | `3.6.3` | `io.coil-kt.coil3:coil-compose`，只用于分应用代理的应用图标 |
 | reorderable | `3.1.0` | `sh.calvin.reorderable`，列表拖拽排序 |

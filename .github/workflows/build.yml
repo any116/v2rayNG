@@ -8,6 +8,9 @@ on:
 
 permissions: write-all
 
+env:
+  NDK_VERSION: 30.0.16248370
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -36,13 +39,8 @@ jobs:
       run: |
         echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
           --channel=0 \
-          --install "ndk;30.0.16248370"
-        echo "NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370" >> $GITHUB_ENV
-        sed -i '17i\
-        \
-        externalNativeBuild { \
-            ndkVersion = "30.0.16248370" \
-        }' ${{ github.workspace }}/V2rayNG/app/build.gradle.kts
+          --install "ndk;$NDK_VERSION"
+        echo "NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> $GITHUB_ENV
         sed -i 's/JNI_VERSION_1_4/JNI_VERSION_1_6/g' hev-socks5-tunnel/src/hev-jni.c
             
     - name: Update Version
@@ -50,9 +48,6 @@ jobs:
       run: |
         echo "go_version=$(curl -s 'https://go.dev/dl/?mode=json&include=all' | jq -r '.[0].version | sub("^go"; "") | if test("rc[0-9]+$") then capture("^(?<majmin>[0-9]+\\.[0-9]+)(?<rc>rc[0-9]+)$") | "\(.majmin).0-\(.rc | sub("rc"; "rc."))" else . end')" >> $GITHUB_OUTPUT
 
-        Gradle=$(curl -s https://services.gradle.org/versions/current | jq -r '.version')
-        sed -i "s|gradle-.*-bin\.zip|gradle-$Gradle-bin.zip|" "${{ github.workspace }}/V2rayNG/gradle/wrapper/gradle-wrapper.properties"    
-    
     - name: Setup Golang
       uses: actions/setup-go@v7
       with:
@@ -113,7 +108,7 @@ jobs:
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
         echo "TAG=$(grep 'versionName =' ./app/build.gradle.kts | sed 's/.*versionName = "\(.*\)"/\1/')" >> $GITHUB_ENV
         chmod 755 gradlew
-        ./gradlew assembleRelease --build-cache --parallel --daemon --warning-mode all
+        ./gradlew -PNDK_VERSION="$NDK_VERSION" assembleRelease --build-cache --parallel --daemon --warning-mode all
 
     - name: Delete releases and workflows runs
       uses: ophub/delete-releases-workflows@main
