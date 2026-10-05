@@ -21,7 +21,7 @@ ui/components/ 跨屏共享组件与主题
   PrefsState.kt               rememberSettingBool / rememberSettingString（无 ViewModel 的小开关两向绑定）
   SettingsItem.kt             PreferenceGroupHeader、SettingsSwitchItem/ListItem/EditItem/MenuItem
   Menu.kt                     AppDropdownMenuItems
-  Scrollbar.kt                verticalScrollbar / horizontalScrollbar（M3 nonInteractiveScrollbar 封装）
+  Scrollbar.kt                verticalScrollbar / horizontalScrollbar（M3 滚动条与快速拖拽封装）
   SnackBar.kt                 AppSnackbarController / AppSnackbarHost / AppSnackbarManager / ToastType
 ui/<feature>/  该屏专属
 ui/widght/     Glance 桌面组件（包名 com.v2ray.ang.ui.widget；目录名是历史拼写）
