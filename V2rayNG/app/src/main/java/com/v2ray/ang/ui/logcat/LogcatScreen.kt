@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -37,7 +36,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.PagingData
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemContentType
+import androidx.paging.compose.itemKey
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.components.AppSearchState
@@ -47,6 +52,7 @@ import com.v2ray.ang.ui.components.ItemDivider
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
 import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 private val RowHorizontalPad = 12.dp
@@ -70,6 +76,10 @@ fun LogcatScreen(
     val dispatch = remember(viewModel) { viewModel::onAction }
 
     BackHandler { dispatch(LogcatAction.Back) }
+    LifecycleStartEffect(viewModel) {
+        dispatch(LogcatAction.Started)
+        onStopOrDispose { dispatch(LogcatAction.Stopped) }
+    }
 
     BaseScreen(
         viewModel = viewModel,
@@ -102,8 +112,9 @@ fun LogcatScreen(
                 )
             }
         }
-    ) { uiState, action ->
-        LogcatContent(lines = uiState.lines, onAction = action)
+    ) { _, action ->
+        val lines = remember(viewModel) { viewModel.lines }.collectAsLazyPagingItems()
+        LogcatContent(lines = lines, onAction = action)
     }
 }
 
@@ -183,7 +194,7 @@ private fun LogcatTopBar(
 
 @Composable
 private fun LogcatContent(
-    lines: List<LogLine>,
+    lines: LazyPagingItems<LogLine>,
     onAction: (LogcatAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -198,17 +209,36 @@ private fun LogcatContent(
         contentPadding = NavigationBarsBottomPadding(extra = ListBottomPad)
     ) {
         items(
-            items = lines,
-            key = { it.id },
-            contentType = { LogLineContentType }
-        ) { line ->
-            LogcatItem(
-                line = line,
-                copyLabel = copyLabel,
-                onLongClick = { onAction(LogcatAction.LineLongPressed(line.raw)) }
-            )
+            count = lines.itemCount,
+            key = lines.itemKey { it.id },
+            contentType = lines.itemContentType { LogLineContentType }
+        ) { index ->
+            val line = lines[index]
+            if (line == null) {
+                LogcatPlaceholder()
+            } else {
+                LogcatItem(
+                    line = line,
+                    copyLabel = copyLabel,
+                    onLongClick = { onAction(LogcatAction.LineLongPressed(line.raw)) }
+                )
+            }
             ItemDivider()
         }
+    }
+}
+
+@Composable
+private fun LogcatPlaceholder(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = MinRowHeight)
+            .padding(horizontal = RowHorizontalPad, vertical = RowVerticalPad)
+    ) {
+        Text("", style = MaterialTheme.typography.labelMedium)
+        Spacer(modifier = Modifier.height(TagContentGap))
+        Text("", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -269,8 +299,8 @@ private fun LogcatItem(
 @Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun LogcatContentPreview() = AppTheme {
-    LogcatContent(
-        lines = listOf(
+    val lines = remember {
+        val preview = listOf(
             LogLine(
                 id = 0L,
                 tag = "01-02 03:04:05.678 I/GoLog",
@@ -290,9 +320,10 @@ private fun LogcatContentPreview() = AppTheme {
                 content = "",
                 raw = "01-02 03:04:07.120 W/com.v2ray.ang(1234): "
             )
-        ),
-        onAction = {}
-    )
+        )
+        flowOf(PagingData.from(preview))
+    }.collectAsLazyPagingItems()
+    LogcatContent(lines = lines, onAction = {})
 }
 
 @Preview(showBackground = true)

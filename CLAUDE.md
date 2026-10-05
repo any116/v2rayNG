@@ -216,6 +216,7 @@ UI 侧的接收点只有一个：`MainRepository` 内部的 `BroadcastReceiver` 
 | 加依赖、动 `di/`、加 ViewModel / Worker | `hilt-rules.md` |
 | 动 Service / Receiver / Worker / 广播 | `service-ipc-rules.md` |
 | 改测速 / 延迟测试 | `connection-test-lifecycle.md` |
+| 改 Logcat 读取、缓存、清理、分享或页面生命周期 | `logcat-lifecycle.md` |
 | 写 Composable、改主题与尺寸 | `compose/structure.md`、`compose/theme-styles.md` |
 | 列表卡顿、重组过多 | `compose/performance.md` |
 | 加导航目标、写 Preview | `compose/navigation-preview.md` |

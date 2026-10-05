@@ -1,9 +1,17 @@
 package com.v2ray.ang.ui.logcat
 
 import androidx.compose.runtime.Immutable
+import com.v2ray.ang.dto.LogcatRecord
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseUiState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private val epochPrefix = Regex("""^\s*(\d{1,12})\.(\d{3,9})\s""")
+private val displayTime = DateTimeFormatter.ofPattern("MM-dd HH:mm:ss.SSS", Locale.US)
 
 /** Separator of the `TAG(pid): message` shape produced by `logcat -v time`. */
 private const val TAG_SEPARATOR = "):"
@@ -18,12 +26,13 @@ data class LogLine(
 
 @Immutable
 data class LogcatUiState(
-    val lines: List<LogLine> = emptyList(),
     val query: String = "",
     val searchActive: Boolean = false
 ) : BaseUiState
 
 sealed interface LogcatAction : BaseAction {
+    data object Started : LogcatAction
+    data object Stopped : LogcatAction
     data object Back : LogcatAction
     data object Refresh : LogcatAction
     data object CopyAll : LogcatAction
@@ -46,24 +55,30 @@ sealed interface LogcatEvent : BaseEvent.Platform {
 /**
  * Splits `TAG(pid): message` once.
  */
-internal fun parseLogLines(raw: List<String>): List<LogLine> {
-    val result = ArrayList<LogLine>(raw.size)
-    raw.forEachIndexed { index, line ->
-        val marker = line.indexOf(TAG_SEPARATOR)
-        val head = if (marker >= 0) line.substring(0, marker) else line
-        val paren = head.indexOf('(')
-        val tag = if (paren >= 0) head.substring(0, paren) else head
-        val content = if (marker >= 0) {
-            line.substring(marker + TAG_SEPARATOR.length).trim()
-        } else {
-            ""
-        }
-        result += LogLine(
-            id = index.toLong(),
-            tag = tag.trim(),
-            content = content,
-            raw = line
+internal fun parseLogLine(record: LogcatRecord): LogLine {
+    val line = record.raw
+    val timeFormat = displayTime.withZone(ZoneId.systemDefault())
+    val marker = line.indexOf(TAG_SEPARATOR)
+    val rawHead = if (marker >= 0) line.substring(0, marker) else line
+    val epoch = epochPrefix.find(rawHead)
+    val head = if (epoch == null) rawHead else {
+        val instant = Instant.ofEpochSecond(
+            epoch.groupValues[1].toLong(),
+            epoch.groupValues[2].padEnd(9, '0').toLong()
         )
+        timeFormat.format(instant) + " " + rawHead.substring(epoch.range.last + 1)
     }
-    return result
+    val paren = head.indexOf('(')
+    val tag = if (paren >= 0) head.substring(0, paren) else head
+    val content = if (marker >= 0) {
+        line.substring(marker + TAG_SEPARATOR.length).trim()
+    } else {
+        ""
+    }
+    return LogLine(
+        id = record.id,
+        tag = tag.trim(),
+        content = content,
+        raw = line
+    )
 }

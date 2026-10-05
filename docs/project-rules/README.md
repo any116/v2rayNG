@@ -21,6 +21,7 @@
 | [`compose/accessibility.md`](compose/accessibility.md) | contentDescription、语义合并、触控目标 | 加图标按钮/可点击行时 |
 | [`compose/testing.md`](compose/testing.md) | 测试分层、DAO/Paging 测试、可测边界、模板 | 写测试时 |
 | [`compose/review-checklist.md`](compose/review-checklist.md) | 提交前自查 + Review 清单 | 每次提 PR 前、每次 Review 时 |
+| [`logcat-lifecycle.md`](logcat-lifecycle.md) | Logcat 读取、缓存、生命周期、清理与分享 | 改 Logcat 读取、缓存、清理、分享或页面生命周期时 |
 | [`archive/README.md`](archive/README.md) | 历史迁移计划存档索引（Hilt / Room 3 / View 收尾） | 查阅或收尾历史迁移计划时 |
 
 ## 四条不可协商的底线
