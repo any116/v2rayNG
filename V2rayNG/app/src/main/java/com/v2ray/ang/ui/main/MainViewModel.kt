@@ -153,6 +153,7 @@ class MainViewModel @Inject constructor(
     private val groupsReady = CompletableDeferred<Unit>()
     private val firstPageShown = CompletableDeferred<Unit>()
     private var selectionSeeded = false
+    private var groupSelectionWriteJob: Job? = null
 
     /** Main-thread only: awaitReady() is always called from MainActivity's LaunchedEffect. */
     private var storageReadyHandled = false
@@ -271,7 +272,11 @@ class MainViewModel @Inject constructor(
                 selectionSeeded = true
                 val saved = repo.selectedGroupId()
                 if (saved in validIds) saved
-                else groups.first().id.also { repo.setSelectedGroupId(it) }
+                else groups.first().id.also { persistSelectedGroup(it) }
+            } else if (state.selectedGroupId.isEmpty() && groups.isNotEmpty() && "" !in validIds) {
+                // Unlike a missing subscription, All is omitted only when its display setting
+                // is disabled. Resolve this explicitly instead of relying on a Pager fallback.
+                groups.first().id.also { persistSelectedGroup(it) }
             } else {
                 null
             }
@@ -296,7 +301,7 @@ class MainViewModel @Inject constructor(
             if (state.selectedGroupId != removed) return@collect
             val next = state.groups.firstOrNull { it.id != removed }?.id ?: ""
             setState { copy(selectedGroupId = next) }
-            repo.setSelectedGroupId(next)
+            persistSelectedGroup(next)
         }
     }
 
@@ -435,7 +440,18 @@ class MainViewModel @Inject constructor(
         if (state.groups.none { it.id == id }) return
         if (state.selectedGroupId == id) return
         setState { copy(selectedGroupId = id) }
-        launch(onError = {}) { repo.setSelectedGroupId(id) }
+        persistSelectedGroup(id)
+    }
+
+    /** Preserve tap order, including queued writes when the Activity's ViewModel is cleared. */
+    private fun persistSelectedGroup(id: String) {
+        val previous = groupSelectionWriteJob
+        groupSelectionWriteJob = launch(onError = {}) {
+            withContext(NonCancellable) {
+                previous?.join()
+                repo.setSelectedGroupId(id)
+            }
+        }
     }
 
     private fun setSearchActive(active: Boolean) {
@@ -605,6 +621,8 @@ class MainViewModel @Inject constructor(
         currentTestId = null
         batchTestId = null
         batchGroupId = null
+        groupSelectionWriteJob?.cancel()
+        groupSelectionWriteJob = null
         // Every CachedPager scope is a child of viewModelScope's Job, which ViewModel.clear()
         // has already cancelled by the time onCleared() runs; clear() also cancels each scope.
         synchronized(pagerLock) { pagers.clear() }

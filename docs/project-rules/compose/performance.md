@@ -122,7 +122,10 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
   切分组回来时位置不丢；分组列表变化后调 `retain(validIds)` 清理，防止泄漏。
 - `HorizontalPager` 设 `beyondViewportPageCount = 0`，并给 `key = { groups[it].id }`。
 - 分页切换用 `snapshotFlow { pagerState.settledPage }.distinctUntilChanged()`，
-  不要监听 `currentPage`（滑动过程中每帧都变）。
+  不要监听 `currentPage`（滑动过程中每帧都变）。分组 ID 是恢复选择的唯一依据：
+  先完成 Pager 对齐，再订阅页码变化；初次对齐不回写选择。临时列表缺少选中 ID 时
+  不订阅、不回写，等该 ID 再出现后重新对齐（`MainGroupSelection.kt`）。
+  标签点击直接 dispatch `SelectGroup(id)`，再由同一对齐流程滚动 Pager。
 - 行内不要 `collectAsStateWithLifecycle` 一个大流；行只接收已经算好的数据。
 - 拖拽排序统一用 `ReorderableListItem` / `ReorderableGridItem` + `rememberReorderable*State`，
   每次交换在 `onMove` 中 dispatch `MoveServer(groupId, movedGuid, toIndex)`，重排由 DAO 事务完成

@@ -40,7 +40,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
+import javax.inject.Singleton
 
+/** Shares explicit group-removal events between the main screen and subscription editors. */
+@Singleton
 open class SubRepository @Inject constructor(
     private val app: Application,
     private val profileDao: ProfileDao,

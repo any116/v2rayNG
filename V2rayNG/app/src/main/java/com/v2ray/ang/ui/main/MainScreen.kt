@@ -181,29 +181,22 @@ private fun MainContent(
 ) {
     val groups = args.groups
     if (groups.isEmpty()) return
-    val scope = rememberCoroutineScope()
-    // Start on the selected page. Starting at page 0 and scrolling afterwards composed page 0
-    // first (a wasted paging query + COUNT on cold start) and let settledPage report 0, which
-    // could momentarily re-select and persist the first group.
-    // Keyless remember is intentional: this only seeds PagerState, and observeGroups() publishes
-    // `groups` and the seeded `selectedGroupId` in one setState, so the first non-empty
-    // composition already sees a consistent pair.
+    val groupIds = remember(groups) { groups.map { it.id } }
+    // Avoid querying page 0 on a cold start. rememberPagerState can restore an older numeric
+    // page instead of initialPage, so the effect below must still align by ID before observing.
     val initialPage = remember { groups.indexOfFirst { it.id == args.selectedGroupId }.coerceAtLeast(0) }
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { groups.size })
     val scrollStates = handles.scrollStates
 
-    LaunchedEffect(groups) {
-        scrollStates.retain(groups.mapTo(HashSet()) { it.id })
-        val index = groups.indexOfFirst { it.id == args.selectedGroupId }
-        if (index >= 0 && index != pagerState.currentPage) pagerState.scrollToPage(index)
-    }
-
-    LaunchedEffect(pagerState, groups) {
-        snapshotFlow { pagerState.settledPage }
-            .distinctUntilChanged()
-            .collect { page ->
-                groups.getOrNull(page)?.let { handles.dispatch(MainAction.SelectGroup(it.id)) }
-            }
+    LaunchedEffect(pagerState, groupIds, args.selectedGroupId) {
+        scrollStates.retain(groupIds.toHashSet())
+        observeGroupPagerSelection(
+            groupIds = groupIds,
+            selectedGroupId = args.selectedGroupId,
+            settledPages = snapshotFlow { pagerState.settledPage },
+            alignPage = { pagerState.scrollToPage(it) },
+            onSelect = { handles.dispatch(MainAction.SelectGroup(it)) }
+        )
     }
 
     /** The row index is computed in SQL, so no list scan and no wait for data is needed here. */
@@ -258,7 +251,7 @@ private fun MainContent(
                 selectedTabIndex = pagerState.currentPage.coerceIn(0, groups.lastIndex),
                 counts = handles.slices.counts,
                 onTabClick = { index ->
-                    scope.launch { pagerState.scrollToPage(index) }
+                    groupIds.getOrNull(index)?.let { handles.dispatch(MainAction.SelectGroup(it)) }
                 }
             )
         }

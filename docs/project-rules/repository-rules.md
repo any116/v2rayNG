@@ -67,6 +67,8 @@ open class XxxRepository @Inject constructor(
    `SharedFlow`（`replay = 0`、`extraBufferCapacity = 64`、`onBufferOverflow = DROP_OLDEST`）。
    样板 `MainRepository.serviceEvents`。Repository 声明为 `@Singleton`，
    由 Hilt 保证进程内唯一注册（不要自己 `Closeable` 反注册）。
+   跨页面共享的事件源同样必须用同一个实例：`SubRepository` 为 `@Singleton`，
+   主屏通过 `groupRemoved` 只在明确删除分组时回退选择，不能把临时列表缺项当作删除。
 
 ## 3. DAO / 查询规范
 
