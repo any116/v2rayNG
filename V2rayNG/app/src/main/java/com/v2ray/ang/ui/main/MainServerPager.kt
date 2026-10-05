@@ -106,7 +106,11 @@ fun GroupPagerPage(
         val reorderable = if (canReorder) {
             rememberReorderableLazyGridState(gridState) { from, to ->
                 val moved = from.key as? String ?: return@rememberReorderableLazyGridState
-                handles.dispatch(MainAction.MoveServer(groupId, moved, to.index))
+                moveServerAndAwaitPresentation(
+                    MainAction.MoveServer(groupId, moved, to.index),
+                    handles.dispatch,
+                    snapshotFlow { items.itemSnapshotList.getOrNull(to.index)?.guid }
+                )
             }
         } else null
         LazyVerticalGrid(
@@ -143,7 +147,11 @@ fun GroupPagerPage(
         val reorderable = if (canReorder) {
             rememberReorderableLazyListState(listState) { from, to ->
                 val moved = from.key as? String ?: return@rememberReorderableLazyListState
-                handles.dispatch(MainAction.MoveServer(groupId, moved, to.index))
+                moveServerAndAwaitPresentation(
+                    MainAction.MoveServer(groupId, moved, to.index),
+                    handles.dispatch,
+                    snapshotFlow { items.itemSnapshotList.getOrNull(to.index)?.guid }
+                )
             }
         } else null
         LazyColumn(
@@ -331,7 +339,7 @@ private fun ServerRow(
             ) {
                 Text(
                     row.typeDescription,
-                    modifier = Modifier.weight(1f, fill = false),
+                    modifier = Modifier.weight(1f, fill = true),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary,
                     maxLines = 1,

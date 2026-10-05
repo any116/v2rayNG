@@ -125,8 +125,11 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
   不要监听 `currentPage`（滑动过程中每帧都变）。
 - 行内不要 `collectAsStateWithLifecycle` 一个大流；行只接收已经算好的数据。
 - 拖拽排序统一用 `ReorderableListItem` / `ReorderableGridItem` + `rememberReorderable*State`，
-  拖拽结束 dispatch `MoveServer(groupId, movedGuid, toIndex)`，重排由 DAO 事务完成
-  （`to.index` 是移除被拖行**之后**的下标）。
+  每次交换在 `onMove` 中 dispatch `MoveServer(groupId, movedGuid, toIndex)`，重排由 DAO 事务完成
+  （`to.index` 是移除被拖行**之后**的下标）。`onMove` 必须等待 Paging 的目标下标实际呈现
+  `movedGuid` 后才返回，不能发出异步 Action 就直接返回，否则拖拽库会提前补偿位置而导致残影跳位。
+  用 `snapshotFlow` 观察 `itemSnapshotList`，不触发分页访问提示；等待须有超时，超时按取消传播，
+  不能把未应用的交换当作成功返回（样板：`MainServerReorder.kt` 中的 `moveServerAndAwaitPresentation`）。
 - 定位选中项不要扫全表：位置由 SQL 的 `indexOf` 给出，再 `scrollToItem`；
   等布局就绪要有超时（`withTimeoutOrNull(LocateLayoutTimeoutMs)`，600ms）。
 - **下拉框用 Paging 时**用 `FormPagedDropdownField`：它用 bare `Popup` + `LazyColumn`
