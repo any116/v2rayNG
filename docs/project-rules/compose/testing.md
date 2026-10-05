@@ -5,7 +5,7 @@
 本仓库 CI 不跑测试，仪器测试基本未使用（只有 espresso 依赖声明，`androidTest` 为空）。
 因此策略是：**把值得测的逻辑挤出 Composable，用 JVM 单元测试覆盖。**
 
-依赖（`app/build.gradle.kts`）：JUnit4 + `mockito-inline` + `mockito-kotlin` +
+依赖（`app/build.gradle.kts`）：JUnit 6 + `mockito-inline` + `mockito-kotlin` +
 `kotlinx-coroutines-test` + `androidx.room3:room3-testing` + `androidx.paging:paging-testing`
 + `androidx.sqlite:sqlite-bundled-jvm`（JVM 里开内存 SQLite）。
 测试目录 `app/src/test/java/`。

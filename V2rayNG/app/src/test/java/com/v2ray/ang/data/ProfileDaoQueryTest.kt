@@ -10,9 +10,9 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.normalizeLike
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
 
 /**
  * Equivalence and regression coverage for the scope-split queries.

@@ -1,9 +1,9 @@
 package com.v2ray.ang.data
 
 import com.v2ray.ang.AppConfig
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Test
 
 internal class LegacyImporterPlanTest {
 
@@ -30,8 +30,8 @@ internal class LegacyImporterPlanTest {
 
         IMPORTED_TABLES.forEach { table ->
             assertFalse(
+                plan.keysOf(table.table).isEmpty(),
                 "no keys planned for ${table.table}: keysOf() is out of sync with IMPORTED_TABLES",
-                plan.keysOf(table.table).isEmpty()
             )
         }
     }

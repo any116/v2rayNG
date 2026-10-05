@@ -4,7 +4,7 @@ desugarJdkLibs = "2.1.5"
 aboutLibraries = "15.2.0"
 kotlin = "2.4.20"
 coreKtx = "1.19.1"
-junit = "4.13.2"
+junit = "6.1.3"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 activity = "1.13.0"
@@ -34,7 +34,8 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
 aboutlibraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "aboutLibraries" }
 aboutlibraries-compose-m3 = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutLibraries" }
-junit = { group = "junit", name = "junit", version.ref = "junit" }
+junit = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 mmkv-static = { module = "com.tencent:mmkv-static", version.ref = "mmkvStatic" }

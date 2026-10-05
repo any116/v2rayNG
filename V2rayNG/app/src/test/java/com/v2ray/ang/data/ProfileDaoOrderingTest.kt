@@ -2,8 +2,8 @@ package com.v2ray.ang.data
 
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 /**
  * Regression coverage for the "rank while writing" bug: the previous single-statement

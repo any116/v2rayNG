@@ -236,7 +236,7 @@ UI 侧的接收点只有一个：`MainRepository` 内部的 `BroadcastReceiver` 
 
 ## Testing Strategy
 
-- 单元测试：`app/src/test/java/`，JUnit4 + `mockito-inline` + `mockito-kotlin` +
+- 单元测试：`app/src/test/java/`，JUnit 6 + `mockito-inline` + `mockito-kotlin` +
   `kotlinx-coroutines-test` + `room3-testing` + `paging-testing` + `sqlite-bundled-jvm`。
   现有样例：`UtilsTest`、`HttpUtilTest`、`ShadowsocksFmtTest`、`ListExtTest`、
   `MainImportMenuTest`、`AppPickerViewModelTest`、`ScannerActivityTest`、
