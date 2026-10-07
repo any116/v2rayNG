@@ -23,9 +23,10 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
-import androidx.glance.layout.Box
 import androidx.glance.layout.Column
+import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.state.GlanceStateDefinition
@@ -39,17 +40,15 @@ import com.v2ray.ang.handler.WidgetStateManager
 import com.v2ray.ang.receiver.WidgetProvider
 import com.v2ray.ang.ui.components.colorFabActive
 
-private val ButtonSize = 48.dp
-private val IconSize = 24.dp
-private val ButtonRadius = 24.dp
-private val WidgetPadding = 4.dp
-private val LabelSize = 12.sp
-
-// Only the semantic colors are shared with the app; AppTheme itself cannot cross into Glance.
 private val ActiveColor = colorFabActive
 private val InactiveColor = Color(0xFF9C9C9C)
-private val AttentionColor = Color(0xFFD50000)
-private val OnButtonColor = Color.White
+private val AttentionColor = Color(0xFFBA1A1A)
+private val WidgetContentColor = Color.White
+private val IconSize = 32.dp
+private val WidgetCornerRadius = 24.dp
+private val WidgetPadding = 8.dp
+private val LabelGap = 2.dp
+private val LabelSize = 12.sp
 
 /**
  * Declarative switch widget. Glance turns this into RemoteViews on every supported API level,
@@ -84,33 +83,28 @@ private fun SwitchContent(preview: WidgetRunState? = null) {
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
-            .padding(WidgetPadding)
-            .clickable(actionSendBroadcast(clickIntent(context))),
+            .widgetBackground(state)
+            .clickable(actionSendBroadcast(clickIntent(context)))
+            .padding(WidgetPadding),
         verticalAlignment = Alignment.Vertical.CenterVertically,
         horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
     ) {
-        Box(
-            modifier = GlanceModifier.size(ButtonSize).switchBackground(state),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (state.isPending) {
-                CircularProgressIndicator(
-                    modifier = GlanceModifier.size(IconSize),
-                    color = ColorProvider(OnButtonColor),
-                )
-            } else {
-                Image(
-                    provider = ImageProvider(
-                        if (state.isActive) R.drawable.ic_stop_24dp else R.drawable.ic_play_24dp
-                    ),
-                    contentDescription = description,
-                    modifier = GlanceModifier.size(IconSize),
-                )
-            }
+        if (state.isPending) {
+            CircularProgressIndicator(
+                modifier = GlanceModifier.size(IconSize),
+                color = ColorProvider(WidgetContentColor),
+            )
+        } else {
+            Image(
+                provider = ImageProvider(R.drawable.ic_power_settings_new_24dp),
+                contentDescription = description,
+                modifier = GlanceModifier.size(IconSize),
+            )
         }
+        Spacer(GlanceModifier.height(LabelGap))
         Text(
             text = context.getString(R.string.app_name),
-            style = TextStyle(color = ColorProvider(OnButtonColor), fontSize = LabelSize),
+            style = TextStyle(color = ColorProvider(WidgetContentColor), fontSize = LabelSize),
         )
     }
 }
@@ -123,27 +117,22 @@ private fun clickIntent(context: Context): Intent =
     Intent(context, WidgetProvider::class.java).setAction(AppConfig.BROADCAST_ACTION_WIDGET_CLICK)
 
 /**
- * Rounded corners are a platform modifier from API 31; below that the existing shape drawables
- * keep the round look instead of degrading to a square button.
+ * Rounded corners are a platform modifier from API 31. Older launchers still receive the same
+ * Compose color and fall back to the platform's default widget shape.
  */
-private fun GlanceModifier.switchBackground(state: WidgetRunState): GlanceModifier {
+private fun GlanceModifier.widgetBackground(state: WidgetRunState): GlanceModifier {
     val attention = state == WidgetRunState.FAILED || state == WidgetRunState.PERMISSION_REQUIRED
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val color = when {
-            attention -> AttentionColor
-            state.isActive || state == WidgetRunState.STARTING -> ActiveColor
-            else -> InactiveColor
+    val color = when {
+        attention -> AttentionColor
+        state.isActive || state == WidgetRunState.STARTING -> ActiveColor
+        else -> InactiveColor
+    }
+
+    return background(ColorProvider(color)).run {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            cornerRadius(WidgetCornerRadius)
+        } else {
+            this
         }
-        background(ColorProvider(color)).cornerRadius(ButtonRadius)
-    } else {
-        background(
-            ImageProvider(
-                if (state.isActive || state == WidgetRunState.STARTING) {
-                    R.drawable.ic_rounded_corner_active
-                } else {
-                    R.drawable.ic_rounded_corner_inactive
-                }
-            )
-        )
     }
 }
