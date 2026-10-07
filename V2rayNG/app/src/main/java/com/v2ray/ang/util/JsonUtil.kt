@@ -2,6 +2,7 @@ package com.v2ray.ang.util
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonNull
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonPrimitive
@@ -10,6 +11,7 @@ import com.google.gson.JsonSerializer
 import com.google.gson.reflect.TypeToken
 import com.v2ray.ang.AppConfig
 import java.lang.reflect.Type
+import java.math.BigDecimal
 
 object JsonUtil {
     private var gson = Gson()
@@ -64,12 +66,16 @@ object JsonUtil {
         val gsonPre = GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()
-            .registerTypeAdapter( // custom serializer is needed here since JSON by default parse number as Double, core will fail to start
+            .registerTypeAdapter( // Convert whole-valued Doubles to integers; the core rejects `1.0` for integer fields.
                 object : TypeToken<Double>() {}.type,
                 JsonSerializer { src: Double?, _: Type?, _: JsonSerializationContext? ->
-                    JsonPrimitive(
-                        src?.toInt()
-                    )
+                    if (src == null) {
+                        JsonNull.INSTANCE
+                    } else if (src % 1.0 == 0.0) {
+                        JsonPrimitive(BigDecimal.valueOf(src).toBigInteger())
+                    } else {
+                        JsonPrimitive(src)
+                    }
                 }
             )
             .create()
