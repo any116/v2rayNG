@@ -10,6 +10,7 @@ import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.v2ray.ang.AppConfig.ANG_PACKAGE
 import com.v2ray.ang.data.AppDatabase
+import com.v2ray.ang.data.ImportBuffer
 import com.v2ray.ang.data.LegacyMigrationGate
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.StorageBootstrap
@@ -60,6 +61,10 @@ class AngApplication : Application() {
         super.onCreate()
 
         AppLocaleManager.initialize(this)
+
+        // A process killed during a large import cannot run ImportBuffer.close(). Remove only
+        // old import artifacts; recent files may still belong to another active process.
+        ImportBuffer.cleanupStaleFiles(cacheDir)
 
         WorkManager.initialize(this, buildWorkManagerConfiguration())
 

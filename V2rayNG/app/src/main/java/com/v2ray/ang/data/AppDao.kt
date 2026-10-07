@@ -17,7 +17,11 @@ import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
 import com.v2ray.ang.data.entities.SettingsEntry
 import com.v2ray.ang.data.entities.SubscriptionItem
+import com.v2ray.ang.dto.ProfileImportRecord
 import com.v2ray.ang.enums.EConfigType
+import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 
 // ---- Projections: list queries never touch profile_raw ----
@@ -776,6 +780,76 @@ interface ProfileDao {
             writeSelectedGuid(firstGuidInGroup(subscriptionId) ?: firstGuid())
         }
         return replacement
+    }
+
+    @Query("DELETE FROM profile_stats WHERE guid IN (SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId)")
+    suspend fun deleteGroupStats(subscriptionId: String)
+
+    @Query("DELETE FROM profile_raw WHERE guid IN (SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId)")
+    suspend fun deleteGroupRaws(subscriptionId: String)
+
+    @Query("DELETE FROM profiles WHERE subscriptionId = :subscriptionId")
+    suspend fun deleteGroupProfiles(subscriptionId: String)
+
+    /**
+     * Replays validated staging files in bounded batches. All deletes/inserts/selection repair
+     * share one transaction, so a later read/write failure or cancellation restores the old group.
+     * Empty input never deletes existing profiles. Only the selected old profile is materialized.
+     * A subscription removed while parsing is not recreated as an orphan profile group.
+     * JSON-lines are deserialized while this transaction is open deliberately: this keeps the
+     * replacement all-or-nothing at the cost of a longer write lock for very large imports.
+     */
+    @Transaction
+    suspend fun importGroupBatches(
+        subscriptionId: String,
+        batches: Sequence<List<ProfileImportRecord>>,
+        append: Boolean
+    ): Int {
+        val iterator = batches.filter { it.isNotEmpty() }.iterator()
+        if (!iterator.hasNext()) return 0
+        val groupOrder = groupSortOrderOf(subscriptionId) ?: return 0
+        val selected = selectedGuid()
+        val selectedProfile = if (!append && selected != null) findByGuid(selected) else null
+        val identity = selectedProfile?.takeIf { it.subscriptionId == subscriptionId }?.duplicateIdentity()
+        var replacement: String? = null
+        val base = if (append) maxSortOrder(subscriptionId) else 0L
+        if (!append) {
+            deleteGroupStats(subscriptionId)
+            deleteGroupRaws(subscriptionId)
+            deleteGroupProfiles(subscriptionId)
+        }
+        var count = 0
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            if (!iterator.hasNext()) break
+            val batch = iterator.next()
+            val profiles = ArrayList<ProfileItem>(batch.size)
+            val raws = ArrayList<ProfileRaw>()
+            for (entry in batch) {
+                // Parsers may allocate a guid for their in-memory model, but the persistence
+                // boundary owns identity so every imported row is fresh and unique.
+                val profile = entry.profile.copy(
+                    guid = Utils.getUuid(),
+                    subscriptionId = subscriptionId,
+                    sortOrder = base + (++count).toLong() * ProfileItem.SORT_STEP,
+                    groupSortOrder = groupOrder,
+                    dedupeKey = ""
+                )
+                if (replacement == null && identity != null && profile.duplicateIdentity() == identity) {
+                    replacement = profile.guid
+                }
+                profiles.add(profile)
+                entry.rawConfig?.let { raws.add(ProfileRaw(profile.guid, it)) }
+            }
+            upsertAll(profiles)
+            if (raws.isNotEmpty()) putRaws(raws)
+        }
+        if (replacement != null) {
+            writeSelectedGuid(replacement)
+        } else if (selected != null && !profileExists(selected)) {
+            writeSelectedGuid(firstGuidInGroup(subscriptionId) ?: firstGuid())
+        }
+        return count
     }
 
     companion object {

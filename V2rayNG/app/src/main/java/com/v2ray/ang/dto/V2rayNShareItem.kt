@@ -4,6 +4,7 @@ import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
+import com.v2ray.ang.util.Utils
 
 @Suppress("PropertyName")
 data class V2rayNShareItem(
@@ -99,6 +100,7 @@ data class V2rayNShareItem(
                 else -> NetworkType.fromString(Network).type
             }
         val profile = ProfileItem(
+            guid = Utils.getUuid(),
             configType = configType,
             remarks = Remarks.orEmpty(),
             server = Address.orEmpty(),
