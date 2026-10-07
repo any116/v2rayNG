@@ -19,6 +19,10 @@ object AppConfig {
     /** Default subscription ID for ungrouped servers. */
     const val DEFAULT_SUBSCRIPTION_ID = "__default_subscription__"
     const val DEFAULT_SUBSCRIPTION_REMARKS = "Default"
+    /** Maximum number of rows written to Room in one import batch. */
+    const val IMPORT_BATCH_SIZE = 300
+    /** Maximum decoded characters accepted from a network subscription response. */
+    const val MAX_IMPORT_CONTENT_CHARS = 64 * 1024 * 1024L
 
     /** Preferences mapped to MMKV storage. */
     const val PREF_SNIFFING_ENABLED = "pref_sniffing_enabled"
@@ -212,6 +216,7 @@ object AppConfig {
     const val SOCKS4 = "socks4://"
     const val SOCKS5 = "socks5://"
     const val HTTP = "http://"
+    const val HTTPS = "https://"
     const val VLESS = "vless://"
     const val TROJAN = "trojan://"
     const val WIREGUARD = "wireguard://"
