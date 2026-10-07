@@ -219,7 +219,9 @@ object CoreConfigManager {
 
         // (added by getDns / getCustomLocalDns) to use the balancer, then add
         // the catch-all balancer rule.
-        if (primaryResolvedOutbound.resolvedType == CoreResolvedType.POLICYGROUP) {
+        if (primaryResolvedOutbound.resolvedType == CoreResolvedType.POLICYGROUP
+            && policyGroupBalancerTags.containsKey(AppConfig.TAG_PROXY)
+        ) {
             if (v2rayConfig.routing.domainStrategy == "IPIfNonMatch") {
                 v2rayConfig.routing.rules.add(
                     V2rayConfig.RoutingBean.RulesBean(
@@ -392,6 +394,7 @@ object CoreConfigManager {
 
         val memberTagPrefix = "${AppConfig.TAG_PROXY}-${resolvedOutbound.tag}-"
         val membersToAdd = mutableListOf<V2rayConfig.OutboundBean>()
+        val memberTagByRemark = mutableMapOf<String, String>()
         memberPairs.forEachIndexed { index, (outbound, profile) ->
             val memberTag = "$memberTagPrefix${index + 1}-${profile.remarks.trim()}"
             if (memberTag in existingTags) {
@@ -399,6 +402,7 @@ object CoreConfigManager {
             }
             outbound.tag = memberTag
             membersToAdd.add(outbound)
+            memberTagByRemark.putIfAbsent(profile.remarks.trim(), memberTag)
             existingTags.add(memberTag)
         }
 
@@ -422,18 +426,31 @@ object CoreConfigManager {
             "${AppConfig.TAG_BALANCER_PRE}-${resolvedOutbound.tag}"
         }
         val strategyType = BalancerStrategyType.from(resolvedOutbound.profile.policyGroupType)
-        val fallbackTag = if (strategyType.supportsObservatory && resolvedOutbound.profile.policyGroupTestOutbounds != false) {
-            resolvedOutbound.profile.policyGroupFallbackTag
-                ?.takeIf { it.isNotEmpty() && it != AppConfig.TAG_PROXY }
-            // Xray excludes dead random/roundRobin candidates only when fallbackTag is set;
-            // without this default, an enabled empty field creates no observatory.
-                ?: membersToAdd.first().tag
-        } else null
+        val firstMemberTag = membersToAdd.first().tag
+        val configuredFallbackTag = resolvedOutbound.profile.policyGroupFallbackTag?.trim()
+        val fallbackTag = configuredFallbackTag
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { requestedTag ->
+                when {
+                    requestedTag in membersToAdd.map { it.tag } -> requestedTag
+                    memberTagByRemark[requestedTag] != null -> memberTagByRemark.getValue(requestedTag)
+                    else -> {
+                        LogUtil.w(
+                            AppConfig.TAG,
+                            "POLICYGROUP '${resolvedOutbound.tag}' fallback tag '$requestedTag' is not a group member, "
+                                + "using '$firstMemberTag'"
+                        )
+                        firstMemberTag
+                    }
+                }
+            }
+            ?: firstMemberTag
         val strategy = buildBalancerStrategy(
             strategyType = strategyType,
             selector = listOf(memberTagPrefix),
             balancerTag = balancerTag,
             fallbackTag = fallbackTag,
+            enableProbing = resolvedOutbound.profile.policyGroupTestOutbounds != false,
         )
         val existingBalancers = v2rayConfig.routing.balancers?.toMutableList() ?: mutableListOf()
         if (existingBalancers.none { it.tag == balancerTag }) {
@@ -1075,6 +1092,7 @@ object CoreConfigManager {
         selector: List<String>,
         balancerTag: String = AppConfig.TAG_BALANCER,
         fallbackTag: String? = null,
+        enableProbing: Boolean = true,
     ): BalancerStrategy {
         val probeUrl = Prefs.string(AppConfig.PREF_DELAY_TEST_URL) ?: AppConfig.DELAY_TEST_URL
         val leastPingInterval = decodeObservatoryDuration(AppConfig.PREF_OBSERVATORY_LEAST_PING_INTERVAL, AppConfig.OBSERVATORY_LEAST_PING_INTERVAL)
@@ -1088,7 +1106,7 @@ object CoreConfigManager {
             fallbackTag = fallbackTag,
             strategy = V2rayConfig.RoutingBean.StrategyObject(type = strategyType.policyGroupType)
         )
-        val observatory = if (strategyType.requiresObservatory || fallbackTag != null) {
+        val observatory = if (enableProbing && (strategyType.requiresObservatory || fallbackTag != null)) {
             V2rayConfig.ObservatoryObject(
                 subjectSelector = selector,
                 probeUrl = probeUrl,
@@ -1096,7 +1114,7 @@ object CoreConfigManager {
                 enableConcurrency = true
             )
         } else null
-        val burstObservatory = if (strategyType.requiresBurstObservatory) {
+        val burstObservatory = if (enableProbing && strategyType.requiresBurstObservatory) {
             V2rayConfig.BurstObservatoryObject(
                 subjectSelector = selector,
                 pingConfig = V2rayConfig.BurstObservatoryObject.PingConfigObject(

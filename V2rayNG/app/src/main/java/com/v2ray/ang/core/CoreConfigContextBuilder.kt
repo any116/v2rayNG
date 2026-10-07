@@ -9,7 +9,6 @@ import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.dto.CoreConfigContext
-import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
@@ -51,13 +50,12 @@ object CoreConfigContextBuilder {
             }
         val routingResolvedOutbounds = resolveRoutingOutbounds(scope, routingRulesets)
         val resolvedOutbounds = listOf(primaryResolvedOutbound) + routingResolvedOutbounds
-        val fallbackResolvedOutbounds = resolveFallbackOutbounds(scope, resolvedOutbounds)
         val routingDomainRules = collectRoutingDomainRulesForDns(routingRulesets)
 
         return CoreConfigContext(
             context = context,
             guid = guid,
-            resolvedOutbounds = resolvedOutbounds + fallbackResolvedOutbounds,
+            resolvedOutbounds = resolvedOutbounds,
             routingDomainRules = routingDomainRules,
             routingRulesets = routingRulesets,
         )
@@ -266,36 +264,4 @@ object CoreConfigContextBuilder {
         return result
     }
 
-    /**
-     * Fallback outbounds of POLICYGROUP nodes. Must not overlap resolved or builtin tags.
-     *
-     * Suspend work runs in an explicit loop — see the note at the top of the file.
-     */
-    private suspend fun resolveFallbackOutbounds(
-        scope: ConfigScope,
-        resolvedOutbounds: List<CoreConfigContext.ResolvedOutbound>,
-    ): List<CoreConfigContext.ResolvedOutbound> {
-        val candidateTags = resolvedOutbounds
-            .asSequence()
-            .filter { it.resolvedType == CoreResolvedType.POLICYGROUP }
-            .filter {
-                BalancerStrategyType.from(it.profile.policyGroupType).supportsObservatory &&
-                    it.profile.policyGroupTestOutbounds != false
-            }
-            .mapNotNull { it.profile.policyGroupFallbackTag }
-            .filter { it !in AppConfig.BUILTIN_OUTBOUND_TAGS && resolvedOutbounds.none { ob -> ob.tag == it } }
-            .distinct()
-            .toList()
-
-        val result = mutableListOf<CoreConfigContext.ResolvedOutbound>()
-        for (tag in candidateTags) {
-            val profile = SettingsManager.getServerViaRemarks(tag) ?: continue
-            if (profile.configType == EConfigType.CUSTOM || profile.configType == EConfigType.POLICYGROUP) {
-                continue
-            }
-            val resolved = resolveOutbound(scope, tag, profile) ?: continue
-            result.add(resolved)
-        }
-        return result
-    }
 }
