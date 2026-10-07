@@ -262,7 +262,16 @@ object CoreOutboundBuilder {
                 peer.endpoint = Utils.getIpv6Address(profileItem.server) + ":${profileItem.serverPort}"
             }
             wireguard.mtu = profileItem.mtu
-            wireguard.reserved = profileItem.reserved?.takeIf { it.isNotBlank() }?.split(",")?.filter { it.isNotBlank() }?.map { it.trim().toInt() }
+            wireguard.reserved = profileItem.reserved
+                ?.takeIf { it.isNotBlank() }
+                ?.split(",")
+                ?.filter { it.isNotBlank() }
+                ?.map { it.trim().toInt() }
+            wireguard.remoteDNS = profileItem.remoteDNS
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { Utils.isPureIpAddress(it) }
+                ?.takeIf { it.isNotEmpty() }
         }
 
         if (!profileItem.finalMask.isNullOrBlank()) {

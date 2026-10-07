@@ -42,7 +42,7 @@ object DbConverters {
         RulesetItem::class,
         SettingsEntry::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @ColumnTypeConverters(DbConverters::class)

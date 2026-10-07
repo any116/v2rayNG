@@ -106,6 +106,9 @@ data class ProfileItem(
     var proxyChainProfiles: String? = null,
 
     var browserDialerMode: String? = null,
+
+    /** WireGuard DNS servers used inside the tunnel; entries must be plain IP addresses. */
+    var remoteDNS: String? = null,
 ) {
 
     companion object {

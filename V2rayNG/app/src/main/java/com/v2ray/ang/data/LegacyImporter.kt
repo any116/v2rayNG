@@ -277,6 +277,7 @@ internal object LegacyImporter {
         bindNullableText(58, p.policyGroupFallbackTag)
         bindNullableText(59, p.proxyChainProfiles)
         bindNullableText(60, p.browserDialerMode)
+        bindNullableText(61, p.remoteDNS)
     }
 
     private suspend fun insertStat(exec: SqlExec, row: StatRow) = exec(
@@ -370,8 +371,8 @@ internal object LegacyImporter {
            obfsPassword, portHopping, portHoppingInterval, pinSHA256, bandwidthDown, bandwidthUp,
            policyGroupType, policyGroupSubscriptionId, policyGroupFilter,
            policyGroupTestOutbounds, policyGroupFallbackTag, proxyChainProfiles,
-           browserDialerMode)
+           browserDialerMode, remoteDNS)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
-                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """
 }

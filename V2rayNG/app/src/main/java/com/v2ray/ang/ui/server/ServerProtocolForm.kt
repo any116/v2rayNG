@@ -141,6 +141,10 @@ private fun ProtocolFields(
                 KeyboardType.Number,
             )
             ServerTextField(
+                R.string.server_lab_remote_dns, ServerField.REMOTE_DNS, form.remoteDNS,
+                onAction, fieldErrors,
+            )
+            ServerTextField(
                 R.string.server_lab_final_mask, ServerField.FINAL_MASK, form.finalMask,
                 onAction, fieldErrors,
             )

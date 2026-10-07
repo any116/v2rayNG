@@ -34,6 +34,7 @@ object WireguardFmt : FmtBase() {
         config.mtu = Utils.parseInt(queryParam["mtu"] ?: AppConfig.WIREGUARD_LOCAL_MTU)
         config.reserved = queryParam["reserved"] ?: "0,0,0"
         config.finalMask = (queryParam["fm"] ?: queryParam["finalmask"] ?: queryParam["finalMask"])?.nullIfBlank()
+        config.remoteDNS = queryParam.firstValue("dns", "remoteDNS", "remotedns", "remoteDns")?.nullIfBlank()
 
         return config
     }
@@ -55,7 +56,7 @@ object WireguardFmt : FmtBase() {
         str.lines().forEach { line ->
             val trimmedLine = line.trim()
 
-            if (trimmedLine.isEmpty() || trimmedLine.startsWith("#")) {
+            if (trimmedLine.isEmpty() || trimmedLine.startsWith("#") || trimmedLine.startsWith(";")) {
                 return@forEach
             }
 
@@ -67,7 +68,7 @@ object WireguardFmt : FmtBase() {
                         val parts = trimmedLine.split("=", limit = 2).map { it.trim() }
                         if (parts.size == 2) {
                             val key = parts[0].lowercase()
-                            val value = parts[1]
+                            val value = parts[1].substringBefore('#').substringBefore(';').trim()
                             when (currentSection) {
                                 "Interface" -> interfaceParams[key] = value
                                 "Peer" -> peerParams[key] = value
@@ -85,16 +86,12 @@ object WireguardFmt : FmtBase() {
         config.publicKey = peerParams["publickey"].orEmpty()
         config.preSharedKey = peerParams["presharedkey"]?.nullIfBlank()
         val endpoint = peerParams["endpoint"].orEmpty()
-        val endpointParts = endpoint.split(":", limit = 2)
-        if (endpointParts.size == 2) {
-            config.server = endpointParts[0]
-            config.serverPort = endpointParts[1]
-        } else {
-            config.server = endpoint
-            config.serverPort = ""
-        }
+        val endpointParts = splitEndpoint(endpoint)
+        config.server = endpointParts.first
+        config.serverPort = endpointParts.second
         config.reserved = peerParams["reserved"] ?: "0,0,0"
         config.finalMask = (peerParams["finalmask"] ?: peerParams["fm"] ?: interfaceParams["finalmask"] ?: interfaceParams["fm"])?.nullIfBlank()
+        config.remoteDNS = (interfaceParams["remotedns"] ?: interfaceParams["dns"])?.nullIfBlank()
 
         return config
     }
@@ -121,7 +118,27 @@ object WireguardFmt : FmtBase() {
             dicQuery["presharedkey"] = config.preSharedKey.removeWhiteSpace().orEmpty()
         }
         config.finalMask?.nullIfBlank()?.let { dicQuery["fm"] = it }
+        config.remoteDNS?.nullIfBlank()?.let { dicQuery["dns"] = it }
 
         return toUri(config, config.secretKey, dicQuery)
+    }
+
+    private fun Map<String, String>.firstValue(vararg keys: String): String? =
+        keys.asSequence().mapNotNull { this[it] }.firstOrNull()
+
+    private fun splitEndpoint(endpoint: String): Pair<String, String> {
+        val value = endpoint.trim()
+        if (value.startsWith("[")) {
+            val closingBracket = value.indexOf(']')
+            if (closingBracket > 1) {
+                return value.substring(1, closingBracket) to value.substring(closingBracket + 1).removePrefix(":")
+            }
+        }
+        val separator = value.lastIndexOf(':')
+        return if (separator > 0 && value.indexOf(':') == separator) {
+            value.substring(0, separator) to value.substring(separator + 1)
+        } else {
+            value to ""
+        }
     }
 }

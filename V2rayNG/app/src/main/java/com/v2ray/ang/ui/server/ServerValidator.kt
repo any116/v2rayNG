@@ -6,6 +6,7 @@ import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.util.JsonUtil
+import com.v2ray.ang.util.Utils
 
 /**
  * Centralised validation rules for the server configuration screen.
@@ -47,7 +48,19 @@ internal object ServerValidator {
         if (configType == EConfigType.TROJAN && form.streamSecurity.isBlank()) {
             errors[ServerField.STREAM_SECURITY] = R.string.server_lab_stream_security
         }
+        if (configType == EConfigType.WIREGUARD) {
+            if (!isIpList(form.remoteDNS)) {
+                errors[ServerField.REMOTE_DNS] = R.string.server_lab_remote_dns
+            }
+        }
         return errors
+    }
+
+    private fun isIpList(value: String): Boolean {
+        if (value.isBlank()) return true
+        val entries = value.split(",").map(String::trim)
+        if (entries.any(String::isEmpty)) return false
+        return entries.all { entry -> Utils.isPureIpAddress(entry) && !entry.startsWith("[") }
     }
 
     /** Protocol-level checks that don't map cleanly to a single editor field. */
