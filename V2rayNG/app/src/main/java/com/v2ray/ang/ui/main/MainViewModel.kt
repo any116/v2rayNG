@@ -221,7 +221,9 @@ class MainViewModel @Inject constructor(
             MainAction.ImportFromQrCode -> platform(MainEvent.ScanQrCode)
             MainAction.ImportFromFile -> platform(MainEvent.PickConfigFile)
             MainAction.ImportFromClipboard -> launch(loading = true) { importBatchConfig(repo.readClipboard()) }
-            is MainAction.ConfigFileSelected -> launch(loading = true) { importBatchConfig(repo.readTextFromUri(action.uri).orEmpty()) }
+            is MainAction.ConfigFileSelected -> launch(loading = true) {
+                showImportResult(repo.importConfigFromUri(action.uri, state.selectedGroupId))
+            }
             is MainAction.ImportBatchConfig -> launch(loading = true) { importBatchConfig(action.configText) }
             is MainAction.SelectGroup -> selectGroup(action.groupId)
             is MainAction.SelectServer -> selectServer(action.guid)
@@ -537,10 +539,16 @@ class MainViewModel @Inject constructor(
             toastError()
             return
         }
-        val (count, countSub) = repo.importBatchConfig(configText, state.selectedGroupId)
+        showImportResult(repo.importBatchConfig(configText, state.selectedGroupId))
+    }
+
+    private fun showImportResult(result: Pair<Int, Int>) {
+        val (count, countSub) = result
         when {
             count > 0 -> toast(BaseText.of(R.string.title_import_config_count, count))
-            countSub > 0 -> Unit
+            // The subscription row was imported successfully; its first fetch may still fail and
+            // remains retryable from the subscription screen, so report the durable import here.
+            countSub > 0 -> toastSuccess(R.string.import_subscription_success)
             else -> toastError()
         }
     }

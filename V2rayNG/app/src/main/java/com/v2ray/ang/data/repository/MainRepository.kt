@@ -28,6 +28,7 @@ import com.v2ray.ang.dto.ServerRowItem
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.TestNotification
 import com.v2ray.ang.dto.TestServiceMessage
+import com.v2ray.ang.enums.ConfigImportSource
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.normalizeLike
@@ -48,6 +49,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -321,6 +323,19 @@ open class MainRepository @Inject constructor(
     open suspend fun importBatchConfig(text: String, groupId: String): Pair<Int, Int> =
         withIO { AngConfigManager.importBatchConfig(text, groupId, true) }
 
+    /** Keep file imports out of a full readText() allocation; the provider stream is reopened for sniffing. */
+    open suspend fun importConfigFromUri(uri: Uri, groupId: String): Pair<Int, Int> = withIO {
+        AngConfigManager.importConfig(
+            openReader = {
+                app.contentResolver.openInputStream(uri)?.bufferedReader()
+                    ?: throw IOException("Unable to open configuration file")
+            },
+            subid = groupId,
+            append = true,
+            source = ConfigImportSource.USER_INPUT
+        )
+    }
+
     open suspend fun updateSubscriptions(groupId: String): SubscriptionUpdateResult = withIO {
         if (groupId.isEmpty()) {
             AngConfigManager.updateConfigViaSubAll()
@@ -348,12 +363,6 @@ open class MainRepository @Inject constructor(
         runCatching { Utils.getClipboard(app) }
             .onFailure { LogUtil.e(AppConfig.TAG, "Failed to read clipboard", it) }
             .getOrDefault("")
-    }
-
-    open suspend fun readTextFromUri(uri: Uri): String? = withIO {
-        runCatching { app.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }
-            .onFailure { LogUtil.e(AppConfig.TAG, "Failed to read content from URI", it) }
-            .getOrNull()
     }
 
     // ---- Test service IPC ----

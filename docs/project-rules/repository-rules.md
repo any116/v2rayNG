@@ -3,7 +3,7 @@
 ## 0. 唯一持久层
 
 结构化数据全部存在 **Room 3**（`androidx.room3`）里，数据库文件 `v2rayng.db`，
-`AppDatabase` 版本 `1`，schema 导出到 `app/schemas/`（随版本管理提交）。
+`AppDatabase` 版本 `2`，schema 导出到 `app/schemas/`（随版本管理提交）。
 
 | 表 | 实体 | 说明 |
 | --- | --- | --- |
@@ -98,19 +98,43 @@ open class XxxRepository @Inject constructor(
   按延迟排序同理（`guidsByDelay` + `sortByDelay`）。**不要用“单条 UPDATE 边写边算”的写法**：
   SQLite 不保证相关子查询读到更新前的排名，实测会产出重复 `sortOrder`、破坏拖拽间距。
   `groupSortOrder` 是订阅顺序的冗余列，由 `data/DatabaseCallbacks.kt` 的
-  `GROUP_ORDER_TRIGGERS` 在 SQL 层维护，**不要手写**。唯一例外：`ProfileDao.replaceGroup`
-  可以预填，且取值必须与触发器 WHEN 子句同源
+  `GROUP_ORDER_TRIGGERS` 在 SQL 层维护，**不要手写**。导入例外：`ProfileDao.replaceGroup`
+  与 `importGroupBatches` 可以预填，且取值必须与触发器 WHEN 子句同源
   （`groupSortOrderOf(subscriptionId) ?: Long.MAX_VALUE`）；触发器仍是最终权威，
   预填错了会被纠正 UPDATE 修复——**不得**因此删掉触发器的纠正逻辑。
   `ProfileDaoQueryTest` 钉死了这三个场景（订阅存在 / 孤儿 / 导入后改订阅顺序）。
 - 写操作优先用 `@Upsert` / `@Insert(REPLACE)`；跨表一致性用 `@Transaction` 组合方法
-  （样板：`ProfileDao.deleteProfiles`、`replaceGroup`、`SubscriptionDao.removeWithDefault`）。
+  （样板：`ProfileDao.deleteProfiles`、`importGroupBatches`、`SubscriptionDao.removeWithDefault`）。
   投影删除必须同时清理 `profiles` / `profile_stats` / `profile_raw` 三张表。
 - `IN (:list)` 参数受 SQLite 变量上限约束，超过 `ProfileDao.SQLITE_VAR_LIMIT`（900）必须先
   `chunked(...)`。
 - 轻量派生列（`dedupeKey`）允许惰性回填：`backfillDedupeKeys` 分批写，避免首次导入时
   在事务里算几千个 SHA-256（ANR 风险）。算法版本存 `SettingsStore.KEY_DEDUPE_ALGO_VERSION`，
   变更时清空重算。
+
+### 3.1 大订阅导入
+
+- Repository 是 UI 入口并通过 `withIO` 切线程；共享导入逻辑在 `AngConfigManager`，后台订阅服务也能使用。
+- `ConfigImportParser` 返回有明确关闭责任的单次读取流，逐行识别；Base64 按流解码，不生成完整解码字符串。
+- 协议注册由 `ProtocolParserRegistry` 统一规范为小写 `scheme://`；分流和实际解析共享头部提取规则，载荷大小写不变。
+- 完整 JSON/WireGuard 文档与链接批次互斥；节点和订阅 URL 可以在链接批次中共存。文档不得通过 `lines()` 消费。
+- 来源必须显式指定 `ConfigImportSource`：用户输入导入节点和订阅 URL；订阅响应只消费节点/配置，不递归跟进其中的 URL。
+  纯 URL 的订阅响应视为零节点并保留旧订阅。无协议头网址不接受 userinfo；带凭据时必须显式填写 HTTP(S)。
+- 网络订阅流式下载到缓存文件，URI 导入直接提供可重开的 Reader；不得先 `readText()` 再构造全量节点 List。
+- `data/ImportBuffer` 只用于当前导入的临时 JSON-lines 暂存，成功/失败/取消后关闭并删除；不作为持久层或恢复数据源。
+  `AngApplication` 启动时还会清理超过 1 小时的残留导入文件，以覆盖进程被杀的场景。
+- 全部内容先解析并序列化到临时缓冲，再以 `AppConfig.IMPORT_BATCH_SIZE`（300）分批交给 `ProfileDao.importGroupBatches`；
+  事务内只做缓冲行反序列化和 Room 写入。
+  删除旧行、写入所有批次及修复选中节点必须在**同一个事务**中；空结果保留原订阅，任一批失败/取消全部回滚。
+  JSON-lines 在该事务内反序列化，这是保留跨批原子替换的明确取舍，长订阅会持有更久的写锁。
+- 网络响应有 `AppConfig.MAX_IMPORT_CONTENT_CHARS` 上限；超限下载失败并清理临时文件。
+- WireGuard 文本配置有独立的 1 MiB 上限；JSON 数组按元素流式处理，CUSTOM 原文仍随单个配置暂存。
+- 普通链接去重仅保留 SHA-256 摘要；`v2rayn` 只保留 ID/备注索引，完整分享对象暂存到文件，第二遍逐个解析跨条目引用。
+- Profile parser 在转换阶段生成临时 guid，最终 Room 导入边界仍会重新生成 guid，避免任何 parser 的默认主键覆盖其他导入行。
+- `ConfigImportContent.lines()` 保证规范化和去重；订阅 URL 写入边界仍独立去重，避免未来调用点依赖上游实现细节。
+- 无协议头网址只有在包含路径、查询或明确端口时才默认补 HTTPS，避免普通文本被当作订阅地址。
+- 提交事务内重新检查目标订阅是否存在；解析期间已经删除的订阅不得获得孤儿节点。
+- 内存并非严格 O(1)：剪贴板原文、单个配置、去重摘要与 `v2rayn` 索引仍需要内存；禁止声称全链路常量内存。
 
 ## 4. 设置读取：SettingsStore 与 Prefs
 

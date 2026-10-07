@@ -7,6 +7,7 @@ import com.v2ray.ang.dto.UrlContentRequest
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.ResponseBody
 import java.io.File
 import java.io.IOException
 import java.net.IDN
@@ -148,13 +149,45 @@ object HttpUtil {
      * @throws IOException If an I/O error occurs.
      */
     @Throws(IOException::class)
-    fun getUrlContentWithUserAgent(request: UrlContentRequest): String {
+    fun getUrlContentWithUserAgent(request: UrlContentRequest): String =
+        readUrlContentWithUserAgent(request) { it?.string().orEmpty() }
+
+    /** Streams a subscription to a disposable spool; [checkActive] keeps long downloads cancellable. */
+    @Throws(IOException::class)
+    fun downloadUrlContentWithUserAgent(
+        request: UrlContentRequest,
+        target: File,
+        checkActive: () -> Unit = {},
+        maxChars: Long = AppConfig.MAX_IMPORT_CONTENT_CHARS
+    ): Long = readUrlContentWithUserAgent(request) { body ->
+        if (body != null && body.contentLength() > maxChars) {
+            throw IOException("Response body exceeds import limit")
+        }
+        target.bufferedWriter().use { output ->
+            // charStream honors the response charset/BOM just like the former body.string().
+            body?.charStream()?.use { input ->
+                val buffer = CharArray(DEFAULT_BUFFER_SIZE)
+                var total = 0L
+                while (true) {
+                    checkActive()
+                    val size = input.read(buffer)
+                    if (size < 0) break
+                    if (total + size > maxChars) throw IOException("Response body exceeds import limit")
+                    output.write(buffer, 0, size)
+                    total += size
+                }
+                total
+            } ?: 0L
+        }
+    }
+
+    private fun <T> readUrlContentWithUserAgent(request: UrlContentRequest, consume: (ResponseBody?) -> T): T {
         var currentUrl = request.url
         var redirects = 0
         val maxRedirects = 3
 
         while (redirects++ < maxRedirects) {
-            if (currentUrl == null) continue
+            val requestUrl = currentUrl ?: throw IOException("Subscription URL is missing")
             val client = buildOkHttpClient(request.timeout, request.httpPort, request.proxyUsername, request.proxyPassword, followRedirects = false)
             val finalUserAgent = if (request.userAgent.isNullOrBlank()) {
                 "v2rayNG/${BuildConfig.VERSION_NAME}"
@@ -162,12 +195,12 @@ object HttpUtil {
                 request.userAgent
             }
             val requestBuilder = Request.Builder()
-                .url(currentUrl)
+                .url(requestUrl)
                 .get()
                 .header("User-agent", finalUserAgent)
                 .header("Connection", "close")
 
-            applyEmbeddedBasicAuthHeader(currentUrl, requestBuilder)
+            applyEmbeddedBasicAuthHeader(requestUrl, requestBuilder)
 
 
             val headersMap = JsonUtil.parseHeadersToMap(request.requestHeaders)
@@ -190,7 +223,7 @@ object HttpUtil {
                         if (location.isNullOrEmpty()) {
                             throw IOException("Redirect location not found")
                         }
-                        currentUrl = resolveLocation(currentUrl, location)
+                        currentUrl = resolveLocation(requestUrl, location)
                         if (currentUrl.isNullOrEmpty()) {
                             throw IOException("Failed to resolve redirect location")
                         }
@@ -198,7 +231,7 @@ object HttpUtil {
                     }
 
                     response.isSuccessful -> {
-                        return response.body?.string() ?: ""
+                        return consume(response.body)
                     }
 
                     else -> {

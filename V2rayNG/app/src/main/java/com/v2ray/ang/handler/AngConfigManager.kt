@@ -3,20 +3,26 @@ package com.v2ray.ang.handler
 import android.content.Context
 import android.graphics.Bitmap
 import android.text.TextUtils
-import androidx.sqlite.SQLiteException
+import com.google.gson.JsonElement
+import com.google.gson.JsonParser
+import com.google.gson.stream.JsonReader
+import com.google.gson.stream.JsonToken
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.CoreConfigManager
+import com.v2ray.ang.data.ImportBuffer
 import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.SubscriptionDao
 import com.v2ray.ang.data.entities.ProfileItem
-import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.PlatformDependencies
+import com.v2ray.ang.dto.ProfileImportRecord
 import com.v2ray.ang.dto.SubChainValidation
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.dto.UrlContentRequest
+import com.v2ray.ang.dto.V2rayNShareItem
+import com.v2ray.ang.enums.ConfigImportSource
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.isNotNullEmpty
@@ -29,15 +35,30 @@ import com.v2ray.ang.fmt.V2rayNFmt
 import com.v2ray.ang.fmt.VlessFmt
 import com.v2ray.ang.fmt.VmessFmt
 import com.v2ray.ang.fmt.WireguardFmt
+import com.v2ray.ang.util.ConfigImportContent
+import com.v2ray.ang.util.ConfigImportKind
+import com.v2ray.ang.util.ConfigImportLineKind
+import com.v2ray.ang.util.ConfigImportParser
 import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
+import com.v2ray.ang.util.ProtocolParserRegistry
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
+import com.v2ray.ang.util.distinctImportText
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import java.io.File
+import java.io.IOException
+import java.io.Reader
+import java.io.StringReader
 import java.net.URI
 import java.util.Locale
 
 object AngConfigManager {
+
+    private const val MAX_WIREGUARD_CONFIG_CHARS = 1_048_576
 
     private val profileDao: ProfileDao
         get() = PlatformDependencies.profileDao(AngApplication.application)
@@ -48,24 +69,21 @@ object AngConfigManager {
     private val settingsStore: SettingsStore
         get() = PlatformDependencies.settingsStore(AngApplication.application)
 
-    private data class ParsedProfile(
-        val profile: ProfileItem,
-        val rawConfig: String? = null,
-    )
-
-    // Parser mapping for different config types (lazy initialized)
-    private val configFmtParsers: Map<String, (String) -> ProfileItem?> by lazy {
-        mapOf(
-            EConfigType.VMESS.protocolScheme to VmessFmt::parse,
-            EConfigType.SHADOWSOCKS.protocolScheme to ShadowsocksFmt::parse,
-            EConfigType.SOCKS.protocolScheme to SocksFmt::parse,
-            AppConfig.SOCKS4 to SocksFmt::parse,
-            AppConfig.SOCKS5 to SocksFmt::parse,
-            EConfigType.TROJAN.protocolScheme to TrojanFmt::parse,
-            EConfigType.VLESS.protocolScheme to VlessFmt::parse,
-            EConfigType.WIREGUARD.protocolScheme to WireguardFmt::parse,
-            EConfigType.HYSTERIA2.protocolScheme to Hysteria2Fmt::parse,
-            AppConfig.HY2 to Hysteria2Fmt::parse,
+    // The registry canonicalizes every key to lowercase scheme:// and rejects ambiguous aliases.
+    private val configFmtParsers: ProtocolParserRegistry<ProfileItem> by lazy {
+        ProtocolParserRegistry(
+            mapOf(
+                EConfigType.VMESS.protocolScheme to VmessFmt::parse,
+                EConfigType.SHADOWSOCKS.protocolScheme to ShadowsocksFmt::parse,
+                EConfigType.SOCKS.protocolScheme to SocksFmt::parse,
+                AppConfig.SOCKS4 to SocksFmt::parse,
+                AppConfig.SOCKS5 to SocksFmt::parse,
+                EConfigType.TROJAN.protocolScheme to TrojanFmt::parse,
+                EConfigType.VLESS.protocolScheme to VlessFmt::parse,
+                EConfigType.WIREGUARD.protocolScheme to WireguardFmt::parse,
+                EConfigType.HYSTERIA2.protocolScheme to Hysteria2Fmt::parse,
+                AppConfig.HY2 to Hysteria2Fmt::parse
+            )
         )
     }
 
@@ -191,66 +209,83 @@ object AngConfigManager {
 
     /**
      * Imports a batch of configurations.
+     * Content is classified once so plain links never go through an outer Base64 decoder.
      *
      * @param server The server string.
      * @param subid The subscription ID; empty means the "All" tab, which is not a real group.
      * @param append Whether to append the configurations.
      * @return A pair containing the number of configurations and subscriptions imported.
      */
-    suspend fun importBatchConfig(server: String?, subid: String, append: Boolean): Pair<Int, Int> {
+    suspend fun importBatchConfig(server: String?, subid: String, append: Boolean): Pair<Int, Int> =
+        importConfig({ StringReader(server.orEmpty()) }, subid, append, ConfigImportSource.USER_INPUT)
+
+    /**
+     * Parses into disposable spools first, then atomically replays bounded batches into Room.
+     * [source] is mandatory: manual input may create subscriptions, whereas downloaded bodies
+     * consume profiles/config documents only. URL-only subscription responses import zero nodes.
+     */
+    suspend fun importConfig(
+        openReader: () -> Reader,
+        subid: String,
+        append: Boolean,
+        source: ConfigImportSource
+    ): Pair<Int, Int> {
         return try {
+            val context = currentCoroutineContext()
             val targetSubId = subid.ifEmpty { AppConfig.DEFAULT_SUBSCRIPTION_ID }
-            if (targetSubId == AppConfig.DEFAULT_SUBSCRIPTION_ID) {
-                // Forced: profiles are about to be written into this group.
-                subscriptionDao.ensureDefaultForced(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
+            ConfigImportParser.parse(
+                openReader, configFmtParsers.schemes + AppConfig.V2RAYNFMTS,
+                checkActive = { context.ensureActive() }
+            ).use { content ->
+                val cache = AngApplication.application.cacheDir
+                ImportBuffer(cache, ProfileImportRecord::class.java).use { profiles ->
+                    ImportBuffer(cache, ProfileImportRecord::class.java).use { v2rayn ->
+                        ImportBuffer(cache, String::class.java).use { urls ->
+                            stageContent(content, targetSubId, profiles, v2rayn, urls, source)
+                            val count = commitProfiles(profiles, v2rayn, targetSubId, append)
+                            val importedSubIds = urls.openReader().use { reader ->
+                                parseBatchSubscription(urls.entries(reader), alreadyDistinct = true)
+                            }
+                            if (importedSubIds.isNotEmpty()) updateConfigViaSubIds(importedSubIds)
+                            count to importedSubIds.size
+                        }
+                    }
+                }
             }
-
-            var count = parseBatchConfig(Utils.decode(server), targetSubId, append)
-            if (count <= 0) {
-                count = parseBatchConfig(server, targetSubId, append)
-            }
-            if (count <= 0) {
-                count = parseCustomConfigServer(server, targetSubId, append)
-            }
-
-            var importedSubIds = parseBatchSubscription(server)
-            if (importedSubIds.isEmpty()) {
-                importedSubIds = parseBatchSubscription(Utils.decode(server))
-            }
-            // Only fetch what this import just created. updateConfigViaSubAll() re-downloaded
-            // every subscription in the table, so pasting a single link refreshed all of them.
-            if (importedSubIds.isNotEmpty()) {
-                updateConfigViaSubIds(importedSubIds)
-            }
-
-            count to importedSubIds.size
-        } catch (e: SQLiteException) {
-            LogUtil.e(AppConfig.TAG, "Failed to store imported profiles", e)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to import configurations", e)
             0 to 0
         }
     }
 
     /**
      * Parses a batch of subscriptions.
+     * This boundary deduplicates again unless the caller explicitly hands over a sequence already
+     * deduplicated by ConfigImportContent.lines().
      *
-     * @param servers The servers string.
+     * @param servers The subscription URLs separated from profile links by the import parser.
      * @return The guids of the subscriptions that were actually created.
      */
-    private suspend fun parseBatchSubscription(servers: String?): List<String> {
+    private suspend fun parseBatchSubscription(
+        servers: Sequence<String>,
+        alreadyDistinct: Boolean = false
+    ): List<String> {
         try {
-            if (servers == null) {
-                return emptyList()
-            }
-
             val created = mutableListOf<String>()
-            servers.lines()
-                .distinct()
-                .forEach { str ->
-                    if (Utils.isValidSubUrl(str)) {
-                        importUrlAsSubscription(str)?.let { created.add(it) }
-                    }
+            val context = currentCoroutineContext()
+            val candidates = if (alreadyDistinct) servers else {
+                servers.distinctImportText(key = { it }, checkActive = { context.ensureActive() })
+            }
+            candidates.forEach { str ->
+                if (Utils.isValidSubUrl(str)) {
+                    importUrlAsSubscription(str)?.let { created.add(it) }
                 }
+            }
             return created
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to parse batch subscription", e)
         }
@@ -336,179 +371,118 @@ object AngConfigManager {
         return "$base$index"
     }
 
-    /**
-     * Parses a batch of configurations.
-     *
-     * @param servers The servers string.
-     * @param subid The subscription ID.
-     * @param append Whether to append the configurations.
-     * @return The number of configurations parsed.
-     */
-    private suspend fun parseBatchConfig(servers: String?, subid: String, append: Boolean): Int {
-        try {
-            if (servers == null) {
-                return 0
-            }
-            val subItem = subscriptionDao.find(subid)
-
-            // Parse all configs first (no I/O during parsing)
-            val configs = mutableListOf<ProfileItem>()
-            val v2raynLines = mutableListOf<String>()
-
-            servers.lines()
-                .distinct()
-                .forEach {
-                    if (it.startsWith(AppConfig.V2RAYNFMTS, ignoreCase = true)) {
-                        v2raynLines.add(it)
-                    } else {
-                        val config = parseConfig(it, subid, subItem)
-                        if (config != null) {
-                            configs.add(config)
+    /** Profile links arrive normalized and deduplicated by ConfigImportContent.lines(), including on direct use. */
+    private suspend fun stageContent(
+        content: ConfigImportContent,
+        subid: String,
+        profiles: ImportBuffer<ProfileImportRecord>,
+        v2rayn: ImportBuffer<ProfileImportRecord>,
+        urls: ImportBuffer<String>,
+        source: ConfigImportSource
+    ) {
+        val context = currentCoroutineContext()
+        when (content.kind) {
+            ConfigImportKind.LINKS -> {
+                val filter = subscriptionDao.find(subid)?.filter?.takeIf { it.isNotEmpty() }?.let(::Regex)
+                val accumulator = V2rayNFmt.Accumulator()
+                ImportBuffer(AngApplication.application.cacheDir, V2rayNShareItem::class.java).use { shares ->
+                    for (line in content.lines(source)) {
+                        context.ensureActive()
+                        when (line.kind) {
+                            ConfigImportLineKind.SUBSCRIPTION -> urls.append(line.text)
+                            ConfigImportLineKind.PROFILE -> if (line.text.startsWith(AppConfig.V2RAYNFMTS)) {
+                                accumulator.add(line.text)?.let(shares::append)
+                            } else {
+                                parseConfig(line.text, subid, filter)?.let { profiles.append(ProfileImportRecord(it)) }
+                            }
+                        }
+                    }
+                    // Resolve forward references from the compact index, replaying one share at a time.
+                    shares.openReader().use { reader ->
+                        for (item in shares.entries(reader)) {
+                            context.ensureActive()
+                            val profile = accumulator.profile(item, subid)
+                            v2rayn.append(ProfileImportRecord(profile))
                         }
                     }
                 }
-
-            val v2raynConfigs = V2rayNFmt.parse(v2raynLines, subid)
-            val allConfigs = v2raynConfigs + configs
-
-            if (allConfigs.isNotEmpty()) {
-                commitProfiles(
-                    configs = allConfigs.map(::ParsedProfile),
-                    subid = subid,
-                    append = append,
-                )
             }
-
-            return allConfigs.size
-        } catch (e: SQLiteException) {
-            throw e
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to parse batch config", e)
+            ConfigImportKind.JSON -> JsonReader(content.reader).use { reader ->
+                if (reader.peek() == JsonToken.BEGIN_ARRAY) {
+                    reader.beginArray()
+                    while (reader.hasNext()) {
+                        context.ensureActive()
+                        stageCustomJson(JsonParser.parseReader(reader), subid, profiles, normalizeNumbers = true)
+                    }
+                    reader.endArray()
+                } else {
+                    stageCustomJson(JsonParser.parseReader(reader), subid, profiles, normalizeNumbers = false)
+                }
+                if (reader.peek() != JsonToken.END_DOCUMENT) throw IOException("Trailing configuration content")
+            }
+            ConfigImportKind.WIREGUARD -> {
+                val raw = buildString {
+                    var length = 0
+                    val buffer = CharArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        context.ensureActive()
+                        val size = content.reader.read(buffer)
+                        if (size < 0) break
+                        if (length + size > MAX_WIREGUARD_CONFIG_CHARS) {
+                            throw IOException("WireGuard configuration exceeds import limit")
+                        }
+                        append(buffer, 0, size)
+                        length += size
+                    }
+                }
+                if (raw.contains("[Peer]")) {
+                    val profile = WireguardFmt.parseWireguardConfFile(raw)
+                    profile.subscriptionId = subid
+                    profile.description = generateDescription(profile)
+                    profiles.append(ProfileImportRecord(profile, raw))
+                }
+            }
+            ConfigImportKind.EMPTY -> Unit
+            ConfigImportKind.BASE64 -> error("Base64 must be unwrapped before staging")
         }
-        return 0
     }
 
-    /**
-     * Commits parsed profiles before removing the profiles they replace.
-     *
-     * @param configs The parsed profiles to save.
-     * @param subid The subscription ID.
-     * @param append Whether to append to the existing server list.
-     */
-    private suspend fun commitProfiles(
-        configs: List<ParsedProfile>,
+    private fun stageCustomJson(
+        element: JsonElement,
         subid: String,
-        append: Boolean,
+        profiles: ImportBuffer<ProfileImportRecord>,
+        normalizeNumbers: Boolean
     ) {
-        // Last line of defence: replaceGroup would otherwise write rows into a group that
-        // owns no subscriptions row, and nothing in the UI can reach those.
-        val targetSubId = subid.ifEmpty { AppConfig.DEFAULT_SUBSCRIPTION_ID }
-        if (subscriptionDao.find(targetSubId) == null) {
+        if (!element.isJsonObject) return
+        val json = element.asJsonObject
+        if (!json.has("inbounds") || !json.has("outbounds") || !json.has("routing")) return
+        // Preserve the former JSON-array number normalization, but materialize only one entry.
+        val value = if (normalizeNumbers) JsonUtil.fromJson(element.toString(), Any::class.java) else element
+        val raw = JsonUtil.toJsonPretty(value) ?: return
+        val profile = CustomFmt.parse(raw)
+        profile.subscriptionId = subid
+        profile.description = generateDescription(profile)
+        profiles.append(ProfileImportRecord(profile, raw))
+    }
+
+    private suspend fun commitProfiles(
+        profiles: ImportBuffer<ProfileImportRecord>,
+        v2rayn: ImportBuffer<ProfileImportRecord>,
+        subid: String,
+        append: Boolean
+    ): Int {
+        if (profiles.count + v2rayn.count == 0) return 0
+        if (subid == AppConfig.DEFAULT_SUBSCRIPTION_ID) {
             subscriptionDao.ensureDefaultForced(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
         }
-
-        val profiles = ArrayList<ProfileItem>(configs.size)
-        val raws = mutableListOf<ProfileRaw>()
-
-        configs.forEachIndexed { index, parsed ->
-            val key = Utils.getUuid()
-            profiles += parsed.profile.copy(
-                guid = key,
-                subscriptionId = targetSubId,
-                sortOrder = (index + 1).toLong() * ProfileItem.SORT_STEP,
-            )
-            parsed.rawConfig?.let { raw -> raws += ProfileRaw(key, raw) }
-        }
-
-        profileDao.replaceGroup(
-            subscriptionId = targetSubId,
-            profiles = profiles,
-            raws = raws,
-            append = append,
-        )
-
-        settingsStore.poke(
-            SettingsStore.KEY_SELECTED_SERVER,
-            profileDao.selectedGuid(),
-        )
-    }
-
-    /**
-     * Parses a custom configuration server.
-     *
-     * @param server The server string.
-     * @param subid The subscription ID.
-     * @param append Whether to append the configurations.
-     * @return The number of configurations parsed.
-     */
-    private suspend fun parseCustomConfigServer(server: String?, subid: String, append: Boolean): Int {
-        if (server == null) {
-            return 0
-        }
-        if (server.contains("inbounds")
-            && server.contains("outbounds")
-            && server.contains("routing")
-        ) {
-            try {
-                val serverList: Array<Any> =
-                    JsonUtil.fromJson(server, Array<Any>::class.java) ?: arrayOf()
-
-                if (serverList.isNotEmpty()) {
-                    val configs = serverList.map { srv ->
-                        val config = CustomFmt.parse(JsonUtil.toJson(srv))
-                        config.subscriptionId = subid
-                        config.description = generateDescription(config)
-                        ParsedProfile(
-                            profile = config,
-                            rawConfig = JsonUtil.toJsonPretty(srv) ?: "",
-                        )
-                    }
-                    commitProfiles(configs, subid, append)
-                    return configs.size
-                }
-            } catch (e: SQLiteException) {
-                throw e
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.TAG, "Failed to parse custom config server JSON array", e)
+        val count = profiles.openReader().use { normalReader ->
+            v2rayn.openReader().use { v2raynReader ->
+                val entries = v2rayn.entries(v2raynReader) + profiles.entries(normalReader)
+                profileDao.importGroupBatches(subid, entries.chunked(AppConfig.IMPORT_BATCH_SIZE), append)
             }
-
-            try {
-                // For compatibility
-                val config = CustomFmt.parse(server)
-                config.subscriptionId = subid
-                config.description = generateDescription(config)
-                commitProfiles(
-                    configs = listOf(ParsedProfile(config, server)),
-                    subid = subid,
-                    append = append,
-                )
-                return 1
-            } catch (e: SQLiteException) {
-                throw e
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.TAG, "Failed to parse custom config server as single config", e)
-            }
-            return 0
-        } else if (server.startsWith("[Interface]") && server.contains("[Peer]")) {
-            try {
-                val config = WireguardFmt.parseWireguardConfFile(server)
-                config.subscriptionId = subid
-                config.description = generateDescription(config)
-                commitProfiles(
-                    configs = listOf(ParsedProfile(config, server)),
-                    subid = subid,
-                    append = append,
-                )
-                return 1
-            } catch (e: SQLiteException) {
-                throw e
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.TAG, "Failed to parse WireGuard config file", e)
-            }
-            return 0
-        } else {
-            return 0
         }
+        settingsStore.poke(SettingsStore.KEY_SELECTED_SERVER, profileDao.selectedGuid())
+        return count
     }
 
     /**
@@ -517,32 +491,28 @@ object AngConfigManager {
      *
      * @param str The configuration string.
      * @param subid The subscription ID.
-     * @param subItem The subscription item.
+     * @param filter The subscription filter compiled once for the entire import.
      * @return The parsed ProfileItem or null if parsing fails or filtered out.
      */
     private fun parseConfig(
         str: String?,
         subid: String,
-        subItem: SubscriptionItem?
+        filter: Regex?
     ): ProfileItem? {
         try {
             if (str == null || TextUtils.isEmpty(str)) {
                 return null
             }
 
-            val config = configFmtParsers.firstNotNullOfOrNull { (scheme, parser) ->
-                if (str.startsWith(scheme)) parser(str) else null
-            }
+            val config = configFmtParsers.parse(str)
 
             if (config == null) {
                 return null
             }
 
             // Apply filter
-            if (subItem?.filter.isNotNullEmpty() && config.remarks.isNotNullEmpty()) {
-                val matched = Regex(pattern = subItem?.filter.orEmpty())
-                    .containsMatchIn(input = config.remarks)
-                if (!matched) return null
+            if (filter != null && config.remarks.isNotNullEmpty()) {
+                if (!filter.containsMatchIn(config.remarks)) return null
             }
 
             config.subscriptionId = subid
@@ -565,9 +535,12 @@ object AngConfigManager {
             val subscriptions = subscriptionDao.all()
             var acc = SubscriptionUpdateResult()
             for (sub in subscriptions) {
+                currentCoroutineContext().ensureActive()
                 acc += updateConfigViaSub(sub)
             }
             acc
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to update config via all subscriptions", e)
             SubscriptionUpdateResult()
@@ -583,6 +556,7 @@ object AngConfigManager {
         return try {
             var acc = SubscriptionUpdateResult()
             subIds.distinct().forEach { id ->
+                currentCoroutineContext().ensureActive()
                 val item = subscriptionDao.find(id)
                 if (item == null) {
                     LogUtil.w(AppConfig.TAG, "updateConfigViaSubIds: no subscription for $id")
@@ -591,6 +565,8 @@ object AngConfigManager {
                 }
             }
             acc
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to update config via subscription ids", e)
             SubscriptionUpdateResult()
@@ -637,42 +613,30 @@ object AngConfigManager {
             val proxyUsername = SettingsManager.getSocksUsername()
             val proxyPassword = SettingsManager.getSocksPassword()
 
-            var configText = try {
-                val httpPort = SettingsManager.getHttpPort()
-                HttpUtil.getUrlContentWithUserAgent(
-                    UrlContentRequest(
-                        url = url,
-                        userAgent = userAgent,
-                        requestHeaders = requestHeaders,
-                        timeout = 15000,
-                        httpPort = httpPort,
-                        proxyUsername = proxyUsername,
-                        proxyPassword = proxyPassword
-                    )
+            val download = File.createTempFile("subscription-download-", ".txt", AngApplication.application.cacheDir)
+            val count = try {
+                val context = currentCoroutineContext()
+                val directRequest = UrlContentRequest(url = url, userAgent = userAgent, requestHeaders = requestHeaders)
+                val proxyRequest = directRequest.copy(
+                    timeout = 15000,
+                    httpPort = SettingsManager.getHttpPort(),
+                    proxyUsername = proxyUsername,
+                    proxyPassword = proxyPassword
                 )
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.ANG_PACKAGE, "Update subscription: proxy not ready or other error", e)
-                ""
-            }
-            if (configText.isEmpty()) {
-                configText = try {
-                    HttpUtil.getUrlContentWithUserAgent(
-                        UrlContentRequest(
-                            url = url,
-                            userAgent = userAgent,
-                            requestHeaders = requestHeaders
-                        )
-                    )
-                } catch (e: Exception) {
-                    LogUtil.e(AppConfig.TAG, "Update subscription: Failed to get URL content with user agent", e)
-                    ""
+                var downloaded = downloadSubscription(proxyRequest, download) { context.ensureActive() }
+                if (downloaded == 0L) {
+                    downloaded = downloadSubscription(directRequest, download) { context.ensureActive() }
                 }
+                if (downloaded == 0L) return SubscriptionUpdateResult(failureCount = 1)
+                importConfig(
+                    { download.bufferedReader() }, it.guid,
+                    append = false, source = ConfigImportSource.SUBSCRIPTION_RESPONSE
+                ).first
+            } finally {
+                runCatching {
+                    if (download.exists() && !download.delete()) throw IOException("Failed to delete subscription download")
+                }.onFailure { LogUtil.e(AppConfig.TAG, "Failed to clean subscription download", it) }
             }
-            if (configText.isEmpty()) {
-                return SubscriptionUpdateResult(failureCount = 1)
-            }
-
-            val count = parseConfigViaSub(configText, it.guid, false)
             if (count > 0) {
                 subscriptionDao.upsert(it.copy(lastUpdated = System.currentTimeMillis()))
                 LogUtil.i(AppConfig.TAG, "Subscription updated: ${it.remarks}, $count configs")
@@ -684,10 +648,21 @@ object AngConfigManager {
                 // Got response but no valid configs parsed
                 return SubscriptionUpdateResult(failureCount = 1)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to update config via subscription", e)
             return SubscriptionUpdateResult(failureCount = 1)
         }
+    }
+
+    private fun downloadSubscription(request: UrlContentRequest, file: File, checkActive: () -> Unit): Long = try {
+        HttpUtil.downloadUrlContentWithUserAgent(request, file, checkActive, AppConfig.MAX_IMPORT_CONTENT_CHARS)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        LogUtil.e(AppConfig.TAG, "Failed to download subscription", e)
+        0L
     }
 
     /**
@@ -741,25 +716,6 @@ object AngConfigManager {
      */
     suspend fun sortByTestResultsForSub(subId: String) {
         profileDao.sortByDelay(subId)
-    }
-
-    /**
-     * Parses the configuration via a subscription.
-     *
-     * @param server The server string.
-     * @param subid The subscription ID.
-     * @param append Whether to append the configurations.
-     * @return The number of configurations parsed.
-     */
-    private suspend fun parseConfigViaSub(server: String?, subid: String, append: Boolean): Int {
-        var count = parseBatchConfig(Utils.decode(server), subid, append)
-        if (count <= 0) {
-            count = parseBatchConfig(server, subid, append)
-        }
-        if (count <= 0) {
-            count = parseCustomConfigServer(server, subid, append)
-        }
-        return count
     }
 
     /**
