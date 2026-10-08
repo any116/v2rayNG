@@ -166,6 +166,6 @@
 - [ ] 新增了 Action：是否与已有 Action 语义重叠？
 - [ ] 新增了 dto：是否只服务一屏（应下沉到 `XxxContract.kt`）？
 - [ ] 新增了 Room 表/列：是否真的需要索引？查询计划是否走索引？
-- [ ] 使用了 Material3 alpha API：是否有稳定替代？升级 `1.5.0-alpha28` 时会不会断？
+- [ ] 使用了 Material3 alpha API：是否有稳定替代？升级 `1.5.0-alpha29` 时会不会断？
 - [ ] 分页参数（pageSize / prefetch / placeholders）是否适合这个列表的规模？
 - [ ] 新增的常量是否应该进 `AppConfig`（跨模块）还是留在文件内（局部）？

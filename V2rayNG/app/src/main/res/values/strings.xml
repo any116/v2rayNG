@@ -535,6 +535,8 @@
     <string name="acc_add_rule">Add routing rule</string>
     <string name="acc_start">Start service</string>
     <string name="acc_stop">Stop service</string>
+    <string name="acc_check_connection">Check connection</string>
+    <string name="acc_cancel_connection_test">Cancel connection test</string>
     <string name="acc_back">Back</string>
     <string name="acc_search">Search</string>
     <string name="acc_add">Add configuration</string>

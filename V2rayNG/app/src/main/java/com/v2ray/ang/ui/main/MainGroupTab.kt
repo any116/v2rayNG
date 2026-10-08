@@ -1,11 +1,10 @@
 package com.v2ray.ang.ui.main
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
@@ -47,16 +46,6 @@ private const val TabRowContainerAlpha = 0.95f
  * Debounce layout churn and re-align afterwards.
  */
 private val TabAlignSettleDelay = 48.milliseconds
-
-/**
- * Mirrors Material3's internal ScrollableTabRowScrollSpec (tween / 250ms / FastOutSlowInEasing).
- * Using the same curve is what makes the correction read as a single motion: the user cannot tell
- * that the animation changed hands, only that it landed in the right place.
- */
-private val TabScrollSpec = tween<Float>(
-    durationMillis = 250,
-    easing = FastOutSlowInEasing
-)
 
 @Composable
 fun GroupTabBar(
@@ -151,6 +140,7 @@ private fun GroupTabItem(
  * Default-priority animation (same priority, latest wins) and waits out any UserInput drag/fling.
  * One takeover, one motion - no manual stop needed.
  */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun KeepSelectedTabFullyVisible(
     scrollState: ScrollState,
@@ -162,6 +152,7 @@ private fun KeepSelectedTabFullyVisible(
     val index by rememberUpdatedState(selectedIndex)
     val padding by rememberUpdatedState(edgePaddingPx)
     val widths by rememberUpdatedState(tabWidths)
+    val tabScrollSpec = MaterialTheme.motionScheme.fastSpatialSpec<Float>()
 
     LaunchedEffect(scrollState, tabCount) {
         snapshotFlow {
@@ -180,7 +171,7 @@ private fun KeepSelectedTabFullyVisible(
                 if (!metrics.isMeasured) return@collectLatest
                 delay(TabAlignSettleDelay)
                 val target = metrics.offsetToReveal(scrollState.value) ?: return@collectLatest
-                scrollState.animateScrollTo(target, TabScrollSpec)
+                scrollState.animateScrollTo(target, tabScrollSpec)
             }
     }
 }
