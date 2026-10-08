@@ -1,8 +1,10 @@
 package com.v2ray.ang.util
 
+import android.util.Log
 import com.google.gson.JsonParser
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito
 
 class JsonUtilTest {
 
@@ -18,5 +20,20 @@ class JsonUtilTest {
 
         assertEquals("42", objectJson["whole"].toString())
         assertEquals("42.75", objectJson["fractional"].toString())
+    }
+
+    @Test
+    fun parseHeadersToMap_ignoresJsonNullWithoutLoggingAnError() {
+        val logs = Mockito.mockStatic(Log::class.java, Mockito.RETURNS_DEFAULTS)
+        try {
+            assertEquals(emptyMap<String, String>(), JsonUtil.parseHeadersToMap("null"))
+
+            logs.verify(
+                { Log.e(Mockito.anyString(), Mockito.anyString(), Mockito.any(Throwable::class.java)) },
+                Mockito.never()
+            )
+        } finally {
+            logs.close()
+        }
     }
 }

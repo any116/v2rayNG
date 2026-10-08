@@ -92,7 +92,8 @@ object JsonUtil {
         if (src == null)
             return null
         try {
-            return JsonParser.parseString(src).getAsJsonObject()
+            val jsonElement = JsonParser.parseString(src)
+            return if (jsonElement.isJsonObject) jsonElement.asJsonObject else null
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to parse JSON string", e)
             return null
