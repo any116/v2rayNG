@@ -317,6 +317,8 @@ private class Base64TextInputStream(private val reader: Reader) : InputStream() 
         if (length == 0) return 0
         var count = 0
         while (count < length) {
+            // EOF can follow a partial read; keep it sticky so decoders cannot reread stale buffer data.
+            if (size < 0) break
             if (position == size) {
                 size = reader.read(buffer)
                 position = 0

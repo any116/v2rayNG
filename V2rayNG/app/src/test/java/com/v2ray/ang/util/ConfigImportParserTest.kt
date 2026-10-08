@@ -245,6 +245,50 @@ class ConfigImportParserTest {
     }
 
     @Test
+    fun base64TextStreamKeepsEofAfterReturningAFinalPartialBuffer() {
+        val link = "vmess://AbCdEf=="
+        val encoded = encode(link)
+        val variants = listOf(encoded, encoded.trimEnd('='), encoded.chunked(8).joinToString(" \r\n\t"))
+
+        variants.forEach { text ->
+            val expected = text.filterNot(Char::isWhitespace)
+            val result = snapshot(ConfigImportParser.parse(text, profileSchemes, decodeBase64 = { input ->
+                input.use {
+                    val buffer = ByteArray(2048)
+                    val count = it.read(buffer)
+                    assertEquals(expected.length, count)
+                    assertEquals(expected, String(buffer, 0, count, Charsets.US_ASCII))
+                    assertEquals(-1, it.read(buffer))
+                    assertEquals(-1, it.read())
+                    assertEquals(-1, it.read(buffer, 0, 1))
+                    assertEquals(0, it.read(buffer, 0, 0))
+                    Base64.getDecoder().decode(buffer.copyOf(count)).inputStream()
+                }
+            }))
+
+            assertEquals(ImportSnapshot(profileLinks = listOf(link)), result)
+        }
+    }
+
+    @Test
+    fun base64DecoderCanConsumeMultipleBuffersThroughEof() {
+        val links = (0 until 200).map { "trojan://password@example.com:443#Node$it" }
+        val encoded = encode(links.joinToString("\n"))
+        val result = snapshot(ConfigImportParser.parse(encoded, profileSchemes, decodeBase64 = { input ->
+            input.use {
+                // Android's decoder reads blocks through EOF, unlike the JVM decoder's byte-by-byte reads.
+                val bytes = it.readBytes()
+                assertEquals(encoded, bytes.toString(Charsets.US_ASCII))
+                assertEquals(-1, it.read(ByteArray(2048)))
+                assertEquals(-1, it.read())
+                Base64.getDecoder().decode(bytes).inputStream()
+            }
+        }))
+
+        assertEquals(ImportSnapshot(profileLinks = links), result)
+    }
+
+    @Test
     fun urlSafeBase64IsAccepted() {
         val link = "trojan://password@example.com:443#🚀节点"
         val encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(link.toByteArray(Charsets.UTF_8))
