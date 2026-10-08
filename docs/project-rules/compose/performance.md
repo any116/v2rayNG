@@ -7,7 +7,8 @@ Kotlin 2.4 的 Compose 编译器插件默认开启 **Strong Skipping**：
 ## 1. 十条硬规则（减少重组）
 
 1. **一屏只订阅一次 `uiState`**：只有 `BaseScreen` 收集它。
-2. **槽位内单独收窄切片**：topBar / bottomBar 需要的字段自己收，不从 content 传出去。
+2. **栏区单独收窄切片**：topBar / bottomBar 需要的字段自己收，不从 content 传出去。
+   悬浮底栏的切片可在根屏创建，但只在底栏叶节点读取 `State.value`。
 3. **大列表不进 UiState**：走 Paging 3 的 `Flow<PagingData<T>>`，在 content 里
    `collectAsLazyPagingItems()`。
 4. **稳定的 dispatch 引用**：`val dispatch = remember(viewModel) { viewModel::onAction }`。
@@ -25,6 +26,7 @@ Kotlin 2.4 的 Compose 编译器插件默认开启 **Strong Skipping**：
 `MainScreen` 是范本，三个层次互不重叠：
 
 ```kotlin
+val bottomState = rememberBottomState(viewModel) // 创建切片，根屏不读取 value
 BaseScreen(
     viewModel = viewModel,
     topBar = {
@@ -32,26 +34,27 @@ BaseScreen(
         val search by rememberSearchState(viewModel)
         MainTopBar(isLoading = isLoading, isSearchActive = search.isActive, query = search.query, …)
     },
-    bottomBar = {
-        val bottom by rememberBottomState(viewModel)                        // 只影响底栏
-        MainBottomBar(statusText = bottom.status.asText(), isRunning = bottom.isRunning, …)
-    },
-) { state, _ -> MainContent(args = MainPagerArgs(…), …) }
+) { state, _ ->
+    Box {
+        MainContent(args = MainPagerArgs(…), …)
+        MainBottomBarOverlay(bottomState = bottomState, …) // 只在此读取底栏状态
+    }
+}
 ```
 
 窄切片的标准写法：
 
 ```kotlin
 @Immutable
-private data class MainBottomState(val status: MainStatus, val isRunning: Boolean)
+private data class MainBottomState(val status: MainStatus, val isRunning: Boolean, val isTesting: Boolean)
 
 @Composable
 private fun rememberBottomState(viewModel: MainViewModel): State<MainBottomState> {
     val flow = remember(viewModel) {
-        viewModel.uiState.map { MainBottomState(it.status, it.isRunning) }.distinctUntilChanged()
+        viewModel.uiState.map { MainBottomState(it.status, it.isRunning, it.isTesting) }.distinctUntilChanged()
     }
     val initial = remember(viewModel) {
-        viewModel.uiState.value.let { MainBottomState(it.status, it.isRunning) }
+        viewModel.uiState.value.let { MainBottomState(it.status, it.isRunning, it.isTesting) }
     }
     return flow.collectAsStateWithLifecycle(initialValue = initial)
 }
@@ -62,6 +65,16 @@ private fun rememberBottomState(viewModel: MainViewModel): State<MainBottomState
 
 同样地，content 层再把 state 拆成 `@Immutable` 的参数包
 （`MainPagerArgs`），让下游只依赖它真正用到的字段。
+
+主屏毛玻璃的内容版本与位置只在绘制阶段读取。源捕获需隔离在 graphics layer 内，版本更新
+用 `Snapshot.withoutReadObservation`，避免底栏重绘反复触发源重绘；图层由
+`rememberGraphicsLayer()` 随 Composition 释放，不做 Bitmap 截图或全屏 CPU 模糊。
+
+主屏波动阴影封装在 `MainBottomBar` 的状态区内，用软边径向渐变绘制一次扩散阴影，每帧一次
+圆形绘制，不维护粒子或轨迹列表，不需要屏幕级装饰节点或全局边界状态。动画进度与点击坐标
+只在绘制块中读取，不会逐帧重组主列表。仅实际状态区点击启动一次有限动画；进度初始为完成态，
+空闲与结束后跳过绘制。触摸坐标观察不消费事件，也不启动动画。列表 bottom padding 使用底栏
+实测总高度（含外边距与系统 inset）。
 
 ## 3. 稳定性
 

@@ -116,5 +116,31 @@ internal val FieldVerticalPad = 4.dp
   - 无底栏的屏：用 `NavigationBarsBottomPadding()` 取 `contentPadding`，
     或在列表末尾放 `NavigationBarsSpacer()`（样板：`AboutLicenseContent`）。
 - 禁止用固定 dp（如 `padding(bottom = 90.dp)`）猜测导航栏高度；
-  底部"舒适区"留白（如 `MainScreen` 的 `ListBottomPadding = 80.dp`，用于避开悬浮底栏）
-  是允许的，但只能是避让自有悬浮内容，不能当作导航栏 inset。
+  底部"舒适区"留白只能用于避让自有悬浮内容，不能当作导航栏 inset。
+- `MainScreen` 的底栏叠放在内容 `Box` 底部，不能放进 Scaffold 的 `bottomBar` 槽位：
+  后者会缩短列表视口，底栏后面就没有可模糊的内容。列表 bottom padding 使用底栏实测总高度
+  （含外边距与 navigation bars inset）加 `ListBottomGap`，避免大字体改变底栏高度后遮住末行。
+- 主屏悬浮底栏左右外边距为 8.dp。状态文字的 start padding 放在 clickable 内部，
+  让点击区域延伸到外侧圆弧，再由底栏 Surface 统一裁剪。状态区禁用 indication，FAB 局部
+  使用 `LocalRippleConfiguration provides null` 禁用内部波纹；两者均用细边框保留键盘焦点反馈。
+- `MainWaveShadow` 仅在底栏状态区的实际 `onClick` 后显示波动阴影，Surface / FAB 的 shadow
+  elevation 均为 0.dp。阴影使用主题 `scrim` 色与软边径向渐变，从点击位置向四周扩散，
+  在 640ms 内淡出。动画结束后保持隐藏，空闲时没有纹理或动画循环。
+  修饰符放在状态区 Box 上，位于内容 padding 之前；绘制顺序是毛玻璃背景、波动阴影、状态文字。
+  `clipRect` 将阴影限制在状态区自己的边界内，Surface 进一步裁剪面板外侧圆角；
+  阴影不进入状态区与 FAB 的间隙或 FAB 区域，FAB 点击不触发阴影波动。
+  坐标在 pointer input 的 Initial 阶段记录、Final 阶段清理，不消费触摸事件；标准 clickable
+  仍负责点击与无障碍语义。键盘/无障碍点击使用状态区中心，取消按压或禁用状态区不会触发。
+  阴影渐变内外边缘均渐隐，每帧一次圆形绘制，不需要粒子、轨迹列表或全局边界转换。
+- 毛玻璃只模糊 `MainBackdrop` 捕获的列表绘制命令，不模糊底栏的文字/按钮；裁剪区四周
+  为模糊采样留出余量。Android 12 以下或软件渲染用较高不透明度的主题表面色回退。
+  底栏玻璃着色与回退背景使用 `colorScheme.primaryContainer`，贴近当前主题主色；状态文字使用
+  配对的 `onPrimaryContainer`。深浅色模式的玻璃着色不透明度统一为 70%，回退背景为 95%。
+  颜色由当前深浅色/动态主题提供。
+
+绘制边界参考：
+
+- [AndroidX GraphicsLayer KDoc](https://github.com/androidx/androidx/blob/androidx-main/compose/ui/ui-graphics/src/commonMain/kotlin/androidx/compose/ui/graphics/layer/GraphicsLayer.kt)：
+  默认允许越界，但离屏合成的缓冲区按图层尺寸分配；`clip = false` 不能避免离屏边界裁剪。
+- [Material3 Surface 源码](https://github.com/androidx/androidx/blob/androidx-main/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/Surface.kt)：
+  Surface 负责自身形状的裁剪，面板内的阴影与内容共用圆角裁剪区域。
