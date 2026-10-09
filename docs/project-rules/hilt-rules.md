@@ -55,7 +55,7 @@ open class XxxRepository @Inject constructor(
   （当前唯一用途：跨进程设置快照订阅 `settings.observe(appScope)`）。
 - `DatabaseModule.provideDatabase` 里 `build()` 是**惰性**的：不会在这里打开数据库文件，
   所以它能在主线程（Application 字段注入阶段）安全求值。完整性检查放在
-  `LegacyMigrationGate`，由 `AngApplication` 的 bootstrap 协程在首次解析 DAO 之前调用。
+  `DatabaseIntegrity`，由 `AngApplication` 的 bootstrap 协程在首次解析 DAO 之前调用。
 - **不要把现有 object 包一层新的 `@Singleton` 类再宣称完成了依赖隔离。**
   既有 object 就是那个实例，模块只负责把它 re-export 进图里。
 
@@ -88,9 +88,9 @@ open class XxxRepository @Inject constructor(
 
 `onCreate` 的 bootstrap 顺序（改动前必读）：
 `AppLocaleManager.initialize` → `WorkManager.initialize` → `appScope.launch`：
-`LegacyMigrationGate.runIfNeeded` → `settings.refresh()` →
-（仅主进程）`seedDefaults()` / 规则集种子 / 默认订阅 → `LogUtil.refreshLogLevel()` →
-存储模式日志 → `settings.observe(appScope)` → `ThemeManager.refresh()`。
+`DatabaseIntegrity.verifyOrThrow` → `settings.refresh()` →（仅主进程）`seedDefaults()` /
+规则集种子 / 默认订阅 → `LogUtil.refreshLogLevel()` → `settings.observe(appScope)` →
+`ThemeManager.refresh()`。
 
 ## 6. 平台组件与非注入组件
 

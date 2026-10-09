@@ -96,7 +96,7 @@ object CoreConfigManager {
         context: Context,
         configContext: CoreConfigContext,
     ): ConfigResult {
-        // CHANGED: was MmkvManager.decodeServerRaw(configContext.guid)
+        // Raw configuration is read from the Room repository.
         val raw = profileDao(context).raw(configContext.guid)
             ?: return ConfigResult(
                 status = false,
@@ -1004,7 +1004,7 @@ object CoreConfigManager {
      * Configure routing domain strategy and append enabled user rules.
      *
      * Rulesets come from CoreConfigContext (loaded once during context build) instead of a
-     * synchronous MmkvManager read — this is what keeps the whole build path snapshot-only.
+     * synchronous repository read — this is what keeps the whole build path snapshot-only.
      */
     private fun configureRouting(
         configContext: CoreConfigContext,

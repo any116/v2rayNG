@@ -114,13 +114,6 @@ data class ProfileItem(
     companion object {
         const val SORT_STEP = 1024L
 
-        /**
-         * Bump on ANY change that affects duplicateIdentity() output (new protocol field,
-         * renamed field, different JSON writer). Stored in settings as DEDUPE_ALGO_VERSION;
-         * a mismatch triggers a full backfill so old and new digests never coexist.
-         */
-        const val DEDUPE_ALGO_VERSION = 1
-
         fun create(configType: EConfigType): ProfileItem =
             ProfileItem(guid = Utils.getUuid(), configType = configType)
     }

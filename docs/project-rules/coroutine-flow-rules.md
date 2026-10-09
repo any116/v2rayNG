@@ -100,7 +100,6 @@ protected fun launch(
 | 高并发只读 + 偶写的 key→value | `ConcurrentHashMap` |
 | 布尔脏标、一次性开关、幂等注册 | `AtomicBoolean` / `compareAndSet` |
 | 需要容量上限的按 key 缓存 | 访问序 `LinkedHashMap` + `@Synchronized` |
-| 跨进程互斥 | `java.io.RandomAccessFile` 的 `FileLock`（样板：`LegacyMigrationGate`） |
 
 - 禁止 `GlobalScope`、`runBlocking`、裸 `Thread`。
 - `@Volatile` 仅用于简单标量；`SettingsStore.snapshot` 的多步操作（`putAll` + `retainAll`）

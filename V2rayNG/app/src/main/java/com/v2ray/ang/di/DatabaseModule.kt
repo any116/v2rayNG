@@ -27,14 +27,12 @@ object DatabaseModule {
     /**
      * Every process (UI, :daemon, :tasks, :bg) builds its own Application and its own Hilt
      * graph, each holds its own instance. enableMultiInstanceInvalidation() is what makes one
-     * process' write invalidate another's Flow / PagingSource, replacing MMKV's
-     * MULTI_PROCESS_MODE. It must be enabled in EVERY process: enabling it on one side only is
-     * the same as not enabling it.
+     * process' write invalidate another's Flow / PagingSource. It must be enabled in EVERY
+     * process: enabling it on one side only is the same as not enabling it.
      *
      * build() is lazy: no file is opened here, and this provider runs on the main thread during
-     * Application field injection, so an integrity check cannot live here. That check runs in
-     * LegacyMigrationGate, under a cross-process file lock, before the first DAO call resolves
-     * the database.
+     * Application field injection, so an integrity check cannot live here. That check runs in the
+     * storage bootstrap before the first DAO call resolves the database.
      *
      * fallbackToDestructiveMigrationOnDowngrade covers the "user reinstalled an older APK"
      * path, which otherwise throws on open. It does NOT cover the upgrade path: a missing

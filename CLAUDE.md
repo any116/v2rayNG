@@ -63,7 +63,6 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | Paging | `3.5.1` | runtime / compose / common / testing |
 | Hilt | `2.60.1` | `hilt-android` + `hilt-android-compiler`(KSP) |
 | androidx.hilt | `1.4.0` | `hilt-work` + `hilt-compiler`，@HiltWorker 用 |
-| MMKV | 1.3.17 | **仅只读**：`data/legacy/MmkvLegacyReader.kt` 一次性导入旧数据，禁止新增写入 |
 | Glance | `1.3.0-alpha02` | 桌面组件（`:bg` 进程） |
 | AboutLibraries | `15.2.0` | 许可页；Gradle 插件 `offlineMode = true` 生成 `res/raw/aboutlibraries.json` |
 | OkHttp | `5.5.0` | 订阅拉取、测速、更新检查 |
@@ -86,7 +85,7 @@ Worker 用 `@HiltWorker` + `@AssistedInject`，`HiltWorkerFactory` 挂在
 让 Dagger 报 `may only contain one injected constructor`。细则见
 `docs/project-rules/hilt-rules.md`。
 
-**唯一持久层：Room 3**。禁止新增 SharedPreferences / DataStore / Room 2 / MMKV 写入。
+**唯一持久层：Room 3**。禁止新增 SharedPreferences / DataStore / Room 2 或其他持久化方案。
 细则见 `docs/project-rules/repository-rules.md`。
 
 ## Architecture
@@ -104,7 +103,7 @@ UI(Composable) <--Flow<PagingData<T>>------ ViewModel   (大列表，不塞进 U
 
 ```
 AngApplication.kt      # @HiltAndroidApp；WorkManager(:bg)、SettingsStore、存储启动屏障
-                       # （完整性检查 → 旧数据导入 → 快照刷新 → 播种，全部成功才放行）
+                       # （完整性检查 → 快照刷新 → 播种，全部成功才放行）
 AppConfig.kt           # 所有常量：pref key、广播 key、MSG_*、端口、URL
 
 core/                  # 与 Xray 内核交互（跨进程，无 UI 依赖）
@@ -113,11 +112,10 @@ core/                  # 与 Xray 内核交互（跨进程，无 UI 依赖）
 data/                  # 唯一持久层（Room 3，数据库 v2rayng.db）
   AppDatabase / AppDao（Profile/Subscription/Asset/Routing/Settings 五个 DAO + 投影）
   SettingsStore（进程内同步快照）/ Prefs（给无注入点的 object 的同步门面）
-  SettingsDefaults / LegacyImporter / LegacyMigrationGate / DatabaseIntegrity / StorageBootstrap
+  SettingsDefaults / DatabaseIntegrity / StorageBootstrap
   DatabaseCallbacks / DedupeKey
   entities/            # @Entity：ProfileItem / ProfileRaw / ServerAffiliationInfo /
                        # SubscriptionItem / AssetUrlItem / RulesetItem / SettingsEntry
-  legacy/              # MmkvLegacyReader（唯一允许 import com.tencent.mmkv 的文件，只读）/ SettingKinds
   repository/          # UI 进程的数据层门面，ViewModel 唯一可依赖的数据入口
                        # BaseRepository + Main/Server/Sub/Settings/Routing/PerAppProxy/
                        # UserAsset/Backup/Logcat/Scanner/Shortcut/UrlScheme/AppList/

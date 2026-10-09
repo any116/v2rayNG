@@ -22,8 +22,8 @@ class StorageNotReadyException(cause: Throwable) :
  * Process-local, retryable startup barrier for the storage layer.
  *
  * AngApplication installs the bootstrap block once per process; the barrier opens only when that
- * block (integrity check, legacy import, snapshot refresh, main-process seeding) returned
- * normally. A failure keeps the barrier closed — callers never fall back to coded defaults — but
+ * block (integrity check, snapshot refresh, main-process seeding) returned normally. A failure
+ * keeps the barrier closed — callers never fall back to coded defaults — but
  * it is no longer terminal: [retry] re-runs the block, so the UI retry button and cold service
  * starts can recover from transient failures without a process restart.
  */

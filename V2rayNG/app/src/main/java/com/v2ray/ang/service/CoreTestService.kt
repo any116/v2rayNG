@@ -191,9 +191,8 @@ class CoreTestService : Service() {
         pendingRequests.add(requestId)
 
         serviceScope.launch {
-            // The :tasks bootstrap runs the same gate as the UI process; a batch must not read
-            // (or later write) through the DAO while the legacy import is still in flight. On
-            // storage failure resolve the request as cancelled instead of testing half-blind.
+            // The :tasks bootstrap must finish before a batch reads or writes through the DAO.
+            // On storage failure resolve the request as cancelled instead of testing half-blind.
             // A previous attempt in this process may have failed transiently; retry first.
             StorageBootstrap.retry()
             if (!StorageBootstrap.awaitReadyOrNull()) {

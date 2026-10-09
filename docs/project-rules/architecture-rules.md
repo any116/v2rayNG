@@ -50,9 +50,8 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 
 | 包 | 放什么 |
 | --- | --- |
-| `data/` | `AppDatabase`、`AppDao`（全部 DAO + 投影）、`SettingsStore`、`Prefs`、`SettingsDefaults`、`LegacyImporter`、`LegacyMigrationGate`、`DatabaseIntegrity`、`DatabaseCallbacks`、`DedupeKey` |
+| `data/` | `AppDatabase`、`AppDao`（全部 DAO + 投影）、`SettingsStore`、`Prefs`、`SettingsDefaults`、`DatabaseIntegrity`、`StorageBootstrap`、`DatabaseCallbacks`、`DedupeKey` |
 | `data/entities/` | Room `@Entity`：`ProfileItem`、`ServerAffiliationInfo`、`ProfileRaw`、`SubscriptionItem`、`AssetUrlItem`、`RulesetItem`、`SettingsEntry`（+ `WebDavConfig` 值对象） |
-| `data/legacy/` | `MmkvLegacyReader`（唯一允许 import `com.tencent.mmkv` 的文件）、`SettingKinds` |
 | `data/repository/` | 每屏一个 Repository（或一组屏共用一个），继承 `BaseRepository` |
 | `dto/` | 跨层传递的**不可变**数据类。UI 直接消费的行模型（`ServerRowItem`、`GroupMapItem`、`ConnectionTestResult`）也在这里 |
 | `ui/<feature>/XxxContract.kt` | **只有这一屏用**的 UI 模型（`MainStatus`、`MainPagerArgs` 等） |

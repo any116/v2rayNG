@@ -47,7 +47,7 @@
 - UI 侧刷新是**数据库失效驱动**的：`profile_stats` 变化 → `MainRepository.serverPager`
   的 `PagingSource` 失效 → `LazyPagingItems` 自动重取受影响行。
   因此 `MainViewModel.handleServiceEvent` 里 `MeasureConfigSuccess` 是 **no-op**，
-  不要再写"批量结果合并刷新"的自定义去抖（那是 MMKV 时代的实现，已删除）。
+  不要再写"批量结果合并刷新"的自定义去抖（当前数据层已经通过 Room 失效通知刷新）。
 - 单次写全表会闪屏：写入节流只在写侧做，读侧绝不轮询数据库。
 
 ## 失效点

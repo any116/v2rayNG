@@ -13,9 +13,6 @@ object AppConfig {
     const val WEBDAV_BACKUP_DIR = "backups"
     const val WEBDAV_BACKUP_FILE_NAME = "backup_ng.zip"
 
-    /** Legacy configuration keys. */
-    const val ANG_CONFIG = "ang_config"
-
     /** Default subscription ID for ungrouped servers. */
     const val DEFAULT_SUBSCRIPTION_ID = "__default_subscription__"
     const val DEFAULT_SUBSCRIPTION_REMARKS = "Default"
@@ -24,7 +21,7 @@ object AppConfig {
     /** Maximum decoded characters accepted from a network subscription response. */
     const val MAX_IMPORT_CONTENT_CHARS = 64 * 1024 * 1024L
 
-    /** Preferences mapped to MMKV storage. */
+    /** Preference keys stored in the Room settings table. */
     const val PREF_SNIFFING_ENABLED = "pref_sniffing_enabled"
     const val PREF_ROUTE_ONLY_ENABLED = "pref_route_only_enabled"
     const val PREF_PER_APP_PROXY = "pref_per_app_proxy"

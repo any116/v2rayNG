@@ -10,14 +10,12 @@ import com.v2ray.ang.util.LogUtil
  * successfully through Room; every query then throws, the UI renders an empty list, and the
  * user has no way to tell what happened.
  *
- * Must be called inside LegacyMigrationGate's file lock and BEFORE this process resolves
- * AppDatabase for the first time.
+ * Must be called before this process resolves AppDatabase for the first time.
  *
  * The check only reports; it never moves, renames or deletes anything. "The check could not
  * run" (lock contention, I/O error) is not "the database is corrupt", and quarantining a live
  * file while other processes still hold Room connections — or deleting it when the rename
- * fails — can destroy healthy user data. The legacy MMKV store cannot reconstruct rows written
- * after the migration either, so a rebuild would be lossy regardless. A failing check
+ * fails — can destroy healthy user data. A failing check
  * therefore aborts the storage bootstrap and the files stay on disk for an explicit,
  * offline recovery.
  *
@@ -27,8 +25,8 @@ import com.v2ray.ang.util.LogUtil
  * physical page structure (the failure mode that makes Room throw on every query) at a
  * fraction of the cost, which keeps the VPN start path short.
  *
- * Runs once per process — the caller (LegacyMigrationGate.runIfNeeded) is invoked once from
- * Application.onCreate's bootstrap coroutine, so the cost is paid once at cold start.
+ * Runs once per process — the caller is invoked once from Application.onCreate's bootstrap
+ * coroutine, so the cost is paid once at cold start.
  */
 internal object DatabaseIntegrity {
 

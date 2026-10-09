@@ -102,7 +102,7 @@ open class ServerRepository @Inject constructor(
     // ---- Write ----
 
     /**
-     * Replaces MmkvManager.encodeServerConfig. New rows go to the head of their group, the
+     * Persists the server configuration. New rows go to the head of their group, the
      * selection is claimed when nothing is selected yet, and dedupeKey is invalidated so the
      * lazy backfill recomputes it.
      */

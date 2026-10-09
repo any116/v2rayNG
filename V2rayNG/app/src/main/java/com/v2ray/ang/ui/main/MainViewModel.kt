@@ -182,8 +182,6 @@ class MainViewModel @Inject constructor(
         repo.retryBootstrap()
     }
 
-    suspend fun abandonLegacyImport(): Boolean = repo.abandonLegacyImport()
-
     private fun onStorageReady() {
         if (storageReadyHandled) return
         storageReadyHandled = true

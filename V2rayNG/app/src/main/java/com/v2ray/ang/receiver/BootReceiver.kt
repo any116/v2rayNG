@@ -46,12 +46,10 @@ class BootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                // The bootstrap may still be running the integrity check / legacy import. A
+                // The bootstrap may still be running the integrity check. A
                 // cold snapshot would read the coded default of PREF_IS_BOOTED and silently
                 // skip the user's auto-start, so wait (bounded) for the storage layer first.
-                // ACTION_MY_PACKAGE_REPLACED is exactly the first run after an upgrade, i.e.
-                // the run that may have to import the whole legacy store, so retry a failed
-                // attempt instead of giving up on it.
+                // Retry a failed attempt instead of giving up on a transient storage failure.
                 StorageBootstrap.retry()
                 if (!StorageBootstrap.awaitReadyOrNull(BOOT_READY_TIMEOUT_MS)) {
                     LogUtil.w(AppConfig.TAG, "BootReceiver: storage not ready; auto start skipped")
@@ -84,9 +82,8 @@ class BootReceiver : BroadcastReceiver() {
 
     private companion object {
         /**
-         * goAsync() allows background work well past 10s, and the first run after an upgrade
-         * may have to perform the whole legacy import. 8s regularly lost that race and left the
-         * app without auto start after an update.
+         * goAsync() allows background work well past 10s, while the database integrity check and
+         * settings refresh may still be in progress during a cold start.
          */
         const val BOOT_READY_TIMEOUT_MS = 25_000L
     }

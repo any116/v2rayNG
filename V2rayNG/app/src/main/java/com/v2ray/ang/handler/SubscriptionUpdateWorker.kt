@@ -26,7 +26,7 @@ import kotlinx.coroutines.withContext
  * This runs in `:bg`, which has its own Application instance and therefore its own Hilt graph.
  * Only process-agnostic dependencies may be injected here: per repository-rules.md section 5, a
  * Worker talks to `handler/` directly and must never pull in a UI-process Repository. The
- * dispatcher is the one real injected dependency, so the MMKV and Binder work below stops relying
+ * dispatcher is the one real injected dependency, so the settings and Binder work below stops relying
  * on whichever thread the WorkManager executor happens to offer.
  */
 @HiltWorker
