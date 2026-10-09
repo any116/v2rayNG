@@ -12,6 +12,12 @@
     <string name="action_cancel">إلغاء</string>
     <string name="migration_fail">فشلت عملية ترحيل البيانات!</string>
     <string name="pull_down_to_refresh">اسحب لأسفل للتحديث!</string>
+    <string name="action_retry">إعادة المحاولة</string>
+    <string name="boot_storage_failed_title">التهيئة غير مكتملة</string>
+    <string name="boot_storage_failed_message">مساحة تخزين التطبيق غير جاهزة بعد. أعد المحاولة أو أعد تشغيل التطبيق إذا استمرت المشكلة.</string>
+    <string name="boot_storage_not_ready">مساحة التخزين غير جاهزة</string>
+    <string name="boot_storage_failed_escape">هل ما زالت المشكلة قائمة؟ يمكنك استعادة نسخة احتياطية.</string>
+    <string name="action_restore_from_webdav">استعادة من WebDAV</string>
 
     <!-- Notifications -->
     <string name="notification_action_stop_v2ray">إيقاف</string>
@@ -457,6 +463,10 @@
     <string name="tasker_default_profile">Default</string>
     <string name="toast_tasker_select_profile">Select a profile first</string>
     <string name="toast_field_required">Please fill in: %1$s</string>
+    <string name="form_searchable_label">%1$s (قابل للبحث)</string>
+    <string name="msg_no_result">لا توجد عناصر مطابقة</string>
+    <string name="toast_sub_chain_same_profile">لا يمكن لوكيلي الدخول والخروج استخدام ملف التعريف نفسه</string>
+    <string name="toast_sub_chain_profile_missing">ملف التعريف غير موجود: %s</string>
 
     <string name="share_method_qrcode">رمز QR</string>
     <string name="share_method_clipboard">نسخ رابط التكوين</string>
@@ -525,6 +535,8 @@
     <string name="acc_add_rule">إضافة قاعدة توجيه</string>
     <string name="acc_start">بدء الخدمة</string>
     <string name="acc_stop">إيقاف الخدمة</string>
+    <string name="acc_check_connection">التحقق من الاتصال</string>
+    <string name="acc_cancel_connection_test">إلغاء اختبار الاتصال</string>
     <string name="acc_back">رجوع</string>
     <string name="acc_search">بحث</string>
     <string name="acc_add">إضافة تكوين</string>

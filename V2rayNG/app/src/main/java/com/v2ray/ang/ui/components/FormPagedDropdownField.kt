@@ -90,6 +90,7 @@ data class DropdownOption(val value: String, val source: Source) {
  * The field itself is always editable and doubles as the search box: typing
  * commits the value through [onValueChange] immediately and pushes a debounced
  * filter to [onQueryChange]. Picking an option writes it to both.
+ * The label includes a localized search hint so this behavior is discoverable.
  *
  * ## Why not [ExposedDropdownMenu]
  *
@@ -186,7 +187,7 @@ fun FormPagedDropdownField(
             enabled = enabled,
             singleLine = true,
             isError = isError,
-            label = { Text(label) },
+            label = { Text(stringResource(R.string.form_searchable_label, label)) },
             placeholder = placeholder?.let { { Text(it) } },
             supportingText = supportingText?.let { { Text(it) } },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
