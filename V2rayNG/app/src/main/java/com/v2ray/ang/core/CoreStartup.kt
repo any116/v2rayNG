@@ -12,15 +12,14 @@ import kotlinx.coroutines.CancellationException
  * Head of the core startup sequence.
  *
  * Waits (bounded) for this process' [StorageBootstrap], then performs a strong-consistency
- * settings refresh. Reading before the integrity check / legacy import finished would hand the
- * core a snapshot of coded defaults, and a genuine refresh failure must abort the start instead
+ * settings refresh. Reading before the integrity check finished would hand the core a snapshot of
+ * coded defaults, and a genuine refresh failure must abort the start instead
  * of running with defaults (mode, ports, routing). After a successful return, every Prefs.* read
  * in the core build path is warm and no database access is needed to stay synchronous.
  *
  * A failed bootstrap is retried once per core start, so a transient failure in :daemon no longer
- * requires a process restart; the wait itself is bounded, because the file lock inside the
- * migration gate can stay held while another process is still importing and the foreground
- * service must not sit in "starting" forever.
+ * requires a process restart; the wait itself is bounded so the foreground service must not sit
+ * in "starting" forever.
  *
  * Deliberately does not call SettingsStore.seedDefaults(): AngApplication already does that on
  * every process start, and repeating it here would write settings rows from the daemon.

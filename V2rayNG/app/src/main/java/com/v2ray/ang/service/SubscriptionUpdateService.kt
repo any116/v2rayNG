@@ -137,9 +137,7 @@ class SubscriptionUpdateService : Service() {
         serviceScope.launch {
             updateSemaphore.withPermit {
                 try {
-                    // Before the first DAO access: the :tasks bootstrap may still be running the
-                    // legacy import, and updating against an un-imported database would import
-                    // into a store the next retry does not recognise.
+                    // Before the first DAO access, wait for the :tasks bootstrap to finish.
                     if (!StorageBootstrap.awaitReadyOrNull()) {
                         LogUtil.w(AppConfig.TAG, "SubscriptionUpdateService: storage not ready; update skipped")
                         return@withPermit

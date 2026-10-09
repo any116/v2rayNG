@@ -123,7 +123,7 @@ class SettingsStore @Inject constructor(
         return snapshot[key]
     }
 
-    // ---- Synchronous reads, one to one with MmkvManager.decodeSettingsXxx ----
+    // ---- Synchronous reads from the in-process Room snapshot ----
 
     fun contains(key: String): Boolean = read(key) != null
 
@@ -211,6 +211,5 @@ class SettingsStore @Inject constructor(
 
         const val KEY_SELECTED_SERVER = "SELECTED_SERVER"
         const val KEY_WEBDAV_CONFIG = "WEBDAV_CONFIG"
-        const val KEY_DEDUPE_ALGO_VERSION = "DEDUPE_ALGO_VERSION"
     }
 }

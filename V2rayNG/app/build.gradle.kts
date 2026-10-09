@@ -214,7 +214,6 @@ dependencies {
     implementation(libs.aboutlibraries.compose.m3)
 
     // Data and Storage Libraries
-    implementation(libs.mmkv.static)
     implementation(libs.gson)
     implementation(libs.okhttp)
 

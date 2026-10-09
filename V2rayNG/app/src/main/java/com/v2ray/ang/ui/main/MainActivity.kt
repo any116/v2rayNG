@@ -33,7 +33,6 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.extension.delay
-import com.v2ray.ang.extension.toast
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseHelperActivity
@@ -116,14 +115,6 @@ class MainActivity : BaseHelperActivity() {
 
             failed -> BootFailureContent(
                 onRetry = { attempt++ },
-                onSkipLegacyImport = {
-                    lifecycleScope.launch {
-                        // Marking the import done is what makes the retry able to succeed; if the
-                        // marker cannot be written (a genuinely unusable database) the user needs
-                        // the restore path instead, so stay on this screen.
-                        if (viewModel.abandonLegacyImport()) attempt++ else toast(R.string.boot_storage_failed_message)
-                    }
-                },
                 onRestoreFromWebdav = { startActivity(AppRoute.Backup.intent(this)) }
             )
 
@@ -139,7 +130,6 @@ class MainActivity : BaseHelperActivity() {
     @Composable
     private fun BootFailureContent(
         onRetry: () -> Unit,
-        onSkipLegacyImport: () -> Unit,
         onRestoreFromWebdav: () -> Unit
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -154,15 +144,8 @@ class MainActivity : BaseHelperActivity() {
                 Button(onClick = onRetry) {
                     Text(text = stringResource(R.string.action_retry))
                 }
-                // Escape hatches. Some failures are permanent — an unreadable MMKV store or a
-                // staged snapshot that never deserializes — and retrying those locks the user
-                // out of the app forever, so there must be an explicit way out.
                 Spacer(Modifier.height(24.dp))
                 Text(text = stringResource(R.string.boot_storage_failed_escape))
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = onSkipLegacyImport) {
-                    Text(text = stringResource(R.string.action_skip_legacy_import))
-                }
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = onRestoreFromWebdav) {
                     Text(text = stringResource(R.string.action_restore_from_webdav))

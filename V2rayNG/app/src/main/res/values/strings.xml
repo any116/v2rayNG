@@ -16,8 +16,7 @@
     <string name="boot_storage_failed_title">Initialization incomplete</string>
     <string name="boot_storage_failed_message">The app storage is not ready yet. Retry, or restart the app if this keeps happening.</string>
     <string name="boot_storage_not_ready">Storage is not ready</string>
-    <string name="boot_storage_failed_escape">Still stuck? You can skip the legacy import, or restore a backup.</string>
-    <string name="action_skip_legacy_import">Skip legacy import</string>
+    <string name="boot_storage_failed_escape">Still stuck? You can restore a backup.</string>
     <string name="action_restore_from_webdav">Restore from WebDAV</string>
 
     <!-- Notifications -->

@@ -121,8 +121,8 @@ class CoreVpnService : VpnService(), ServiceControl {
      *  5. start the core.
      */
     private suspend fun startSequence(requestedGuid: String?): Boolean {
-        // Aborts when this process' storage bootstrap (integrity check, legacy import, snapshot
-        // refresh) failed: starting the core on coded defaults would ignore the user's mode,
+        // Aborts when this process' storage bootstrap (integrity check and snapshot refresh)
+        // failed: starting the core on coded defaults would ignore the user's mode,
         // ports and routing settings.
         if (!CoreStartup.refreshPreferences(this)) {
             LogUtil.e(AppConfig.TAG, "StartCore-VPN: storage not ready; aborting start")

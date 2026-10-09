@@ -16,7 +16,6 @@
 | `settings` | `SettingsEntry` | `key/value/kind` 标量偏好 |
 
 禁止：新增 `SharedPreferences`、`DataStore`、Room 2、任何第二种可写持久化。
-MMKV 只允许出现在 `data/legacy/MmkvLegacyReader.kt`，且**只读**（一次性旧数据导入）。
 
 ## 1. BaseRepository
 
@@ -108,9 +107,8 @@ open class XxxRepository @Inject constructor(
   投影删除必须同时清理 `profiles` / `profile_stats` / `profile_raw` 三张表。
 - `IN (:list)` 参数受 SQLite 变量上限约束，超过 `ProfileDao.SQLITE_VAR_LIMIT`（900）必须先
   `chunked(...)`。
-- 轻量派生列（`dedupeKey`）允许惰性回填：`backfillDedupeKeys` 分批写，避免首次导入时
-  在事务里算几千个 SHA-256（ANR 风险）。算法版本存 `SettingsStore.KEY_DEDUPE_ALGO_VERSION`，
-  变更时清空重算。
+- 轻量派生列（`dedupeKey`）允许惰性回填：`backfillDedupeKeys` 分批写，避免一次事务中
+  计算几千个 SHA-256（ANR 风险）。算法变更时清空重算。
 
 ### 3.1 大订阅导入
 
@@ -176,9 +174,7 @@ Paging 用 `androidx.paging.testing` 的 `LoadState`/`asSnapshot()` 断言。
    若该项必须在设置页显示默认值，再在 `SettingsDefaults.ENTRIES` 加一条；
 3. 若该项影响内核配置（需要重启服务生效），确保 `SettingsChangeManager.isUiOnly(key)`
    返回 `false`；纯 UI 项加进 `uiOnlyKeys` 返回 `true`；
-4. 若旧版本已存在该 key，把它登记进 `data/legacy/SettingKinds.kt`
-   （`BOOLEAN_KEYS` / `LONG_KEYS` / `INT_KEYS` / `SET_KEYS`），否则旧值会按字符串导入而丢失；
-5. 在 `SettingsScreen` 加对应的 `SettingsSwitchItem` / `SettingsListItem` / `SettingsEditItem`。
+4. 在 `SettingsScreen` 加对应的 `SettingsSwitchItem` / `SettingsListItem` / `SettingsEditItem`。
 
 ## 7. 写入串行化
 
@@ -205,31 +201,21 @@ writeJob = launch {
 - 需要记录时用 `runCatching { }.onFailure { LogUtil.e(AppConfig.TAG, "…", it) }`。
 - 反注册、关闭、清理这类动作一律 `runCatching` 包住，不能因为清理失败影响主流程。
 
-## 9. 数据库打开与旧数据导入（改数据库前必读）
+## 9. 数据库打开与启动屏障（改数据库前必读）
 
 - 数据库构建在 `di/DatabaseModule.kt`：`BundledSQLiteDriver`、`setQueryCoroutineContext(io)`、
   `enableMultiInstanceInvalidation()`（**每个进程都要开**，否则跨进程 Flow/Paging 不失效）、
   `fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)`（只覆盖“用户装回旧版”，
   不覆盖升级路径——升级缺 Migration 就该崩，不能静默丢数据）。
-- 打开前必须先跑 `LegacyMigrationGate.runIfNeeded(...)`：它同时持有
-  **进程内 `Mutex`** 与 **跨进程 `FileLock`**（`files/legacy_import.lock`），
-  内层先 `DatabaseIntegrity.verifyOrThrow(app)`（`PRAGMA quick_check` + `busy_timeout`；
-  **检查失败只抛异常，绝不移动/删除数据库文件**——“检查没跑成”不等于“库损坏”），
-  再在 `immediateTransaction` 里执行 `LegacyImporter.plan(snapshot)` 生成、`importInto` 执行的计划，
-  最后按计划主键校验：导入前统计已有主键数，导入后要求
-  `行数增量 = 计划主键数 − 已有主键数` 且所有计划主键都存在，并写 `LEGACY_IMPORT_STATE=done`。
-  校验不符会回滚并下次重试；**不要假设目标主键在导入前都不存在**（重试时可能已有种子数据）。
-- `AngApplication` 通过 `StorageBootstrap.install(...)` 注册启动块，串行执行“完整性检查 → 旧数据导入 →
+- `AngApplication` 通过 `StorageBootstrap.install(...)` 注册启动块，串行执行“完整性检查 →
   快照刷新 →（仅主进程）播种默认值”；全部成功才进入 `Ready`，任何一步失败进入 `Failed` 且屏障保持关闭。
   失败不是终态：`StorageBootstrap.retry()` 会重跑整条链（UI 重试按钮、核心服务冷启动都会先调一次），
   `Running` / `Ready` 时调用是 no-op；等待方用 `awaitReady()`（失败抛 `StorageNotReadyException`，
   **不是** `CancellationException`）或 `awaitReadyOrNull(timeout)`（失败/超时返回 false，调用方自身取消照常传播）。
   读取设置/数据库的入口（服务、Boot/Tasker/Tile/快捷方式、UI）必须先等该屏障，
   失败时显式跳过或报错重试，**禁止用编码默认值继续**。
-- 有些失败重试也修不好（MMKV 读不出来、暂存快照永远反序列化失败），所以失败页必须有逃生出口：
-  `LegacyMigrationGate.abandonImport(...)` 写 `LEGACY_IMPORT_STATE=done` 并删掉暂存快照，
-  之后 `runIfNeeded` 直接短路返回 true，用户再点重试即可进入 App。它**只写标记、只删暂存快照，
-  不删任何已导入的行**；写标记都失败（库真的用不了）才需要走 WebDAV 恢复。
+- 数据库完整性检查失败时保留原始数据库文件，不移动、不重命名、不删除；失败页提供重试和
+  WebDAV 备份恢复入口。
 - 改 schema：改实体后递增 `AppDatabase.version`，提供 `Migration`，
   重新导出 `app/schemas/**` 并提交；`DatabaseModule` 的 `onCreate/onOpen` 回调负责安装
   `GROUP_ORDER_TRIGGERS`，新增触发器要同时在 `DatabaseCallbacks.kt` 与回调里可见。

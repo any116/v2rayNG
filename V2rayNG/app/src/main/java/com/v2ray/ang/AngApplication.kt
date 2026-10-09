@@ -9,19 +9,16 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.WorkManager
 import com.v2ray.ang.AppConfig.ANG_PACKAGE
-import com.v2ray.ang.data.AppDatabase
+import com.v2ray.ang.data.DatabaseIntegrity
 import com.v2ray.ang.data.ImportBuffer
-import com.v2ray.ang.data.LegacyMigrationGate
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.di.ApplicationScope
-import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.components.ThemeManager
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.HiltAndroidApp
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -39,15 +36,8 @@ class AngApplication : Application() {
     lateinit var settings: SettingsStore
 
     @Inject
-    lateinit var db: AppDatabase
-
-    @Inject
     @ApplicationScope
     lateinit var appScope: CoroutineScope
-
-    @Inject
-    @IoDispatcher
-    lateinit var io: CoroutineDispatcher
 
     /** The invalidation observer must be started once per process, not once per attempt. */
     private val observerStarted = AtomicBoolean(false)
@@ -75,22 +65,14 @@ class AngApplication : Application() {
     }
 
     /**
-     * Order is load-bearing: integrity check + legacy import first, settings snapshot second,
-     * default seeding last. Every step is idempotent, so a retry simply runs the whole chain again.
+     * Order is load-bearing: integrity check first, settings snapshot second, default seeding
+     * last. Every step is idempotent, so a retry simply runs the whole chain again.
      */
     private suspend fun bootstrapStorage(isMain: Boolean) {
         try {
-            // Every process goes through the gate first. :daemon can start before the UI process
-            // (Always-on VPN / boot broadcast / Tile / Glance widget). The file lock makes the
-            // concurrent path safe; once imported, the cost is one settings primary-key read.
-            check(LegacyMigrationGate.runIfNeeded(this, db, settings, io)) {
-                "Legacy import did not finish"
-            }
-
+            DatabaseIntegrity.verifyOrThrow(this)
             settings.refresh()
 
-            // Main process only, and only behind a finished migration: rows written after a
-            // failed import would count as pre-existing on the retry.
             if (isMain) {
                 settings.seedDefaults()
                 SettingsManager.ensureRoutingRulesets(this)
@@ -98,9 +80,6 @@ class AngApplication : Application() {
             }
         } finally {
             LogUtil.refreshLogLevel()
-            // Diagnostics run either way; a failure benefits from them the most.
-            runCatching { LegacyMigrationGate.logStorageMode(this, db, isMain) }
-                .onFailure { LogUtil.e(AppConfig.TAG, "Storage mode logging failed", it) }
         }
 
         // Only reached on success. Neither step may fail the bootstrap after the data is ready.

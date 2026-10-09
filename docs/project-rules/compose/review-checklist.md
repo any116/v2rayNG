@@ -17,7 +17,7 @@
       屏专属模型→`XxxContract.kt`、数据门面→`data/repository/`、跨进程数据源→`handler/`、
       manifest 入口→`receiver/`
 - [ ] 没有新增 SharedPreferences / DataStore / Room 2 / 第二种持久化；
-      MMKV 只在 `data/legacy/MmkvLegacyReader.kt`（只读）
+      持久化统一使用 Room 3
 - [ ] 没有引入 Navigation-Compose、material-icons-extended
 - [ ] 没有新增 XML 业务布局、没有新增 `AndroidView`（除非 PR 中说明了不可替代的理由）
 
@@ -57,7 +57,7 @@
 - [ ] 没有手写 `groupSortOrder`（由 `GROUP_ORDER_TRIGGERS` 维护）
 - [ ] 分页 `PagingConfig` 参数合理；分页下拉用 `enablePlaceholders = false`
 - [ ] 新增偏好项走了完整流程（AppConfig → `BoolPref`/`StringPref` → `isUiOnly` 分类 →
-      旧 key 登记进 `SettingKinds` → UI 项）
+      `SettingsDefaults`（如需种子）→ UI 项）
 - [ ] 需要重启内核才生效的设置项，`uiOnly` 判定正确
 
 ## E. 协程（Blocker）

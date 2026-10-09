@@ -14,7 +14,6 @@ import androidx.paging.PagingData
 import androidx.paging.map
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.AppDatabase
-import com.v2ray.ang.data.LegacyMigrationGate
 import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.data.ServerRowProjection
 import com.v2ray.ang.data.SettingsStore
@@ -141,8 +140,8 @@ open class MainRepository @Inject constructor(
     }
 
     /**
-     * Suspends until this process' storage bootstrap (integrity check, legacy import, settings
-     * refresh) and the settings snapshot are both ready. Throws [StorageNotReadyException] when
+     * Suspends until this process' storage bootstrap (integrity check and settings refresh) and
+     * the settings snapshot are both ready. Throws [StorageNotReadyException] when
      * the current attempt failed; callers must surface that instead of continuing with coded
      * defaults.
      */
@@ -161,17 +160,6 @@ open class MainRepository @Inject constructor(
 
     /** Re-runs a failed storage bootstrap. No-op while running or after success. */
     open fun retryBootstrap(): Boolean = StorageBootstrap.retry()
-
-    /**
-     * Escape hatch shown on the boot failure surface: give up on the legacy import so the
-     * barrier can open. See [LegacyMigrationGate.abandonImport] — it only writes the done
-     * marker and drops the failing staged snapshot, it deletes no imported rows.
-     *
-     * @return true when the marker was written; the caller then retries the bootstrap.
-     */
-    open suspend fun abandonLegacyImport(): Boolean = withIO {
-        LegacyMigrationGate.abandonImport(app, db, settings, io)
-    }
 
     // ---- Preferences: snapshot reads, stay synchronous ----
 

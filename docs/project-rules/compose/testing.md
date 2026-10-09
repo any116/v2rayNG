@@ -83,17 +83,15 @@ class XxxViewModelTest {
       .setQueryCoroutineContext(Dispatchers.Unconfined)
       .build()
   ```
-  用 `ImporterFixtures`（`app/src/test/.../data/ImporterFixtures.kt`）造 `LegacySnapshot`，
-  验证 `LegacyImporter` 的计数与字段、`GROUP_ORDER_TRIGGERS` 的 `groupSortOrder` 同步、
-  `dedupeKey` 回填、`deleteProfiles` 三表一致。
+  用 `ImporterFixtures`（`app/src/test/.../data/ImporterFixtures.kt`）构造测试数据库，
+  验证 `GROUP_ORDER_TRIGGERS` 的 `groupSortOrder` 同步、`dedupeKey` 回填、
+  `deleteProfiles` 三表一致。
 - **分页**：用 `androidx.paging:paging-testing`：
   ```kotlin
   val items = profileDao.pageServers("", "").asSnapshot()
   assertEquals(listOf("a", "b"), items.map { it.guid })
   ```
   也可断言 `LoadState`（首屏 / append / 空结果）。
-- `SettingKinds` / `SettingsStore` 的 key→kind 映射要有一个"覆盖全部 `PREF_*` / `CACHE_*`"的
-  守卫测试：任何常量既不在 kind 表里、也不是字符串，就应报错。
 
 ## 6. 不测什么
 

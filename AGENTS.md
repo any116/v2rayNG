@@ -9,8 +9,8 @@
    `docs/project-rules/` 下的规范文件（索引见 `docs/project-rules/README.md`）；
 3. 遵守 `CLAUDE.md` 的「核心规则」与「AI 探索项目的方式」。
 
-注意：当前实现是 **Hilt + Room 3 + Paging 3 + Compose**。若你记忆中的旧描述
-（MmkvManager 为唯一持久层、无 DI 框架、正则搜索、`:RunSoLibV2RayDaemon` 进程名）与之冲突，
+注意：当前实现是 **Hilt + Room 3 + Paging 3 + Compose**。若你记忆中的旧架构描述
+（无 DI 框架、正则搜索、旧进程名）与之冲突，
 一律以源码为准。
 
 规范与源码冲突时，**以源码为准**，并在同一次改动里回头修正规范文件。

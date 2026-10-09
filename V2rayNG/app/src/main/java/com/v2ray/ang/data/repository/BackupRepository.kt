@@ -7,15 +7,12 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import androidx.room3.useWriterConnection
-import androidx.sqlite.SQLiteStatement
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.data.AppDatabase
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.entities.WebDavConfig
-import com.v2ray.ang.data.legacy.LegacySnapshot
-import com.v2ray.ang.data.legacy.MmkvLegacyReader
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.handler.WebDavManager
 import com.v2ray.ang.helper.MessageHelper
@@ -128,12 +125,7 @@ open class BackupRepository @Inject constructor(
 
     // ---- restore ----
 
-    /**
-     * Two archive shapes are supported:
-     *   - new: contains v2rayng.db, which simply replaces the current file
-     *   - old: contains only an MMKV directory, which is read into a LegacySnapshot, staged, and
-     *     replayed through the SAME LegacyImporter path as the first-time import
-     */
+    /** Restores an archive containing a v2rayng.db file. */
     open suspend fun restore(zip: File): Boolean = runIO(false) {
         val target = File(prepareWorkDir(), "$UNPACK_PREFIX${unique()}")
         try {
@@ -143,7 +135,6 @@ open class BackupRepository @Inject constructor(
             }
 
             val incoming = File(target, AppDatabase.NAME)
-            val legacyDir = findLegacyMmkvDir(target)
             val dbPath = app.getDatabasePath(AppDatabase.NAME)
 
             stopSiblingProcesses()
@@ -155,23 +146,8 @@ open class BackupRepository @Inject constructor(
                     incoming.copyTo(dbPath, overwrite = true)
                 }
 
-                legacyDir != null -> {
-                    val snapshot = MmkvLegacyReader(
-                        context = app,
-                        rootDir = legacyDir.absolutePath,
-                    ).readAll()
-                    if (snapshot.isEmpty) {
-                        LogUtil.w(AppConfig.TAG, "Restore aborted: legacy archive carried no data")
-                        return@runIO false
-                    }
-                    stagePendingSnapshot(snapshot)
-                    db.close()
-                    clearSidecars(dbPath)
-                    dbPath.delete()
-                }
-
                 else -> {
-                    LogUtil.w(AppConfig.TAG, "Restore aborted: archive carried neither a database nor an MMKV store")
+                    LogUtil.w(AppConfig.TAG, "Restore aborted: archive does not contain ${AppDatabase.NAME}")
                     return@runIO false
                 }
             }
@@ -203,23 +179,9 @@ open class BackupRepository @Inject constructor(
         }.onFailure { LogUtil.w(AppConfig.TAG, "Failed to kill sibling processes", it) }
     }
 
-    /**
-     * A restored legacy snapshot has to survive the process restart, it consumed by
-     * the database create callback in whichever process opens the file next.
-     */
-    private fun stagePendingSnapshot(snapshot: LegacySnapshot) {
-        pendingSnapshotFile(app).writeText(JsonUtil.toJson(snapshot))
-    }
-
     private fun clearSidecars(dbPath: File) {
         File("${dbPath.path}-wal").delete()
         File("${dbPath.path}-shm").delete()
-    }
-
-    private fun findLegacyMmkvDir(root: File): File? {
-        if (File(root, LEGACY_PROBE_FILE).isFile) return root
-        return root.walkTopDown().maxDepth(3)
-            .firstOrNull { it.isDirectory && File(it, LEGACY_PROBE_FILE).isFile }
     }
 
     private fun scheduleSelfRestart() {
@@ -278,12 +240,8 @@ open class BackupRepository @Inject constructor(
         private const val UNPACK_PREFIX = "unpack_"
         private const val DOWNLOAD_PREFIX = "webdav_"
         private const val STAMP_FORMAT = "yyyy-MM-dd-HH-mm-ss"
-        private const val LEGACY_PROBE_FILE = "MAIN"
         private const val RESTART_REQUEST_CODE = 0x5265
         private const val RESTART_DELAY_MS = 400L
         private const val SERVICE_STOP_GRACE_MS = 600L
-        private const val PENDING_SNAPSHOT = "pending_legacy_snapshot.json"
-
-        fun pendingSnapshotFile(app: Application): File = File(app.filesDir, PENDING_SNAPSHOT)
     }
 }

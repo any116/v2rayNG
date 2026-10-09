@@ -36,8 +36,7 @@
 3. **分层**：`ui/` → `data/repository/` → `data/`（Room 3 DAO）/ `handler/` → 网络 / 内核。
    ViewModel 不得 import `handler/`、`core/`、`service/`、`data/*Dao`、`android.content.Context`。
 4. **唯一持久层**：Room 3（`androidx.room3`）是唯一可写持久层。
-   禁止新增 `SharedPreferences` / `DataStore` / Room 2 / MMKV 写入。
-   仅 `data/legacy/MmkvLegacyReader.kt` 允许**只读**访问旧 MMKV 目录（一次性导入）。
+   禁止新增 `SharedPreferences` / `DataStore` / Room 2 或其他持久化方案。
 
 ## 技术基线（改依赖前先核对）
 
