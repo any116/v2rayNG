@@ -5,6 +5,7 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.idnHost
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.util.Utils
+import okio.ByteString.Companion.encodeUtf8
 import java.net.URI
 
 object SocksFmt : FmtBase() {
@@ -53,6 +54,6 @@ object SocksFmt : FmtBase() {
             else
                 ":"
 
-        return toUri(config, Utils.encode(pw, true), null)
+        return toUri(config, pw.encodeUtf8().base64(includePadding = false), null)
     }
 }
