@@ -60,8 +60,10 @@ android {
     }
     buildTypes {
         release {
-        signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+            // AGP requires code shrinking for resource shrinking; proguard-rules.pro disables renaming and optimization.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
