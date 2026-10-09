@@ -12,6 +12,12 @@
     <string name="action_cancel">لغو</string>
     <string name="migration_fail">جاگورویی داڌه یل شکست خرد!</string>
     <string name="pull_down_to_refresh">سی وانۊ کردن، بلگه ن بلم بکشین!</string>
+    <string name="action_retry">دوواره آزمایش کۊنین</string>
+    <string name="boot_storage_failed_title">ره وستن تموم نوابی</string>
+    <string name="boot_storage_failed_message">داڌه یل برنومه هنی آماده نؽن. دوواره آزمایش کۊنین؛ اگه موشکل هنی هڌس، برنومه ن دوواره ره بۊنین.</string>
+    <string name="boot_storage_not_ready">داڌه یل آماده نؽن</string>
+    <string name="boot_storage_failed_escape">هنی موشکل هڌس؟ ترین لادراری ن وورگنین.</string>
+    <string name="action_restore_from_webdav">وورگندن ز WebDAV</string>
 
     <!-- Notifications -->
     <string name="notification_action_stop_v2ray">واڌاشتن</string>
@@ -457,6 +463,10 @@
     <string name="tasker_default_profile">Default</string>
     <string name="toast_tasker_select_profile">Select a profile first</string>
     <string name="toast_field_required">Please fill in: %1$s</string>
+    <string name="form_searchable_label">%1$s (قابل پیتینیڌن)</string>
+    <string name="msg_no_result">هیچ گزینه جۊر نوابی</string>
+    <string name="toast_sub_chain_same_profile">پروکسی وۊرۊی وو دری نتری ی کانفیگ بۊن</string>
+    <string name="toast_sub_chain_profile_missing">کانفیگن نجوست: %s</string>
 
     <string name="share_method_qrcode">کود QR</string>
     <string name="share_method_clipboard">لف گیری لینک کانفیگ</string>
@@ -525,6 +535,8 @@
     <string name="acc_add_rule">ٱووردن قانووݩ</string>
     <string name="acc_start">ره وستن سرویس</string>
     <string name="acc_stop">واڌاشتن سرویس</string>
+    <string name="acc_check_connection">منپیزن واجۊری کوݩ</string>
+    <string name="acc_cancel_connection_test">لغو آزمایش منپیزن</string>
     <string name="acc_back">برگشت</string>
     <string name="acc_search">پیتینیڌن</string>
     <string name="acc_add">ٱووردن کانفیگ</string>

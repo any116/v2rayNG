@@ -12,6 +12,12 @@
     <string name="action_cancel">Hủy</string>
     <string name="migration_fail">Không thể chuyển dữ liệu!</string>
     <string name="pull_down_to_refresh">Kéo xuống để làm mới!</string>
+    <string name="action_retry">Thử lại</string>
+    <string name="boot_storage_failed_title">Khởi tạo chưa hoàn tất</string>
+    <string name="boot_storage_failed_message">Bộ nhớ của ứng dụng chưa sẵn sàng. Hãy thử lại hoặc khởi động lại ứng dụng nếu vấn đề vẫn tiếp diễn.</string>
+    <string name="boot_storage_not_ready">Bộ nhớ chưa sẵn sàng</string>
+    <string name="boot_storage_failed_escape">Vẫn gặp vấn đề? Bạn có thể khôi phục bản sao lưu.</string>
+    <string name="action_restore_from_webdav">Khôi phục từ WebDAV</string>
 
     <!-- Notifications -->
     <string name="notification_action_stop_v2ray">Ngắt kết nối v2rayNG</string>
@@ -457,6 +463,10 @@
     <string name="tasker_default_profile">Default</string>
     <string name="toast_tasker_select_profile">Select a profile first</string>
     <string name="toast_field_required">Please fill in: %1$s</string>
+    <string name="form_searchable_label">%1$s (có thể tìm kiếm)</string>
+    <string name="msg_no_result">Không có mục phù hợp</string>
+    <string name="toast_sub_chain_same_profile">Proxy đầu vào và đầu ra không thể dùng cùng một cấu hình</string>
+    <string name="toast_sub_chain_profile_missing">Không tìm thấy cấu hình: %s</string>
 
     <string name="share_method_qrcode">Mã QR</string>
     <string name="share_method_clipboard">Sao chép liên kết cấu hình</string>
@@ -525,6 +535,8 @@
     <string name="acc_add_rule">Thêm quy tắc định tuyến</string>
     <string name="acc_start">Khởi động dịch vụ</string>
     <string name="acc_stop">Dừng dịch vụ</string>
+    <string name="acc_check_connection">Kiểm tra kết nối</string>
+    <string name="acc_cancel_connection_test">Hủy kiểm tra kết nối</string>
     <string name="acc_back">Quay lại</string>
     <string name="acc_search">Tìm kiếm</string>
     <string name="acc_add">Thêm cấu hình</string>

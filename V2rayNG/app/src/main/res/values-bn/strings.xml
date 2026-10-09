@@ -12,6 +12,12 @@
     <string name="action_cancel">বাতিল</string>
     <string name="migration_fail">ডেটা স্থানান্তর ব্যর্থ!</string>
     <string name="pull_down_to_refresh">রিফ্রেশ করতে নিচে টানুন!</string>
+    <string name="action_retry">আবার চেষ্টা করুন</string>
+    <string name="boot_storage_failed_title">প্রারম্ভিক প্রস্তুতি অসম্পূর্ণ</string>
+    <string name="boot_storage_failed_message">অ্যাপের স্টোরেজ এখনও প্রস্তুত নয়। আবার চেষ্টা করুন, অথবা সমস্যা চলতে থাকলে অ্যাপটি পুনরায় চালু করুন।</string>
+    <string name="boot_storage_not_ready">স্টোরেজ প্রস্তুত নয়</string>
+    <string name="boot_storage_failed_escape">এখনও সমস্যা হচ্ছে? আপনি ব্যাকআপ পুনরুদ্ধার করতে পারেন।</string>
+    <string name="action_restore_from_webdav">WebDAV থেকে পুনরুদ্ধার করুন</string>
 
     <!-- Notifications -->
     <string name="notification_action_stop_v2ray">বন্ধ করুন</string>
@@ -457,6 +463,10 @@
     <string name="tasker_default_profile">Default</string>
     <string name="toast_tasker_select_profile">Select a profile first</string>
     <string name="toast_field_required">Please fill in: %1$s</string>
+    <string name="form_searchable_label">%1$s (অনুসন্ধানযোগ্য)</string>
+    <string name="msg_no_result">কোনো মিল পাওয়া যায়নি</string>
+    <string name="toast_sub_chain_same_profile">প্রবেশ ও প্রস্থান প্রক্সি একই প্রোফাইল ব্যবহার করতে পারে না</string>
+    <string name="toast_sub_chain_profile_missing">প্রোফাইল পাওয়া যায়নি: %s</string>
 
     <string name="share_method_qrcode">QR কোড</string>
     <string name="share_method_clipboard">প্রোফাইল লিংক কপি করুন</string>
@@ -525,6 +535,8 @@
     <string name="acc_add_rule">রাউটিং নিয়ম যোগ করুন</string>
     <string name="acc_start">সার্ভিস শুরু করুন</string>
     <string name="acc_stop">সার্ভিস বন্ধ করুন</string>
+    <string name="acc_check_connection">সংযোগ পরীক্ষা করুন</string>
+    <string name="acc_cancel_connection_test">সংযোগ পরীক্ষা বাতিল করুন</string>
     <string name="acc_back">ফিরে যান</string>
     <string name="acc_search">অনুসন্ধান করুন</string>
     <string name="acc_add">কনফিগারেশন যোগ করুন</string>

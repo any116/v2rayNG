@@ -12,6 +12,12 @@
     <string name="action_cancel">Отмена</string>
     <string name="migration_fail">Перенос данных не выполнен!</string>
     <string name="pull_down_to_refresh">Потяните вниз для обновления!</string>
+    <string name="action_retry">Повторить</string>
+    <string name="boot_storage_failed_title">Инициализация не завершена</string>
+    <string name="boot_storage_failed_message">Хранилище приложения ещё не готово. Повторите попытку или перезапустите приложение, если проблема сохраняется.</string>
+    <string name="boot_storage_not_ready">Хранилище не готово</string>
+    <string name="boot_storage_failed_escape">Проблема сохраняется? Можно восстановить резервную копию.</string>
+    <string name="action_restore_from_webdav">Восстановить из WebDAV</string>
 
     <!-- Notifications -->
     <string name="notification_action_stop_v2ray">Остановить</string>
@@ -457,6 +463,10 @@
     <string name="tasker_default_profile">Default</string>
     <string name="toast_tasker_select_profile">Select a profile first</string>
     <string name="toast_field_required">Please fill in: %1$s</string>
+    <string name="form_searchable_label">%1$s (с поиском)</string>
+    <string name="msg_no_result">Нет совпадений</string>
+    <string name="toast_sub_chain_same_profile">Входной и выходной прокси не могут использовать один и тот же профиль</string>
+    <string name="toast_sub_chain_profile_missing">Профиль не найден: %s</string>
 
     <string name="share_method_qrcode">QR-код</string>
     <string name="share_method_clipboard">Копировать ссылку профиля</string>
@@ -525,6 +535,8 @@
     <string name="acc_add_rule">Добавить правило маршрутизации</string>
     <string name="acc_start">Запустить службу</string>
     <string name="acc_stop">Остановить службу</string>
+    <string name="acc_check_connection">Проверить соединение</string>
+    <string name="acc_cancel_connection_test">Отменить проверку соединения</string>
     <string name="acc_back">Назад</string>
     <string name="acc_search">Поиск</string>
     <string name="acc_add">Добавить профиль</string>

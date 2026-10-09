@@ -12,6 +12,12 @@
     <string name="action_cancel">取消</string>
     <string name="migration_fail">資料遷移失敗！</string>
     <string name="pull_down_to_refresh">請下拉重新整理！</string>
+    <string name="action_retry">重試</string>
+    <string name="boot_storage_failed_title">初始化未完成</string>
+    <string name="boot_storage_failed_message">應用程式資料尚未就緒，請重試；若持續失敗，請重新啟動應用程式。</string>
+    <string name="boot_storage_not_ready">儲存空間尚未就緒</string>
+    <string name="boot_storage_failed_escape">仍然無法完成？可以從備份還原。</string>
+    <string name="action_restore_from_webdav">從 WebDAV 還原</string>
 
     <!-- Notifications -->
     <string name="notification_action_stop_v2ray">停止</string>
@@ -457,6 +463,10 @@
     <string name="tasker_default_profile">Default</string>
     <string name="toast_tasker_select_profile">請選擇一個配置</string>
     <string name="toast_field_required">請填寫：%1$s</string>
+    <string name="form_searchable_label">%1$s（可搜尋）</string>
+    <string name="msg_no_result">沒有符合的項目</string>
+    <string name="toast_sub_chain_same_profile">前置代理與落地代理不能使用同一個設定檔</string>
+    <string name="toast_sub_chain_profile_missing">找不到設定檔：%s</string>
 
     <string name="share_method_qrcode">QR Code</string>
     <string name="share_method_clipboard">複製設定連結</string>
@@ -525,6 +535,8 @@
     <string name="acc_add_rule">新增路由規則</string>
     <string name="acc_start">啟動服務</string>
     <string name="acc_stop">停止服務</string>
+    <string name="acc_check_connection">檢查連線</string>
+    <string name="acc_cancel_connection_test">取消連線測試</string>
     <string name="acc_back">返回</string>
     <string name="acc_search">搜尋</string>
     <string name="acc_add">新增設定</string>
