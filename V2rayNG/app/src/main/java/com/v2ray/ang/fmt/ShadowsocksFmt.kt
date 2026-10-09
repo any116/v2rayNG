@@ -7,6 +7,7 @@ import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.extension.idnHost
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import okio.ByteString.Companion.encodeUtf8
 import java.net.URI
 
 object ShadowsocksFmt : FmtBase() {
@@ -120,6 +121,6 @@ object ShadowsocksFmt : FmtBase() {
     fun toUri(config: ProfileItem): String {
         val pw = "${config.method}:${config.password}"
 
-        return toUri(config, Utils.encode(pw, true), null)
+        return toUri(config, pw.encodeUtf8().base64(includePadding = false), null)
     }
 }

@@ -11,6 +11,7 @@ import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import okio.ByteString.Companion.encodeUtf8
 import java.net.URI
 
 object VmessFmt : FmtBase() {
@@ -147,7 +148,7 @@ object VmessFmt : FmtBase() {
         vmessQRCode.pcs = config.pinnedCA256.orEmpty()
 
         val json = JsonUtil.toJson(vmessQRCode)
-        return Utils.encode(json)
+        return json.encodeUtf8().base64()
     }
 
     /**
