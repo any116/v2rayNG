@@ -45,7 +45,8 @@ sealed interface AppRoute : BaseRoute {
 - 普通屏：系统默认返回即可；需要在返回前保存/确认的，用 `BackHandler`
   把返回翻成 Action（如 `ScannerScreen`、`FormPagedDropdownField` 的弹出层），
   ViewModel 决定 `finishWith` 什么结果。
-- `MainActivity` 覆写 `onKeyDown` 做 `moveTaskToBack(false)`，这是主屏特例，不要复制到别处。
+- `MainActivity` 通过 `OnBackPressedDispatcher` 将系统返回退到后台；仅保留
+  `onKeyDown` 对 `KEYCODE_BUTTON_B` 的手柄兼容，这是主屏特例，不要复制到别处。
 
 ## 3. Preview 规范
 

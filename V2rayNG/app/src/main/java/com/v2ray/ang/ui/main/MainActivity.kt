@@ -5,6 +5,7 @@ import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
@@ -59,6 +60,11 @@ class MainActivity : BaseHelperActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                moveTaskToBack(false)
+            }
+        })
         // The notification permission request moved behind the storage barrier (see
         // ScreenContent): a system dialog on the very first frame competes with first draw.
         viewModel.onAction(MainAction.Initialize)
@@ -205,8 +211,11 @@ class MainActivity : BaseHelperActivity() {
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_BUTTON_B) {
-            moveTaskToBack(false)
+        // KEYCODE_BACK is dispatched through OnBackPressedDispatcher so Android 13+ can keep
+        // the predictive-back path. BUTTON_B is retained for TV/gamepad devices, which deliver
+        // the controller button as a regular key event instead of a system back gesture.
+        if (keyCode == KeyEvent.KEYCODE_BUTTON_B) {
+            if (event.repeatCount == 0) onBackPressedDispatcher.onBackPressed()
             return true
         }
         return super.onKeyDown(keyCode, event)
