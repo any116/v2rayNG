@@ -1,5 +1,5 @@
-# Resource shrinking requires R8 code shrinking. Only remove unused code;
-# preserve class/member names and disable bytecode optimization.
+# Resource shrinking requires R8 code shrinking. Keep DEX names stable and disable bytecode
+# optimization; the rules below preserve reflection, serialization, native and Android entry points.
 -dontobfuscate
 -dontoptimize
 

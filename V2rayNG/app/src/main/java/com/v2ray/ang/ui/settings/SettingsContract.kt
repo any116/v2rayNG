@@ -62,4 +62,7 @@ sealed interface SettingsAction : BaseAction {
 sealed interface SettingsEvent : BaseEvent.Platform {
     /** AppCompat switches the per-app locale on the main thread and recreates the Activity. */
     data class ApplyLanguage(val code: String) : SettingsEvent
+
+    /** Recreates the host after the setting write so the back dispatcher reads the new value. */
+    data object PredictiveBackChanged : SettingsEvent
 }

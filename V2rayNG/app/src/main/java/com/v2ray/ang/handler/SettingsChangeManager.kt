@@ -23,7 +23,8 @@ object SettingsChangeManager {
         AppConfig.PREF_IS_BOOTED,
         AppConfig.PREF_DELAY_TEST_URL,
         AppConfig.PREF_REAL_PING_CONCURRENCY,
-        AppConfig.PREF_IP_API_URL
+        AppConfig.PREF_IP_API_URL,
+        AppConfig.PREF_PREDICTIVE_BACK
     )
 
     /** Whether the given key only affects UI and never requires a core restart. */

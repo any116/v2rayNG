@@ -1,6 +1,5 @@
 package com.v2ray.ang.ui.routing
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +29,7 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
@@ -85,7 +85,7 @@ fun RoutingEditScreen(
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    BackHandler { onAction(RoutingEditAction.Back) }
+    AppBackHandler { onAction(RoutingEditAction.Back) }
 
     BaseScreen(
         viewModel = viewModel,

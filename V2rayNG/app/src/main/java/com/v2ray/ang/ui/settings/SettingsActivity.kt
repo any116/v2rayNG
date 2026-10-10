@@ -21,5 +21,10 @@ class SettingsActivity : BaseActivity() {
             AppLocaleManager.setApplicationLanguage(event.code)
             true
         }
+
+        SettingsEvent.PredictiveBackChanged -> {
+            recreate()
+            true
+        }
     }
 }

@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.logcat
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +44,7 @@ import androidx.paging.compose.itemContentType
 import androidx.paging.compose.itemKey
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppSearchState
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
@@ -75,7 +75,7 @@ fun LogcatScreen(
 ) {
     val dispatch = remember(viewModel) { viewModel::onAction }
 
-    BackHandler { dispatch(LogcatAction.Back) }
+    AppBackHandler { dispatch(LogcatAction.Back) }
     LifecycleStartEffect(viewModel) {
         dispatch(LogcatAction.Started)
         onStopOrDispose { dispatch(LogcatAction.Stopped) }

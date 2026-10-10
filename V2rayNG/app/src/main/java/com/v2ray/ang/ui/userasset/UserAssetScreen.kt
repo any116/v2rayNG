@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.userasset
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -38,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.base.LocalPlatformActions
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
@@ -82,7 +82,7 @@ fun UserAssetScreen(viewModel: UserAssetViewModel) {
         }
     }
 
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,

@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.userasset
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -20,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
@@ -35,7 +35,7 @@ fun UserAssetUrlScreen(viewModel: UserAssetUrlViewModel) {
     val onAction = remember(viewModel) { viewModel::onAction }
     val onBack = remember(onAction) { { onAction(UserAssetUrlAction.Back) } }
 
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,
