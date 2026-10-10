@@ -184,6 +184,8 @@
     <string name="summary_pref_per_app_proxy">Thông thường: ứng dụng đã chọn dùng proxy, ứng dụng chưa chọn kết nối trực tiếp;\nChế độ bỏ qua: ứng dụng đã chọn kết nối trực tiếp, ứng dụng chưa chọn dùng proxy.\nTrong trình đơn có tùy chọn tự động chọn các ứng dụng sẽ dùng proxy.</string>
     <string name="title_pref_is_booted">Tự động kết nối khi khởi động</string>
     <string name="summary_pref_is_booted">Tự động kết nối với máy chủ đã chọn khi khởi động; thao tác này có thể không thành công</string>
+    <string name="title_pref_predictive_back">Cử chỉ quay lại dự đoán</string>
+    <string name="summary_pref_predictive_back">Hiển thị hoạt ảnh cho cử chỉ quay lại trên Android 13 trở lên. Thay đổi có hiệu lực ngay lập tức.</string>
 
 
     <string name="subscription_updater_job_tips">Tác vụ sẽ chạy trong nền và thông tin tiến độ sẽ hiển thị trong thông báo.</string>

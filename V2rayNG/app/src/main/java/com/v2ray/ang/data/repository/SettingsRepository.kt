@@ -36,6 +36,7 @@ enum class BoolPref(val key: String, val default: Boolean) {
     IS_BOOTED(AppConfig.PREF_IS_BOOTED, false),
     ROOT_MODE_ENABLE(AppConfig.PREF_ROOT_MODE_ENABLE, false),
     ROOT_LAN_SHARING(AppConfig.PREF_ROOT_LAN_SHARING, false),
+    PREDICTIVE_BACK(AppConfig.PREF_PREDICTIVE_BACK, true),
 
     DYNAMIC_COLOR(AppConfig.PREF_DYNAMIC_COLOR, true);
 

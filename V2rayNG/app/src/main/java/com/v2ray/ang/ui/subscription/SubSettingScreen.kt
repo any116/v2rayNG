@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.subscription
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.ItemDivider
@@ -54,7 +54,7 @@ fun SubSettingScreen(viewModel: SubSettingViewModel) {
     val onAction = remember(viewModel) { viewModel::onAction }
     val dialogs = rememberSubDialogHost(onAction)
 
-    BackHandler { onAction(SubAction.Back) }
+    AppBackHandler { onAction(SubAction.Back) }
 
     BaseScreen(
         viewModel = viewModel,

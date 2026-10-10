@@ -1,6 +1,5 @@
 package com.v2ray.ang.ui.routing
 
-import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.DropdownMenu
@@ -23,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.RoutingType
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.ConfirmDialog
 import com.v2ray.ang.ui.components.SelectListDialog
@@ -61,7 +61,7 @@ fun RoutingSettingScreen(
     val domainStrategies = rememberStringOptions(R.array.routing_domain_strategy)
     val dialogs = remember { RoutingDialogHost() }
 
-    BackHandler { onAction(RoutingAction.Back) }
+    AppBackHandler { onAction(RoutingAction.Back) }
 
     BaseScreen(
         viewModel = viewModel,

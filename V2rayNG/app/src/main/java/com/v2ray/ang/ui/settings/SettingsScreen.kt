@@ -1,6 +1,6 @@
 package com.v2ray.ang.ui.settings
 
-import androidx.activity.compose.BackHandler
+import android.os.Build
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +23,7 @@ import com.v2ray.ang.R
 import com.v2ray.ang.data.repository.BoolPref
 import com.v2ray.ang.data.repository.StringPref
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.CollapsiblePreferenceGroupHeader
 import com.v2ray.ang.ui.components.NavigationBarsSpacer
@@ -41,7 +42,7 @@ fun SettingsScreen(
 ) {
     val onAction = remember(viewModel) { viewModel::onAction }
     val onBack = remember(onAction) { { onAction(SettingsAction.Back) } }
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,
@@ -618,6 +619,14 @@ private fun ObservatorySection(state: SettingsUiState, onAction: (SettingsAction
 
 @Composable
 private fun AdvancedSection(state: SettingsUiState, onAction: (SettingsAction) -> Unit) {
+    BoolItem(
+        BoolPref.PREDICTIVE_BACK,
+        state[BoolPref.PREDICTIVE_BACK],
+        R.string.title_pref_predictive_back,
+        R.string.summary_pref_predictive_back,
+        enabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+        onAction = onAction
+    )
     BoolItem(
         BoolPref.IS_BOOTED,
         state[BoolPref.IS_BOOTED],

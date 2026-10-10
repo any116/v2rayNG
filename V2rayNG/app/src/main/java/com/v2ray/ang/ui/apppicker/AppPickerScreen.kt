@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.apppicker
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -30,6 +29,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppDropdownMenuItems
 import com.v2ray.ang.ui.components.AppListItem
 import com.v2ray.ang.ui.components.AppSearchState
@@ -60,7 +60,7 @@ fun AppPickerScreen(viewModel: AppPickerViewModel) {
     val selectedProvider = remember(stateHolder) { { stateHolder.value.selected } }
     val emptyResultProvider = remember(stateHolder) { { stateHolder.value.isEmptyResult } }
 
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,

@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.about
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -41,6 +40,7 @@ import com.v2ray.ang.R
 import com.v2ray.ang.data.repository.TranslatorGroup
 import com.v2ray.ang.data.repository.TranslatorRow
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
@@ -70,7 +70,7 @@ fun AboutScreen(viewModel: AboutViewModel) {
     val dispatch = remember(viewModel) { viewModel::onAction }
     val onBack = remember(dispatch) { { dispatch(AboutAction.Back) } }
 
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,

@@ -47,7 +47,7 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 - 渠道维度 `distribution`：`fdroid`（`applicationIdSuffix .fdroid`）与 `playstore`
 - `generateLocaleConfig = true`，`localeFilters` = en / zh-rCN / zh-rTW / vi / ru / fa / ar / bn / bqi-rIR
 - release 当前 `isMinifyEnabled = true`、`isShrinkResources = true`；`proguard-rules.pro` 用
-  `-dontobfuscate` / `-dontoptimize` 禁止 DEX 改名与优化，仅保留 R8 移除未使用代码所需的缩减能力
+  `-dontobfuscate` / `-dontoptimize` 保持 DEX 名称稳定并降低行为变化风险，仅保留 R8 移除未使用代码所需的缩减能力
 - Room schema 导出到 `app/schemas/`（`room3 { schemaDirectory(...) }`），**随版本管理提交**
 
 ## Dependency Management

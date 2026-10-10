@@ -184,6 +184,8 @@
     <string name="summary_pref_per_app_proxy">عام: تستخدم التطبيقات المحددة الوكيل، وتتصل التطبيقات غير المحددة مباشرة؛\nوضع التجاوز: تتصل التطبيقات المحددة مباشرة، وتستخدم التطبيقات غير المحددة الوكيل.\nيتوفر في القائمة خيار لتحديد التطبيقات التي ستستخدم الوكيل تلقائيًا.</string>
     <string name="title_pref_is_booted">الاتصال تلقائياً عند بدء التشغيل</string>
     <string name="summary_pref_is_booted">الاتصال تلقائياً بالخادم المحدد عند بدء التشغيل؛ قد لا تنجح المحاولة</string>
+    <string name="title_pref_predictive_back">إيماءة الرجوع التنبؤية</string>
+    <string name="summary_pref_predictive_back">إظهار حركة إيماءة الرجوع على Android 13 والإصدارات الأحدث. تُطبَّق التغييرات فورًا.</string>
 
 
     <string name="subscription_updater_job_tips">ستعمل المهمة في الخلفية، وسيُعرض تقدمها في الإشعار.</string>

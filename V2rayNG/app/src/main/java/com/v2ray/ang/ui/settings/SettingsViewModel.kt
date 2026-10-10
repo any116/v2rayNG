@@ -166,7 +166,10 @@ class SettingsViewModel @Inject constructor(
                 restartService = restartService || !pref.uiOnly,
             )
         }
-        persist { repo.setBool(pref, value) }
+        persist {
+            repo.setBool(pref, value)
+            if (pref == BoolPref.PREDICTIVE_BACK) platform(SettingsEvent.PredictiveBackChanged)
+        }
     }
 
     private fun applyString(pref: StringPref, value: String) {

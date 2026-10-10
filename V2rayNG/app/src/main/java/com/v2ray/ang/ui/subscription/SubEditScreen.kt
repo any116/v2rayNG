@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.subscription
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +29,7 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
@@ -88,7 +88,7 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
     val prevQuery by viewModel.slices.prevQuery.collectAsStateWithLifecycle()
     val nextQuery by viewModel.slices.nextQuery.collectAsStateWithLifecycle()
 
-    BackHandler { onAction(SubEditAction.Back) }
+    AppBackHandler { onAction(SubEditAction.Back) }
 
     BaseScreen(
         viewModel = viewModel,

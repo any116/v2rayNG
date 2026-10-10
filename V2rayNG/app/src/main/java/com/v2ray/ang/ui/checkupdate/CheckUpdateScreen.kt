@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.checkupdate
 
 import android.content.res.Configuration
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.NavigationBarsSpacer
@@ -53,7 +53,7 @@ fun CheckUpdateScreen(viewModel: CheckUpdateViewModel) {
     val onBack = remember(dispatch) { { dispatch(CheckUpdateAction.Back) } }
     val dialog = remember { UpdateDialogHost() }
 
-    BackHandler(onBack = onBack)
+    AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,
