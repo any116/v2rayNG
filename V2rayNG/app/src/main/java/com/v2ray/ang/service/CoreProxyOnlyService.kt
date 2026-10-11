@@ -49,6 +49,7 @@ class CoreProxyOnlyService : Service(), ServiceControl {
             return START_STICKY
         }
 
+        val requestToken = CoreServiceManager.startRequestToken()
         val requestedGuid = intent?.getStringExtra(LauncherManager.EXTRA_SELECTED_GUID)
         serviceScope.launch {
             if (!CoreStartup.refreshPreferences(this@CoreProxyOnlyService)) {
@@ -66,7 +67,7 @@ class CoreProxyOnlyService : Service(), ServiceControl {
             if (!requestedGuid.isNullOrBlank()) {
                 CoreServiceManager.adoptSelectedGuid(this@CoreProxyOnlyService, requestedGuid)
             }
-            if (!CoreServiceManager.startCoreLoop(null)) {
+            if (!CoreServiceManager.startCoreLoop(null, requestToken)) {
                 LogUtil.e(AppConfig.TAG, "StartCore-Proxy: Failed to start core loop")
                 stopSelf()
             }
@@ -76,9 +77,9 @@ class CoreProxyOnlyService : Service(), ServiceControl {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         CoreServiceManager.stopCoreLoop()
         serviceScope.cancel()
+        super.onDestroy()
     }
 
     override fun getService(): Service = this

@@ -70,6 +70,7 @@ class CoreVpnService : VpnService(), ServiceControl {
     }
 
     override fun onDestroy() {
+        CoreServiceManager.stopCoreLoop()
         super.onDestroy()
         LogUtil.i(AppConfig.TAG, "StartCore-VPN: Service destroyed")
         if (isRunning) {
@@ -98,12 +99,13 @@ class CoreVpnService : VpnService(), ServiceControl {
             return START_NOT_STICKY
         }
 
+        val requestToken = CoreServiceManager.startRequestToken()
         val requestedGuid = intent?.getStringExtra(LauncherManager.EXTRA_SELECTED_GUID)
         LogUtil.i(AppConfig.TAG, "StartCore-VPN: Service command received, systemVpnStart=$isSystemVpnStart")
 
         startJob?.cancel()
         startJob = serviceScope.launch {
-            if (!startSequence(requestedGuid)) {
+            if (!startSequence(requestedGuid, requestToken)) {
                 unlockStart()
                 stopSelf()
             }
@@ -120,7 +122,7 @@ class CoreVpnService : VpnService(), ServiceControl {
      *  4. establish the tun interface,
      *  5. start the core.
      */
-    private suspend fun startSequence(requestedGuid: String?): Boolean {
+    private suspend fun startSequence(requestedGuid: String?, requestToken: Long): Boolean {
         // Aborts when this process' storage bootstrap (integrity check and snapshot refresh)
         // failed: starting the core on coded defaults would ignore the user's mode,
         // ports and routing settings.
@@ -145,7 +147,7 @@ class CoreVpnService : VpnService(), ServiceControl {
             LogUtil.e(AppConfig.TAG, "StartCore-VPN: Setup failed")
             return false
         }
-        if (!CoreServiceManager.startCoreLoop(mInterface)) {
+        if (!CoreServiceManager.startCoreLoop(mInterface, requestToken)) {
             LogUtil.e(AppConfig.TAG, "StartCore-VPN: Failed to start core loop")
             stopAllService()
             return false
@@ -158,7 +160,8 @@ class CoreVpnService : VpnService(), ServiceControl {
 
     override fun startService() {
         // Kept for ServiceControl; the real sequence is triggered by onStartCommand.
-        startJob = serviceScope.launch { CoreServiceManager.startCoreLoop(mInterface) }
+        val requestToken = CoreServiceManager.startRequestToken()
+        startJob = serviceScope.launch { CoreServiceManager.startCoreLoop(mInterface, requestToken) }
     }
 
     override fun stopService() {

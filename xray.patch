@@ -1,80 +1,346 @@
+diff --git a/core/context.go b/core/context.go
+index 5042796..af81af2 100644
+--- a/core/context.go
++++ b/core/context.go
+@@ -2,6 +2,8 @@ package core
+ 
+ import (
+ 	"context"
++
++	"github.com/xtls/xray-core/transport/internet"
+ )
+ 
+ // XrayKey is the key type of Instance in Context, exported for test.
+@@ -40,6 +42,9 @@ func toContext(ctx context.Context, v *Instance) context.Context {
+ 	if FromContext(ctx) != v {
+ 		ctx = context.WithValue(ctx, xrayKey, v)
+ 	}
++	if v != nil {
++		ctx = internet.InheritConnectionReset(ctx, v.ctx)
++	}
+ 	return ctx
+ }
+ 
+diff --git a/core/xray.go b/core/xray.go
+index 794ce8f..0c29680 100644
+--- a/core/xray.go
++++ b/core/xray.go
+@@ -167,7 +167,7 @@ func OptionalFeatures(ctx context.Context, callback interface{}) error {
+ // The instance is not started at this point.
+ // To ensure Xray instance works properly, the config must contain one Dispatcher, one InboundHandlerManager and one OutboundHandlerManager. Other features are optional.
+ func New(config *Config) (*Instance, error) {
+-	server := &Instance{ctx: context.Background()}
++	server := &Instance{ctx: internet.WithConnectionReset(context.Background())}
+ 
+ 	done, err := initInstanceWithConfig(config, server)
+ 	if done {
+@@ -178,7 +178,7 @@ func New(config *Config) (*Instance, error) {
+ }
+ 
+ func NewWithContext(ctx context.Context, config *Config) (*Instance, error) {
+-	server := &Instance{ctx: ctx}
++	server := &Instance{ctx: internet.WithConnectionReset(ctx)}
+ 
+ 	done, err := initInstanceWithConfig(config, server)
+ 	if done {
+@@ -272,6 +272,7 @@ func (s *Instance) Close() error {
+ 			errs = append(errs, err)
+ 		}
+ 	}
++	internet.ResetConnections(s.ctx)
+ 	if len(errs) > 0 {
+ 		return errors.New("failed to close all features").Base(errors.New(serial.Concat(errs...)))
+ 	}
+@@ -279,6 +280,17 @@ func (s *Instance) Close() error {
+ 	return nil
+ }
+ 
++// SetConnectionResetEnabled controls connection cleanup for this instance.
++func (s *Instance) SetConnectionResetEnabled(enabled bool) {
++	internet.SetConnectionResetEnabled(s.ctx, enabled)
++}
++
++// ResetConnections immediately closes this instance's tracked system
++// connections. It is safe to call while the instance is running.
++func (s *Instance) ResetConnections() {
++	internet.ResetConnections(s.ctx)
++}
++
+ // RequireFeatures registers a callback, which will be called when all dependent features are registered.
+ // The callback must be a func(). All its parameters must be features.Feature.
+ func (s *Instance) RequireFeatures(callback interface{}, optional bool) error {
+diff --git a/transport/internet/connection_reset.go b/transport/internet/connection_reset.go
+new file mode 100644
+index 0000000..6698369
+--- /dev/null
++++ b/transport/internet/connection_reset.go
+@@ -0,0 +1,183 @@
++package internet
++
++import (
++	"context"
++	"sync"
++	"sync/atomic"
++	"syscall"
++	"time"
++
++	"github.com/xtls/xray-core/common/net"
++)
++
++const (
++	connectionPruneInterval = 5 * time.Second
++	connectionPruneIdle     = 2 * time.Minute
++)
++
++type trackedConn interface {
++	Close() error
++}
++
++type syscallConnection interface {
++	SyscallConn() (syscall.RawConn, error)
++}
++
++// connectionResetController keeps the system connections opened by one Xray
++// instance. It is deliberately attached to the instance context so resetting
++// a temporary delay-test instance cannot interrupt the running core.
++type connectionResetController struct {
++	enabled atomic.Bool
++	ctx     context.Context
++	lastDial atomic.Int64
++
++	mu      sync.Mutex
++	conns   map[uint64]trackedConn
++	nextKey uint64
++	reaping bool
++}
++
++type connectionResetContextKey struct{}
++
++// WithConnectionReset creates an instance-scoped connection reset controller
++// in ctx. Xray instances call this once while they are being constructed.
++func WithConnectionReset(ctx context.Context) context.Context {
++	if ctx == nil {
++		ctx = context.Background()
++	}
++	controller := &connectionResetController{
++		ctx:    ctx,
++		conns:  make(map[uint64]trackedConn),
++	}
++	controller.enabled.Store(true)
++	return context.WithValue(ctx, connectionResetContextKey{}, controller)
++}
++
++func connectionResetFromContext(ctx context.Context) *connectionResetController {
++	if ctx == nil {
++		return nil
++	}
++	controller, _ := ctx.Value(connectionResetContextKey{}).(*connectionResetController)
++	return controller
++}
++
++// InheritConnectionReset copies the instance controller from parent to ctx.
++// Xray creates request contexts from context.Background in a few public APIs;
++// inheriting here keeps those requests associated with the owning instance.
++func InheritConnectionReset(ctx context.Context, parent context.Context) context.Context {
++	if controller := connectionResetFromContext(parent); controller != nil {
++		return context.WithValue(ctx, connectionResetContextKey{}, controller)
++	}
++	return ctx
++}
++
++// SetConnectionResetEnabled controls whether ResetConnections closes tracked
++// connections. Connections remain tracked while disabled so enabling the
++// switch takes effect on the next reset without losing the current sockets.
++func SetConnectionResetEnabled(ctx context.Context, enabled bool) {
++	if controller := connectionResetFromContext(ctx); controller != nil {
++		controller.enabled.Store(enabled)
++	}
++}
++
++// ResetConnections closes all system connections opened by the instance
++// represented by ctx. Closing the raw transport connection also tears down
++// protocol wrappers such as TLS, HTTP/2 and QUIC.
++func ResetConnections(ctx context.Context) {
++	controller := connectionResetFromContext(ctx)
++	if controller == nil || !controller.enabled.Load() {
++		return
++	}
++	controller.reset()
++}
++
++func (c *connectionResetController) reset() {
++	c.mu.Lock()
++	conns := c.conns
++	c.conns = make(map[uint64]trackedConn, len(conns))
++	c.mu.Unlock()
++
++	for _, conn := range conns {
++		_ = conn.Close()
++	}
++}
++
++func (c *connectionResetController) track(conn trackedConn) {
++	c.lastDial.Store(time.Now().UnixNano())
++
++	c.mu.Lock()
++	c.nextKey++
++	c.conns[c.nextKey] = conn
++	startReaper := !c.reaping
++	if startReaper {
++		c.reaping = true
++	}
++	c.mu.Unlock()
++
++	if startReaper {
++		go c.reapLoop()
++	}
++}
++
++func (c *connectionResetController) reapLoop() {
++	ticker := time.NewTicker(connectionPruneInterval)
++	defer ticker.Stop()
++
++	var done <-chan struct{}
++	if c.ctx != nil {
++		done = c.ctx.Done()
++	}
++
++	for {
++		select {
++		case <-done:
++			c.mu.Lock()
++			c.reaping = false
++			c.mu.Unlock()
++			return
++		case <-ticker.C:
++			idleSince := time.Since(time.Unix(0, c.lastDial.Load()))
++			c.mu.Lock()
++			c.reapLocked()
++			if len(c.conns) == 0 && idleSince > connectionPruneIdle {
++				c.reaping = false
++				c.mu.Unlock()
++				return
++			}
++			c.mu.Unlock()
++		}
++	}
++}
++
++func (c *connectionResetController) reapLocked() {
++	for key, conn := range c.conns {
++		sc, ok := conn.(syscallConnection)
++		if !ok {
++			continue
++		}
++		raw, err := sc.SyscallConn()
++		if err != nil {
++			delete(c.conns, key)
++			continue
++		}
++		if err := raw.Control(func(uintptr) {}); err != nil {
++			delete(c.conns, key)
++		}
++	}
++}
++
++func trackConnection(ctx context.Context, conn trackedConn) {
++	if controller := connectionResetFromContext(ctx); controller != nil && conn != nil {
++		controller.track(conn)
++	}
++}
++
++func trackDialedConnection(ctx context.Context, conn net.Conn) net.Conn {
++	trackConnection(ctx, conn)
++	return conn
++}
++
++func trackDialedPacketConn(ctx context.Context, conn net.PacketConn) net.PacketConn {
++	trackConnection(ctx, conn)
++	return conn
++}
 diff --git a/transport/internet/finalmask/realm/client.go b/transport/internet/finalmask/realm/client.go
-index ab7ba6bb..b63f7dfe 100644
+index b47b9d5..0ac19c4 100644
 --- a/transport/internet/finalmask/realm/client.go
 +++ b/transport/internet/finalmask/realm/client.go
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
 +//go:build !android
++
  package realm
  
  import (
 diff --git a/transport/internet/finalmask/realm/config.go b/transport/internet/finalmask/realm/config.go
-index 2604fa8a..8c16265d 100644
+index 4ad7dc9..cf5c037 100644
 --- a/transport/internet/finalmask/realm/config.go
 +++ b/transport/internet/finalmask/realm/config.go
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
 +//go:build !android
++
  package realm
  
  import (
-diff --git a/transport/internet/finalmask/realm/config_norealm.go b/transport/internet/finalmask/realm/config_norealm.go
-new file mode 100644
-index 00000000..c075eb23
---- /dev/null
-+++ b/transport/internet/finalmask/realm/config_norealm.go
-@@ -0,0 +1,19 @@
-+//go:build android
-+
-+package realm
-+
-+import (
-+	"net"
-+
-+	"github.com/xtls/xray-core/common/errors"
-+)
-+
-+func (c *Config) UDP() {}
-+
-+func (c *Config) WrapPacketConnClient(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
-+	return nil, errors.New("realm is not supported on this platform")
-+}
-+
-+func (c *Config) WrapPacketConnServer(raw net.PacketConn, level int, levelCount int) (net.PacketConn, error) {
-+	return nil, errors.New("realm is not supported on this platform")
-+}
 diff --git a/transport/internet/finalmask/realm/http.go b/transport/internet/finalmask/realm/http.go
-index 2f58ee89..8d3f9cf9 100644
+index 2f58ee8..3f4c121 100644
 --- a/transport/internet/finalmask/realm/http.go
 +++ b/transport/internet/finalmask/realm/http.go
-@@ -1,3 +1,4 @@
-+ //go:build !android
+@@ -1,3 +1,5 @@
++//go:build !android
++
  package realm
  
  import (
 diff --git a/transport/internet/finalmask/realm/punch.go b/transport/internet/finalmask/realm/punch.go
-index 92174f6b..ef87738b 100644
+index 92174f6..1334354 100644
 --- a/transport/internet/finalmask/realm/punch.go
 +++ b/transport/internet/finalmask/realm/punch.go
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
 +//go:build !android
++
  package realm
  
  import (
 diff --git a/transport/internet/finalmask/realm/server.go b/transport/internet/finalmask/realm/server.go
-index 544bf49d..70639f32 100644
+index 1cca665..9855215 100644
 --- a/transport/internet/finalmask/realm/server.go
 +++ b/transport/internet/finalmask/realm/server.go
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
 +//go:build !android
++
  package realm
  
  import (
 diff --git a/transport/internet/finalmask/realm/stun.go b/transport/internet/finalmask/realm/stun.go
-index 5ff59bb3..737d7eba 100644
+index d7dbe3f..89db97d 100644
 --- a/transport/internet/finalmask/realm/stun.go
 +++ b/transport/internet/finalmask/realm/stun.go
-@@ -1,3 +1,4 @@
+@@ -1,3 +1,5 @@
 +//go:build !android
++
  package realm
  
  import (
-
+diff --git a/transport/internet/system_dialer.go b/transport/internet/system_dialer.go
+index bfe3fb5..f4d1bb9 100644
+--- a/transport/internet/system_dialer.go
++++ b/transport/internet/system_dialer.go
+@@ -87,7 +87,7 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
+ 			return nil, err
+ 		}
+ 		return &net.PacketConnWrapper{
+-			PacketConn: packetConn,
++			PacketConn: trackDialedPacketConn(ctx, packetConn),
+ 			Dest:       destAddr,
+ 		}, nil
+ 	}
+@@ -141,7 +141,11 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
+ 		}
+ 	}
+ 
+-	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
++	conn, err := dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
++	if err != nil {
++		return nil, err
++	}
++	return trackDialedConnection(ctx, conn), nil
+ }
+ 
+ func (d *DefaultSystemDialer) DestIpAddress() net.IP {

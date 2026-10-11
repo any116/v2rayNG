@@ -67,6 +67,7 @@ class CoreRootService : Service(), ServiceControl {
             return START_STICKY
         }
 
+        val requestToken = CoreServiceManager.startRequestToken()
         val requestedGuid = intent?.getStringExtra(LauncherManager.EXTRA_SELECTED_GUID)
 
         // Child of the service-owned scope, so onDestroy cancels it. A second equivalent command
@@ -91,7 +92,7 @@ class CoreRootService : Service(), ServiceControl {
 
             // In-process core first (this also posts the foreground notification), then install the
             // root routing. Order is load-bearing: rules must never point at a dead core.
-            if (!CoreServiceManager.startCoreLoop(null)) {
+            if (!CoreServiceManager.startCoreLoop(null, requestToken)) {
                 LogUtil.e(AppConfig.TAG, "StartCore-Root: core failed to start")
                 stopService()
                 return@launch
@@ -106,7 +107,6 @@ class CoreRootService : Service(), ServiceControl {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         // Wait for any in-flight async setup before tearing down. The rules are installed off the
         // main thread and can take seconds (the setup script waits for the tun to appear); a stop
         // arriving in that window would tear down first, and the setup would then re-install rules
@@ -118,6 +118,7 @@ class CoreRootService : Service(), ServiceControl {
         // listener. Synchronous on purpose — leaving rules behind breaks the network.
         RootProxyManager.stop(this)
         CoreServiceManager.stopCoreLoop()
+        super.onDestroy()
     }
 
     override fun getService(): Service = this

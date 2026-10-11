@@ -31,14 +31,24 @@ import com.v2ray.ang.service.DialerWebviewService
 import com.v2ray.ang.service.NetworkMonitor
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import libv2ray.CoreCallbackHandler
 import libv2ray.CoreController
 import libv2ray.ProcessFinder
 import java.lang.ref.SoftReference
 import java.net.InetSocketAddress
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 object CoreServiceManager {
 
@@ -49,13 +59,23 @@ object CoreServiceManager {
     private var browserDialer: IDialerService? = null
     private var networkMonitor: NetworkMonitor? = null
 
-    @Volatile
-    private var isReloading = false
+    private val coreLifecycleMutex = Mutex()
+    private val lifecycleGeneration = AtomicLong(0)
+    private val reloadSequence = AtomicLong(0)
+    private val lifecycleJobsLock = Any()
+    private var reloadJob: Job? = null
+    private var stopJob: Job? = null
+    private val receiverRegistered = AtomicBoolean(false)
 
     /** Tun descriptor the core was started with; null in proxy-only and root modes. */
+    @Volatile
     private var currentVpnInterface: ParcelFileDescriptor? = null
 
-    private val bgScope = CoroutineScope(Dispatchers.IO)
+    private val bgScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, error ->
+            LogUtil.e(AppConfig.TAG, "StartCore-Manager: Uncaught background failure", error)
+        }
+    )
 
     var serviceControl: SoftReference<ServiceControl>? = null
         set(value) {
@@ -72,6 +92,9 @@ object CoreServiceManager {
 
     fun getRunningServerName() = currentConfig?.remarks.orEmpty()
 
+    /** Captures the lifecycle generation when a start request is accepted. */
+    fun startRequestToken(): Long = lifecycleGeneration.get()
+
     /**
      * Persists a guid requested by a receiver or Tasker.
      */
@@ -87,7 +110,20 @@ object CoreServiceManager {
      *
      * @return false when the core is already running or no service is attached.
      */
-    suspend fun startCoreLoop(vpnInterface: ParcelFileDescriptor?): Boolean {
+    suspend fun startCoreLoop(
+        vpnInterface: ParcelFileDescriptor?,
+        requestToken: Long = startRequestToken(),
+    ): Boolean {
+        val pendingStop = synchronized(lifecycleJobsLock) { stopJob }
+        pendingStop?.join()
+        if (requestToken != lifecycleGeneration.get()) return false
+        return coreLifecycleMutex.withLock {
+            if (requestToken != lifecycleGeneration.get()) return@withLock false
+            startCoreLoopLocked(vpnInterface, requestToken)
+        }
+    }
+
+    private suspend fun startCoreLoopLocked(vpnInterface: ParcelFileDescriptor?, requestToken: Long): Boolean {
         if (isRunning()) {
             LogUtil.w(AppConfig.TAG, "StartCore-Manager: Core already running")
             return false
@@ -97,13 +133,15 @@ object CoreServiceManager {
             return false
         }
         return try {
-            doStartCoreLoop(service, vpnInterface)
+            doStartCoreLoop(service, vpnInterface, requestToken)
             true
+        } catch (e: CancellationException) {
+            unregisterReceiverSafely(service)
+            throw e
         } catch (e: Exception) {
             val message = e.message?.takeUnless { it.isBlank() } ?: e.javaClass.simpleName
             LogUtil.e(AppConfig.TAG, "StartCore-Manager: $message", e)
-            runCatching { service.unregisterReceiver(mMsgReceive) }
-                .onFailure { LogUtil.w(AppConfig.TAG, "StartCore-Manager: receiver already unregistered", it) }
+            unregisterReceiverSafely(service)
             MessageHelper.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, message)
             NotificationManager.cancelNotification()
             false
@@ -111,20 +149,52 @@ object CoreServiceManager {
     }
 
     @Throws(Exception::class)
-    private suspend fun doStartCoreLoop(service: Service, vpnInterface: ParcelFileDescriptor?) {
+    private suspend fun doStartCoreLoop(
+        service: Service,
+        vpnInterface: ParcelFileDescriptor?,
+        requestToken: Long,
+    ) {
+        ensureStartCurrent(requestToken)
+        registerReceiverSafely(service)
+        currentVpnInterface = vpnInterface
+        launchCore(service, vpnInterface, requestToken = requestToken)
+        startNetworkMonitor(service)
+    }
+
+    private fun ensureStartCurrent(requestToken: Long) {
+        check(requestToken == lifecycleGeneration.get()) { "core start superseded by stop" }
+    }
+
+    private fun registerReceiverSafely(service: Service) {
+        if (!receiverRegistered.compareAndSet(false, true)) return
         val filter = IntentFilter(AppConfig.BROADCAST_ACTION_SERVICE)
         filter.addAction(Intent.ACTION_SCREEN_ON)
         filter.addAction(Intent.ACTION_SCREEN_OFF)
         filter.addAction(Intent.ACTION_USER_PRESENT)
-        ContextCompat.registerReceiver(service, mMsgReceive, filter, Utils.receiverFlags())
+        try {
+            ContextCompat.registerReceiver(service, mMsgReceive, filter, Utils.receiverFlags())
+        } catch (e: Exception) {
+            receiverRegistered.set(false)
+            throw e
+        }
+    }
 
-        currentVpnInterface = vpnInterface
-        launchCore(service, vpnInterface)
-        startNetworkMonitor(service)
+    private fun unregisterReceiverSafely(service: Service) {
+        if (!receiverRegistered.compareAndSet(true, false)) return
+        try {
+            service.unregisterReceiver(mMsgReceive)
+        } catch (e: Exception) {
+            LogUtil.w(AppConfig.TAG, "StartCore-Manager: Failed to unregister receiver", e)
+        }
     }
 
     @Throws(Exception::class)
-    private suspend fun launchCore(service: Service, vpnInterface: ParcelFileDescriptor?, isReload: Boolean = false) {
+    private suspend fun launchCore(
+        service: Service,
+        vpnInterface: ParcelFileDescriptor?,
+        isReload: Boolean = false,
+        requestToken: Long? = null,
+    ) {
         // Authoritative single-row reads: this is a strong-consistency point, not a snapshot read.
         // The caller refreshed the SettingsStore snapshot first, so every Prefs.* read below is warm.
         val profileDao = PlatformDependencies.profileDao(service)
@@ -145,6 +215,7 @@ object CoreServiceManager {
         if (!result.status) {
             error(result.errorMessage.ifBlank { "Failed to get V2Ray config" })
         }
+        requestToken?.let(::ensureStartCurrent)
 
         currentConfig = config
         var tunFd = vpnInterface?.fd ?: 0
@@ -154,6 +225,7 @@ object CoreServiceManager {
             tunFd = 0
         }
 
+        requestToken?.let(::ensureStartCurrent)
         NotificationManager.showNotification(currentConfig)
         if (dialerAddr.isNotNullEmpty()) {
             CoreNativeManager.reconcileBrowserDialer(dialerAddr)
@@ -191,35 +263,46 @@ object CoreServiceManager {
 
     fun stopCoreLoop(): Boolean {
         val service = getService() ?: return false
+        val hadResources = coreController.isRunning ||
+            receiverRegistered.get() ||
+            networkMonitor != null ||
+            browserDialer != null ||
+            synchronized(lifecycleJobsLock) { stopJob?.isActive == true }
+        if (!hadResources) return false
 
+        lifecycleGeneration.incrementAndGet()
+        reloadSequence.incrementAndGet()
         networkMonitor?.unregister()
         networkMonitor = null
         currentVpnInterface = null
 
-        if (isRunning()) {
-            // Native teardown is blocking; keep it off whichever thread the caller is on.
-            bgScope.launch {
-                try {
-                    coreController.stopLoop()
-                } catch (e: Exception) {
-                    LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to stop V2Ray loop", e)
-                }
-            }
-        }
-
         CoreNativeManager.reconcileBrowserDialer("")
-        if (browserDialer != null) {
-            browserDialer!!.stop()
-            browserDialer = null
+        browserDialer?.let {
+            runCatching { it.stop() }
+                .onFailure { error -> LogUtil.w(AppConfig.TAG, "StartCore-Manager: Failed to stop dialer", error) }
         }
-
+        browserDialer = null
+        unregisterReceiverSafely(service)
         MessageHelper.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")
         NotificationManager.cancelNotification()
 
-        try {
-            service.unregisterReceiver(mMsgReceive)
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to unregister receiver", e)
+        synchronized(lifecycleJobsLock) {
+            reloadJob?.cancel()
+            reloadJob = null
+            if (stopJob?.isActive != true) {
+                // Native teardown is blocking; keep it off whichever thread the caller is on.
+                stopJob = bgScope.launch {
+                    coreLifecycleMutex.withLock {
+                        try {
+                            if (coreController.isRunning) coreController.stopLoop()
+                        } catch (e: Exception) {
+                            LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to stop V2Ray loop", e)
+                        } finally {
+                            currentConfig = null
+                        }
+                    }
+                }
+            }
         }
 
         return true
@@ -233,8 +316,28 @@ object CoreServiceManager {
         networkMonitor = NetworkMonitor(
             connectivity = connectivity,
             onUnderlyingNetworksChanged = { networks -> serviceControl?.get()?.setUnderlyingNetworks(networks) },
-            onHandover = { bgScope.launch { reloadCore() } },
+            onNetworkLost = { resetConnections() },
+            onHandover = { scheduleCoreReload() },
         ).also { it.register() }
+    }
+
+    private fun resetConnections() {
+        val generation = lifecycleGeneration.get()
+        bgScope.launch {
+            if (generation != lifecycleGeneration.get() || !isRunning()) return@launch
+            LogUtil.i(AppConfig.TAG, "StartCore-Manager: Upstream network lost; resetting connections")
+            runCatching { coreController.resetConnections() }
+                .onFailure { LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to reset connections", it) }
+        }
+    }
+
+    private fun scheduleCoreReload() {
+        val generation = lifecycleGeneration.get()
+        val sequence = reloadSequence.incrementAndGet()
+        synchronized(lifecycleJobsLock) {
+            reloadJob?.cancel()
+            reloadJob = bgScope.launch { reloadCore(generation, sequence) }
+        }
     }
 
     /**
@@ -244,26 +347,33 @@ object CoreServiceManager {
      * The config is rebuilt on purpose — outbound server domains are resolved while building it,
      * and an address resolved on a network that is gone can be unusable on the new one.
      */
-    private suspend fun reloadCore(): Boolean {
-        if (isReloading) return false
-        val service = getService() ?: return false
-        if (!isRunning()) return false
+    private suspend fun reloadCore(generation: Long, sequence: Long): Boolean {
+        if (generation != lifecycleGeneration.get()) return false
+        val service = getService()
+        if (service == null) return false
 
         return try {
-            val tunFd = currentVpnInterface
-            isReloading = true
-            LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core reload start...")
-            coreController.stopLoop()
-            launchCore(service, tunFd, isReload = true)
-            LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core reload finished")
-            true
+            coreLifecycleMutex.withLock {
+                if (generation != lifecycleGeneration.get() || sequence != reloadSequence.get() || !isRunning()) {
+                    return@withLock false
+                }
+
+                val tunFd = currentVpnInterface
+                LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core reload start...")
+                withContext(NonCancellable) {
+                    coreController.stopLoop()
+                    launchCore(service, tunFd, isReload = true)
+                }
+                LogUtil.i(AppConfig.TAG, "StartCore-Manager: Core reload finished")
+                true
+            }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             val message = e.message?.takeUnless { it.isBlank() } ?: e.javaClass.simpleName
             LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to reload core: $message", e)
             MessageHelper.sendMsg2UI(service, AppConfig.MSG_STATE_START_FAILURE, message)
             false
-        } finally {
-            isReloading = false
         }
     }
 
@@ -295,6 +405,7 @@ object CoreServiceManager {
         if (requestId.isEmpty()) return false
         if (!isRunning()) return false
         val service = getService() ?: return false
+        val generation = lifecycleGeneration.get()
 
         bgScope.launch {
             var replied = false
@@ -302,7 +413,11 @@ object CoreServiceManager {
                 var time = -1L
                 var errorStr = ""
                 try {
-                    time = coreController.measureDelay(SettingsManager.getDelayTestUrl())
+                    if (generation != lifecycleGeneration.get() || !isRunning()) {
+                        errorStr = "core not running"
+                    } else {
+                        time = coreController.measureDelay(SettingsManager.getDelayTestUrl())
+                    }
                 } catch (e: Exception) {
                     LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to measure delay", e)
                     errorStr = e.message?.substringAfter("\":").orEmpty()

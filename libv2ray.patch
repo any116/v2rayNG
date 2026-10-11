@@ -1,5 +1,5 @@
 diff --git a/libv2ray_main.go b/libv2ray_main.go
-index 83b876f..c759ef9 100644
+index 83b876f..fcfe5e2 100644
 --- a/libv2ray_main.go
 +++ b/libv2ray_main.go
 @@ -1,6 +1,7 @@
@@ -10,34 +10,84 @@ index 83b876f..c759ef9 100644
  	"fmt"
  	"io"
  	"log"
-@@ -38,6 +39,8 @@ type CoreController struct {
+@@ -38,6 +39,10 @@ type CoreController struct {
  	coreMutex       sync.Mutex
  	coreInstance    *core.Instance
  	IsRunning       bool
 +	ctx             context.Context
 +	cancel          context.CancelFunc
++
++	connectionResetEnabled bool
  }
  
  // CoreCallbackHandler defines interface for receiving callbacks and notifications from the core service
-@@ -118,6 +121,7 @@ func (x *CoreController) StartLoop(configContent string, tunFd int32) (err error
+@@ -99,7 +104,34 @@ func NewCoreController(s CoreCallbackHandler) *CoreController {
+ 	}
+ 
+ 	return &CoreController{
+-		CallbackHandler: s,
++		CallbackHandler:         s,
++		connectionResetEnabled: true,
++	}
++}
++
++// SetConnectionResetEnabled enables or disables closing tracked outbound
++// connections during an explicit reset or core shutdown. The default is true
++// so network handovers and normal shutdown do not retain stale sockets.
++func (x *CoreController) SetConnectionResetEnabled(enabled bool) {
++	x.coreMutex.Lock()
++	x.connectionResetEnabled = enabled
++	instance := x.coreInstance
++	x.coreMutex.Unlock()
++
++	if instance != nil {
++		instance.SetConnectionResetEnabled(enabled)
++	}
++}
++
++// ResetConnections closes all tracked outbound connections for this core when
++// connection reset is enabled. It is safe to call while the core is running.
++func (x *CoreController) ResetConnections() {
++	x.coreMutex.Lock()
++	instance := x.coreInstance
++	x.coreMutex.Unlock()
++
++	if instance != nil {
++		instance.ResetConnections()
+ 	}
+ }
+ 
+@@ -118,7 +150,15 @@ func (x *CoreController) StartLoop(configContent string, tunFd int32) (err error
  		return nil
  	}
  
-+	x.ctx, x.cancel = context.WithCancel(context.Background())
- 	return x.doStartLoop(configContent)
+-	return x.doStartLoop(configContent)
++	ctx, cancel := context.WithCancel(context.Background())
++	x.ctx, x.cancel = ctx, cancel
++	if err := x.doStartLoop(configContent); err != nil {
++		cancel()
++		x.doShutdown()
++		x.ctx, x.cancel = nil, nil
++		return err
++	}
++	return nil
  }
  
-@@ -128,6 +132,9 @@ func (x *CoreController) StopLoop() error {
+ // StopLoop safely stops the core processing loop and releases resources
+@@ -128,6 +168,12 @@ func (x *CoreController) StopLoop() error {
  	defer x.coreMutex.Unlock()
  
  	if x.IsRunning {
 +		if x.cancel != nil {
 +			x.cancel()
 +		}
++		if x.coreInstance != nil {
++			x.coreInstance.ResetConnections()
++		}
  		x.doShutdown()
  		x.CallbackHandler.Shutdown()
  		x.CallbackHandler.OnEmitStatus(0, "Core stopped")
-@@ -157,6 +164,8 @@ func (x *CoreController) doShutdown() {
+@@ -157,6 +203,8 @@ func (x *CoreController) doShutdown() {
  	}
  	x.IsRunning = false
  	x.statsManager = nil
@@ -46,19 +96,24 @@ index 83b876f..c759ef9 100644
  }
  
  // doStartLoop sets up and starts the Xray core
+@@ -167,10 +215,11 @@ func (x *CoreController) doStartLoop(configContent string) error {
+ 		return fmt.Errorf("config error: %w", err)
+ 	}
+ 
+-	x.coreInstance, err = core.New(config)
++	x.coreInstance, err = core.NewWithContext(x.ctx, config)
+ 	if err != nil {
+ 		return fmt.Errorf("core init failed: %w", err)
+ 	}
++	x.coreInstance.SetConnectionResetEnabled(x.connectionResetEnabled)
+ 	x.statsManager = x.coreInstance.GetFeature(corestats.ManagerType()).(corestats.Manager)
+ 
+ 	log.Println("starting core...")
 diff --git a/libv2ray_utils.go b/libv2ray_utils.go
-index 342e516..a340c3b 100644
+index 342e516..03254d6 100644
 --- a/libv2ray_utils.go
 +++ b/libv2ray_utils.go
-@@ -4,7 +4,6 @@ import (
- 	"context"
- 	"errors"
- 	"fmt"
--	"io"
- 	"net"
- 	"net/http"
- 	"strconv"
-@@ -53,10 +52,14 @@ func (x *CoreController) QueryAllOutboundTrafficStats() string {
+@@ -53,13 +53,21 @@ func (x *CoreController) QueryAllOutboundTrafficStats() string {
  }
  
  // MeasureDelay measures network latency to a specified URL through the current core instance
@@ -68,15 +123,23 @@ index 342e516..a340c3b 100644
 +// An error is returned if the core is not running or the connection fails
  func (x *CoreController) MeasureDelay(url string) (int64, error) {
 -	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-+	if !x.IsRunning || x.ctx == nil {
++	x.coreMutex.Lock()
++	running, instance, parent := x.IsRunning, x.coreInstance, x.ctx
++	x.coreMutex.Unlock()
++
++	if !running || instance == nil || parent == nil {
 +		return -1, errors.New("core instance is nil")
 +	}
 +
-+	ctx, cancel := context.WithTimeout(x.ctx, 3*time.Second)
++	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
  	defer cancel()
  
- 	return measureInstDelay(ctx, x.coreInstance, url)
-@@ -89,7 +92,11 @@ func MeasureOutboundDelay(ConfigureFileContent string, url string) (int64, error
+-	return measureInstDelay(ctx, x.coreInstance, url)
++	return measureInstDelay(ctx, instance, url)
+ }
+ 
+ // MeasureOutboundDelay measures the outbound delay for a given configuration and URL
+@@ -89,7 +97,11 @@ func MeasureOutboundDelay(ConfigureFileContent string, url string) (int64, error
  		return -1, fmt.Errorf("startup failed: %w", err)
  	}
  	defer inst.Close()
@@ -89,16 +152,7 @@ index 342e516..a340c3b 100644
  }
  
  // measureInstDelay measures the delay for an instance to a given URL
-@@ -104,7 +111,7 @@ func measureInstDelay(ctx context.Context, inst *core.Instance, url string) (int
- 
- 	tr := &http.Transport{
- 		TLSHandshakeTimeout: 6 * time.Second,
--		DisableKeepAlives:   false,
-+		DisableKeepAlives:   true,
- 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
- 			dest, err := corenet.ParseDestination(fmt.Sprintf("%s:%s", network, addr))
- 			if err != nil {
-@@ -113,64 +120,27 @@ func measureInstDelay(ctx context.Context, inst *core.Instance, url string) (int
+@@ -113,23 +125,20 @@ func measureInstDelay(ctx context.Context, inst *core.Instance, url string) (int
  			return core.Dial(ctx, inst, dest)
  		},
  	}
@@ -110,71 +164,52 @@ index 342e516..a340c3b 100644
 +		Timeout:   0,
  	}
  
--	var minDuration int64 = -1
+ 	var minDuration int64 = -1
 -	success := false
--	var lastErr error
+ 	var lastErr error
 -
 -	defer tr.CloseIdleConnections()
 -
 -	const attempts = 2
--	for i := 0; i < attempts; i++ {
--		select {
--		case <-ctx.Done():
++	const attempts = 1
+ 	for i := 0; i < attempts; i++ {
+ 		select {
+ 		case <-ctx.Done():
 -			if !success {
--				return -1, ctx.Err()
--			}
--			return minDuration, nil
--		default:
--		}
--
--		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
--		if err != nil {
--			lastErr = fmt.Errorf("failed to create HTTP request: %w", err)
--			continue
--		}
--
--		start := time.Now()
--		resp, err := client.Do(req)
--		if err != nil {
--			lastErr = err
--			continue
--		}
--
++			if minDuration < 0 {
+ 				return -1, ctx.Err()
+ 			}
+ 			return minDuration, nil
+@@ -149,27 +158,23 @@ func measureInstDelay(ctx context.Context, inst *core.Instance, url string) (int
+ 			continue
+ 		}
+ 
 -		_, err = io.Copy(io.Discard, resp.Body)
--		resp.Body.Close()
++		_, readErr := io.Copy(io.Discard, resp.Body)
+ 		resp.Body.Close()
 -
--		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
--			lastErr = fmt.Errorf("invalid status: %s", resp.Status)
--			continue
--		}
+ 		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+ 			lastErr = fmt.Errorf("invalid status: %s", resp.Status)
+ 			continue
+ 		}
 -
 -		if err != nil {
 -			lastErr = fmt.Errorf("failed to read response body: %w", err)
--			continue
--		}
--
--		duration := time.Since(start).Milliseconds()
--		if !success || duration < minDuration {
--			minDuration = duration
--		}
-+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-+	if err != nil {
-+		return -1, fmt.Errorf("failed to create HTTP request: %w", err)
-+	}
++		if readErr != nil {
++			lastErr = fmt.Errorf("failed to read response body: %w", readErr)
+ 			continue
+ 		}
  
+ 		duration := time.Since(start).Milliseconds()
+-		if !success || duration < minDuration {
++		if minDuration < 0 || duration < minDuration {
+ 			minDuration = duration
+ 		}
+-
 -		success = true
-+	start := time.Now()
-+	resp, err := client.Do(req)
-+	if err != nil {
-+		return -1, err
  	}
 -	if !success {
--		return -1, lastErr
-+	defer resp.Body.Close()
-+
-+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-+		return -1, fmt.Errorf("invalid status: %s", resp.Status)
++	if minDuration < 0 {
+ 		return -1, lastErr
  	}
--	return minDuration, nil
-+	return time.Since(start).Milliseconds(), nil
- }
+ 	return minDuration, nil
