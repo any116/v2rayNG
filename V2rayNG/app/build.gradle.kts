@@ -6,7 +6,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.aboutlibraries)
     alias(libs.plugins.room3)
 }
 
@@ -167,26 +166,6 @@ androidComponents {
 
 room3 {
     schemaDirectory("$projectDir/schemas")
-}
-
-aboutLibraries {
-    offlineMode = true
-
-    collect {
-        fetchRemoteLicense = false
-        fetchRemoteFunding = false
-        includePlatform = false
-    }
-
-    export {
-        prettyPrint = false
-        excludeFields.addAll("funding")
-    }
-
-    library {
-        duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.MERGE
-        duplicationRule = com.mikepenz.aboutlibraries.plugin.DuplicateRule.SIMPLE
-    }
 }
 
 dependencies {

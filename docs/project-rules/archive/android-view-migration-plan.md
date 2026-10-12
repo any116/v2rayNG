@@ -7,8 +7,9 @@
 
 - **About 开源许可（完成）**：最终没有采用 §4 的"自建许可 JSON DTO + WebView 替换"路线，
   而是接入 `com.mikepenz:aboutlibraries` 15.2.0：
-  - Gradle 插件 `aboutlibraries`（`offlineMode = true`）生成 `res/raw/aboutlibraries.json`；
-  - `ui/about/AboutLicenseContent.kt` 用 `produceLibraries(R.raw.aboutlibraries)` +
+  - `app/src/main/assets/aboutlibraries.json` 已固定提交到源码，后续增删或升级依赖时同步维护；
+    AboutLibraries Gradle 插件及构建期生成配置已移除；
+  - `ui/about/AboutLicenseContent.kt` 从 `context.assets` 读取 JSON，再用 `produceLibraries` +
     `LibrariesContainer`（M3、`LibrariesVariant.Refined`、`LibraryDetailMode.Sheet`）渲染，
     正文离线可读；
   - `LicenseWebView` / `AndroidView` / HTML 资产已全部移除——全仓库现在**没有业务 `AndroidView`**；

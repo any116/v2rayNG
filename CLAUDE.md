@@ -65,7 +65,7 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | Hilt | `2.60.1` | `hilt-android` + `hilt-android-compiler`(KSP) |
 | androidx.hilt | `1.4.0` | `hilt-work` + `hilt-compiler`，@HiltWorker 用 |
 | Glance | `1.3.0-alpha02` | 桌面组件（`:bg` 进程） |
-| AboutLibraries | `15.2.0` | 许可页；Gradle 插件 `offlineMode = true` 生成 `res/raw/aboutlibraries.json` |
+| AboutLibraries | `15.2.0` | 许可页；固定提交 `app/src/main/assets/aboutlibraries.json`，运行时读取 |
 | OkHttp | `5.5.0` | 订阅拉取、测速、更新检查 |
 | Coroutines | `1.11.0` | |
 | WorkManager | `2.12.0` | 含 `work-multiprocess` |
@@ -73,6 +73,11 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | Coil | `3.6.3` | `io.coil-kt.coil3:coil-compose`，只用于分应用代理的应用图标 |
 | reorderable | `3.1.0` | `sh.calvin.reorderable`，列表拖拽排序 |
 | Lifecycle | `2.11.0` | 含 `lifecycle-runtime-compose` |
+
+开源许可数据固定在 `V2rayNG/app/src/main/assets/aboutlibraries.json`，由
+`context.assets` 读取；不接入 AboutLibraries Gradle 插件或构建期生成任务。
+当前快照取自 `2.3.6` 发布的 fdroid APK（提交 `ed0228bb`），保留 174 个库条目的完整元数据。
+增删或升级发布依赖时需同步维护此 JSON 的库版本与许可信息。
 
 **DI 框架：Hilt**（`com.google.dagger.hilt.android`，KSP 处理器）。
 Application 带 `@HiltAndroidApp`，Activity / Service 带 `@AndroidEntryPoint`，ViewModel 带

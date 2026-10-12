@@ -10,6 +10,9 @@ object AppConfig {
     /** Directory names used in the app's file system. */
     const val DIR_ASSETS = "assets"
 
+    /** Bundled open-source library metadata, maintained independently of builds. */
+    const val ABOUT_LIBRARIES_ASSET = "aboutlibraries.json"
+
     const val WEBDAV_BACKUP_DIR = "backups"
     const val WEBDAV_BACKUP_FILE_NAME = "backup_ng.zip"
 

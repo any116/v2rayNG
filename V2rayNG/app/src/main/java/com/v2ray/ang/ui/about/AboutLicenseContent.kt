@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.ui.compose.LibraryDefaults
 import com.mikepenz.aboutlibraries.ui.compose.android.produceLibraries
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
@@ -18,14 +19,17 @@ import com.mikepenz.aboutlibraries.ui.compose.variant.LibrariesDensity
 import com.mikepenz.aboutlibraries.ui.compose.variant.LibrariesVariant
 import com.mikepenz.aboutlibraries.ui.compose.variant.LibraryActionMode
 import com.mikepenz.aboutlibraries.ui.compose.variant.LibraryDetailMode
+import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
 import com.v2ray.ang.ui.components.verticalScrollbar
 
-/** res/raw/aboutlibraries.json */
 @Composable
 fun AboutLicenseContent(modifier: Modifier = Modifier) {
-    val libraries by produceLibraries(R.raw.aboutlibraries)
+    val libraries by produceLibraries { context ->
+        val json = context.assets.open(AppConfig.ABOUT_LIBRARIES_ASSET).bufferedReader().use { it.readText() }
+        Libs.Builder().withJson(json).build()
+    }
     val listState = rememberLazyListState()
     val contentPadding = NavigationBarsBottomPadding()
 
