@@ -12,6 +12,7 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.util.JsonUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +31,7 @@ class RoutingEditViewModel @Inject constructor(
 
     private val outboundQuery = MutableStateFlow("")
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val slices = RoutingEditSlices(
         outboundTags = outboundQuery
             .flatMapLatest { repo.outboundTagPager(it) }

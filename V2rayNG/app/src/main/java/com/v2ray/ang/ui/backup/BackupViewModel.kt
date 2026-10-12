@@ -201,11 +201,7 @@ class BackupViewModel @Inject constructor(
     /** Failures propagate to `launch`'s onError, which logs through LogUtil and toasts once. */
     private fun cleanProfiles() = launch(loading = true) {
         val removed = repo.cleanupProfiles()
-        if (removed == null) {
-            toastError(R.string.toast_profile_storage_cleanup_skipped)
-        } else {
-            toast(BaseText.of(R.string.toast_profile_storage_cleanup, removed), ToastType.SUCCESS)
-        }
+        toast(BaseText.of(R.string.toast_profile_storage_cleanup, removed), ToastType.SUCCESS)
     }
 
     // ===== plumbing =====

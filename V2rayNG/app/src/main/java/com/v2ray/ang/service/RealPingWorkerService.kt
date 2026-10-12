@@ -17,6 +17,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
@@ -88,6 +89,7 @@ class RealPingWorkerService(
     private val completedCount = AtomicInteger(0)
     private val lastProgressAt = AtomicLong(0L)
 
+    @OptIn(DelicateCoroutinesApi::class)
     fun start() {
         if (total == 0) {
             onEvent(RealPingEvent.Finish)

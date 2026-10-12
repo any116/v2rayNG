@@ -96,9 +96,9 @@ fun AppTopBar(
             title = {
                 if (isSearchActive) {
                     SearchInputField(
-                        query = searchState?.query ?: "",
+                        query = searchState.query,
                         onQueryChange = onSearchQueryChange,
-                        placeholder = searchState?.placeholder
+                        placeholder = searchState.placeholder
                     )
                 } else {
                     Text(text = title, maxLines = 1, overflow = TextOverflow.Ellipsis)

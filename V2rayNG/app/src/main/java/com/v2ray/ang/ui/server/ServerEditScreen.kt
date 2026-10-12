@@ -42,6 +42,7 @@ import com.v2ray.ang.ui.components.DropdownOption
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
 import com.v2ray.ang.ui.components.NavigationBarsSpacer
 import com.v2ray.ang.ui.components.verticalScrollbar
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.collectLatest
 
@@ -124,6 +125,7 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
     }
 }
 
+@OptIn(FlowPreview::class)
 @Composable
 private fun rememberSyncedRawContent(
     guid: String,

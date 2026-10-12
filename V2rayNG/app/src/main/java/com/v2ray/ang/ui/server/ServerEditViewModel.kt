@@ -17,6 +17,7 @@ import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.ui.components.ToastType
 import com.v2ray.ang.util.JsonUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,6 +47,7 @@ class ServerEditViewModel @Inject constructor(
     private val chainQuery = MutableStateFlow("")
     private val tagQuery = MutableStateFlow("")
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val slices = ServerSlices(
         chainCandidates = chainQuery
             .flatMapLatest { repository.chainCandidatePager(it) }

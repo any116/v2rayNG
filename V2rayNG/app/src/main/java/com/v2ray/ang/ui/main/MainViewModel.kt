@@ -17,6 +17,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +62,7 @@ class MainViewModel @Inject constructor(
     private val query = MutableStateFlow("")
 
     /** Empty query passes through immediately so the first screen is not delayed. */
+    @OptIn(FlowPreview::class)
     private val debouncedQuery = query
         .debounce { if (it.isEmpty()) 0L else SEARCH_DEBOUNCE_MS }
         .distinctUntilChanged()
@@ -98,6 +101,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun servers(groupId: String): Flow<PagingData<ServerRowItem>> = synchronized(pagerLock) {
         pagers.getOrPut(groupId) {
             val scope = CoroutineScope(
@@ -123,6 +127,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private val counts: StateFlow<Map<String, Int>> =
         debouncedQuery
             .flatMapLatest { repo.observeCounts(it) }

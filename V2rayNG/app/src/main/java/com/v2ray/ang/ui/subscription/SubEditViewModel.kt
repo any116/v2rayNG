@@ -17,6 +17,7 @@ import com.v2ray.ang.ui.components.ToastType
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +63,7 @@ class SubEditViewModel @Inject constructor(
         loadJob = load()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun StateFlow<String>.toProfilePager() =
         flatMapLatest { repo.profileRemarkPager(it) }
             .cachedIn(viewModelScope)
