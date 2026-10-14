@@ -301,8 +301,7 @@ class ServerEditViewModel @Inject constructor(
         profile.description = repository.generateDescription(profile)
         applySubscriptionId(profile)
 
-        val savedGuid = repository.saveProfile(state.guid, profile)
-        repository.saveRawConfig(savedGuid, content)
+        val savedGuid = repository.saveProfile(state.guid, profile, content)
         return BaseResult.Saved(id = savedGuid, restartService = state.isRunning)
     }
 

@@ -1,24 +1,18 @@
 package com.v2ray.ang.data.entities
 
-import androidx.room3.ColumnInfo
-import androidx.room3.Entity
-import androidx.room3.Index
-import androidx.room3.PrimaryKey
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.util.Utils
+import kotlin.jvm.Transient
 
-@Entity(
-    tableName = "profiles",
-    indices = [
-        Index(value = ["subscriptionId", "groupSortOrder", "sortOrder", "guid"]),
-        Index(value = ["groupSortOrder", "sortOrder", "guid"]),
-        Index(value = ["dedupeKey"]),
-        Index(value = ["remarks"]),
-    ]
-)
+/**
+ * Complete profile domain model.
+ *
+ * This is deliberately no longer a Room entity. List metadata and the complete protocol
+ * payload have different invalidation and evolution requirements, so persistence is handled by
+ * [ProfileMetadataItem] and [ProfilePayloadItem] at the DAO boundary.
+ */
 data class ProfileItem(
-    @PrimaryKey
     val guid: String = "",
 
     /** Sparse ordering within a group; drag/insert rewrites a single row. */
@@ -28,14 +22,12 @@ data class ProfileItem(
      * Copy of the owning subscription's sortOrder, kept in sync by GROUP_ORDER_TRIGGERS.
      * Long.MAX_VALUE is the orphan fallback.
      */
-    @ColumnInfo(defaultValue = "9223372036854775807")
     var groupSortOrder: Long = Long.MAX_VALUE,
 
     /**
      * Stable digest of duplicateIdentity() used by SQL dedupe. Empty means "not computed yet";
      * ProfileDao.backfillDedupeKeys fills it lazily. Never set this by hand.
      */
-    @ColumnInfo(defaultValue = "")
     var dedupeKey: String = "",
 
     val configVersion: Int = 4,
@@ -109,6 +101,10 @@ data class ProfileItem(
 
     /** WireGuard DNS servers used inside the tunnel; entries must be plain IP addresses. */
     var remoteDNS: String? = null,
+
+    /** Original numeric protocol id when this client does not know the enum yet. */
+    @Transient
+    val persistedConfigType: Int? = null,
 ) {
 
     companion object {

@@ -3,11 +3,12 @@
 ## 0. 唯一持久层
 
 结构化数据全部存在 **Room 3**（`androidx.room3`）里，数据库文件 `v2rayng.db`，
-`AppDatabase` 版本 `2`，schema 导出到 `app/schemas/`（随版本管理提交）。
+`AppDatabase` 版本 `3`，schema 导出到 `app/schemas/`（随版本管理提交）。
 
 | 表 | 实体 | 说明 |
 | --- | --- | --- |
-| `profiles` | `ProfileItem` | 配置元数据 + 协议字段；列表查询走轻量投影，不载入全部列 |
+| `profiles` | `ProfileMetadataItem` | 配置元数据；列表查询不读取协议 payload |
+| `profile_payload` | `ProfilePayloadItem` | 完整协议对象 JSON + 去重摘要；与 profiles 在 DAO 事务内聚合 |
 | `profile_stats` | `ServerAffiliationInfo` | 测速延迟 |
 | `profile_raw` | `ProfileRaw` | CUSTOM 配置原文（单独表，无外键） |
 | `subscriptions` | `SubscriptionItem` | 订阅 / 分组 |

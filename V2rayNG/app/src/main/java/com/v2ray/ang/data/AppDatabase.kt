@@ -5,7 +5,8 @@ import androidx.room3.ColumnTypeConverters
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
 import com.v2ray.ang.data.entities.AssetUrlItem
-import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileMetadataItem
+import com.v2ray.ang.data.entities.ProfilePayloadItem
 import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
@@ -34,7 +35,8 @@ object DbConverters {
 
 @Database(
     entities = [
-        ProfileItem::class,
+        ProfileMetadataItem::class,
+        ProfilePayloadItem::class,
         ServerAffiliationInfo::class,
         ProfileRaw::class,
         SubscriptionItem::class,
@@ -42,7 +44,7 @@ object DbConverters {
         RulesetItem::class,
         SettingsEntry::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @ColumnTypeConverters(DbConverters::class)

@@ -12,6 +12,8 @@ import androidx.room3.paging.PagingSourceDaoReturnTypeConverter
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.data.entities.ProfileMetadataItem
+import com.v2ray.ang.data.entities.ProfilePayloadItem
 import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
@@ -19,6 +21,7 @@ import com.v2ray.ang.data.entities.SettingsEntry
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.dto.ProfileImportRecord
 import com.v2ray.ang.enums.EConfigType
+import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -246,10 +249,21 @@ interface ProfileDao {
     )
     suspend fun neighboursInAll(query: String, excludeGuid: String, offset: Int): List<String>
 
-    // ---- Single row ----
+    // ---- Single row / aggregate hydration ----
 
     @Query("SELECT * FROM profiles WHERE guid = :guid")
-    suspend fun findByGuid(guid: String): ProfileItem?
+    suspend fun findMetadataByGuid(guid: String): ProfileMetadataItem?
+
+    @Query("SELECT * FROM profile_payload WHERE guid = :guid")
+    suspend fun findPayloadByGuid(guid: String): ProfilePayloadItem?
+
+    @Transaction
+    suspend fun findByGuid(guid: String): ProfileItem? {
+        val metadata = findMetadataByGuid(guid) ?: return null
+        return metadata.mergeOrNull(findPayloadByGuid(guid)).also { profile ->
+            if (profile == null) logDroppedPayload(guid)
+        }
+    }
 
     /** Existence probe; avoids materialising ~60 columns just to test for null. */
     @Query("SELECT EXISTS(SELECT 1 FROM profiles WHERE guid = :guid)")
@@ -272,10 +286,17 @@ interface ProfileDao {
         SELECT * FROM profiles
          WHERE remarks = :remarks
          ORDER BY groupSortOrder, sortOrder, guid
-         LIMIT 1
         """
     )
-    suspend fun findByRemarks(remarks: String): ProfileItem?
+    suspend fun findMetadataByRemarks(remarks: String): List<ProfileMetadataItem>
+
+    @Transaction
+    suspend fun findByRemarks(remarks: String): ProfileItem? =
+        findMetadataByRemarks(remarks).firstNotNullOfOrNull { metadata ->
+            metadata.mergeOrNull(findPayloadByGuid(metadata.guid)).also { profile ->
+                if (profile == null) logDroppedPayload(metadata.guid)
+            }
+        }
 
     @Query(
         """
@@ -324,6 +345,30 @@ interface ProfileDao {
     @Query("SELECT guid FROM profiles ORDER BY groupSortOrder, sortOrder, guid LIMIT 1")
     suspend fun firstGuid(): String?
 
+    /** First profile with a readable-version payload; selection fallbacks must not pick metadata-only rows. */
+    @Query(
+        """
+        SELECT p.guid FROM profiles AS p
+        JOIN profile_payload AS payload ON payload.guid = p.guid
+        WHERE p.subscriptionId = :subscriptionId
+          AND payload.payloadVersion = $PROFILE_PAYLOAD_VERSION
+        ORDER BY p.groupSortOrder, p.sortOrder, p.guid
+        LIMIT 1
+        """
+    )
+    suspend fun firstCompleteGuidInGroup(subscriptionId: String): String?
+
+    @Query(
+        """
+        SELECT p.guid FROM profiles AS p
+        JOIN profile_payload AS payload ON payload.guid = p.guid
+        WHERE payload.payloadVersion = $PROFILE_PAYLOAD_VERSION
+        ORDER BY p.groupSortOrder, p.sortOrder, p.guid
+        LIMIT 1
+        """
+    )
+    suspend fun firstCompleteGuid(): String?
+
     /**
      * Profiles of one scope, complex types excluded. Replaces the pre-Room
      * decodeAllServerList() + per-guid decode loop used for POLICYGROUP resolution, which walked
@@ -340,7 +385,7 @@ interface ProfileDao {
          ORDER BY groupSortOrder, sortOrder, guid
         """
     )
-    suspend fun profilesOfGroup(subscriptionId: String, complexTypes: List<Int>): List<ProfileItem>
+    suspend fun profilesOfGroupMetadata(subscriptionId: String, complexTypes: List<Int>): List<ProfileMetadataItem>
 
     @Query(
         """
@@ -349,7 +394,35 @@ interface ProfileDao {
          ORDER BY groupSortOrder, sortOrder, guid
         """
     )
-    suspend fun profilesOfAll(complexTypes: List<Int>): List<ProfileItem>
+    suspend fun profilesOfAllMetadata(complexTypes: List<Int>): List<ProfileMetadataItem>
+
+    @Transaction
+    suspend fun profilesOfGroup(subscriptionId: String, complexTypes: List<Int>): List<ProfileItem> =
+        hydrate(profilesOfGroupMetadata(subscriptionId, complexTypes))
+
+    @Transaction
+    suspend fun profilesOfAll(complexTypes: List<Int>): List<ProfileItem> =
+        hydrate(profilesOfAllMetadata(complexTypes))
+
+    private suspend fun hydrate(rows: List<ProfileMetadataItem>): List<ProfileItem> {
+        if (rows.isEmpty()) return emptyList()
+        val payloads = rows.map { it.guid }
+            .chunked(SQLITE_VAR_LIMIT)
+            .flatMap { findPayloads(it) }
+            .associateBy { it.guid }
+        return rows.mapNotNull { metadata ->
+            metadata.mergeOrNull(payloads[metadata.guid]).also { profile ->
+                if (profile == null) logDroppedPayload(metadata.guid)
+            }
+        }
+    }
+
+    private fun logDroppedPayload(guid: String) {
+        LogUtil.w(AppConfig.TAG, "Profile $guid dropped: payload missing, unsupported, or unreadable")
+    }
+
+    @Query("SELECT * FROM profile_payload WHERE guid IN (:guids)")
+    suspend fun findPayloads(guids: List<String>): List<ProfilePayloadItem>
 
     @Query("SELECT guid FROM profiles ORDER BY groupSortOrder, sortOrder, guid")
     suspend fun allGuidsInOrder(): List<String>
@@ -371,10 +444,51 @@ interface ProfileDao {
     suspend fun subscriptionIdOf(guid: String): String?
 
     @Upsert
-    suspend fun upsert(profile: ProfileItem)
+    suspend fun upsertMetadata(profile: ProfileMetadataItem)
 
     @Upsert
-    suspend fun upsertAll(profiles: List<ProfileItem>)
+    suspend fun upsertMetadataAll(profiles: List<ProfileMetadataItem>)
+
+    @Upsert
+    suspend fun upsertPayload(payload: ProfilePayloadItem)
+
+    @Upsert
+    suspend fun upsertPayloadAll(payloads: List<ProfilePayloadItem>)
+
+    /** Writes one aggregate while avoiding a profiles UPDATE for payload-only edits. */
+    @Transaction
+    suspend fun upsert(profile: ProfileItem) {
+        val metadata = profile.toMetadataItem()
+        if (findMetadataByGuid(profile.guid) != metadata) upsertMetadata(metadata)
+        val existing = findPayloadByGuid(profile.guid)
+        check(existing == null || existing.payloadVersion == PROFILE_PAYLOAD_VERSION) {
+            "Cannot rewrite unsupported payload version ${existing?.payloadVersion} for ${profile.guid}"
+        }
+        upsertPayload(profile.copy(dedupeKey = "").toPayloadItem(existing?.content))
+        if (profile.configType != EConfigType.CUSTOM) deleteRaw(profile.guid)
+    }
+
+    @Transaction
+    suspend fun upsertAll(profiles: List<ProfileItem>) {
+        if (profiles.isEmpty()) return
+        val existingPayloads = profiles.map { it.guid }
+            .chunked(SQLITE_VAR_LIMIT)
+            .flatMap { findPayloads(it) }
+            .associateBy { it.guid }
+        check(existingPayloads.values.all { it.payloadVersion == PROFILE_PAYLOAD_VERSION }) {
+            "Cannot rewrite an unsupported profile payload version"
+        }
+        upsertMetadataAll(profiles.map(ProfileItem::toMetadataItem))
+        upsertPayloadAll(
+            profiles.map { profile ->
+                profile.copy(dedupeKey = "").toPayloadItem(existingPayloads[profile.guid]?.content)
+            }
+        )
+        profiles.filter { it.configType != EConfigType.CUSTOM }
+            .map { it.guid }
+            .chunked(SQLITE_VAR_LIMIT)
+            .forEach { deleteRawRows(it) }
+    }
 
     // ---- SELECTED_SERVER, written inside the same transaction as profile writes/deletes ----
 
@@ -498,10 +612,13 @@ interface ProfileDao {
         }
     }
 
-    // ---- Deletion: all three tables together ----
+    // ---- Deletion: all profile companion tables together ----
 
     @Query("DELETE FROM profiles      WHERE guid IN (:guids)")
     suspend fun deleteProfileRows(guids: List<String>)
+
+    @Query("DELETE FROM profile_payload WHERE guid IN (:guids)")
+    suspend fun deletePayloadRows(guids: List<String>)
 
     @Query("DELETE FROM profile_stats WHERE guid IN (:guids)")
     suspend fun deleteStatRows(guids: List<String>)
@@ -522,12 +639,13 @@ interface ProfileDao {
 
         guids.chunked(SQLITE_VAR_LIMIT).forEach {
             deleteProfileRows(it)
+            deletePayloadRows(it)
             deleteStatRows(it)
             deleteRawRows(it)
         }
 
         if (group != null) {
-            writeSelectedGuid(firstGuidInGroup(group) ?: firstGuid())
+            writeSelectedGuid(firstCompleteGuidInGroup(group) ?: firstCompleteGuid())
         }
         return guids.size
     }
@@ -537,6 +655,9 @@ interface ProfileDao {
 
     @Query("DELETE FROM profiles")
     suspend fun clearProfiles()
+
+    @Query("DELETE FROM profile_payload")
+    suspend fun clearPayloads()
 
     @Query("DELETE FROM profile_stats")
     suspend fun clearStats()
@@ -548,6 +669,7 @@ interface ProfileDao {
     suspend fun deleteAll(): Int {
         val removed = count()
         clearProfiles()
+        clearPayloads()
         clearStats()
         clearRaw()
         writeSelectedGuid(null)
@@ -601,12 +723,13 @@ interface ProfileDao {
         SELECT guid FROM (
             SELECT p.guid AS guid,
                    ROW_NUMBER() OVER (
-                       PARTITION BY p.dedupeKey
+                       PARTITION BY payload.dedupeKey
                        ORDER BY p.sortOrder, p.guid
                    ) AS rn
               FROM profiles AS p
+              JOIN profile_payload AS payload ON payload.guid = p.guid
              WHERE p.configType NOT IN (:complexTypes)
-               AND p.dedupeKey <> ''
+               AND payload.dedupeKey <> ''
                AND p.subscriptionId = :subscriptionId
                AND """ + MATCH_P + """
         ) WHERE rn > 1
@@ -623,12 +746,13 @@ interface ProfileDao {
         SELECT guid FROM (
             SELECT p.guid AS guid,
                    ROW_NUMBER() OVER (
-                       PARTITION BY p.dedupeKey
+                       PARTITION BY payload.dedupeKey
                        ORDER BY p.sortOrder, p.guid
                    ) AS rn
               FROM profiles AS p
+              JOIN profile_payload AS payload ON payload.guid = p.guid
              WHERE p.configType NOT IN (:complexTypes)
-               AND p.dedupeKey <> ''
+               AND payload.dedupeKey <> ''
                AND """ + MATCH_P + """
         ) WHERE rn > 1
         """
@@ -637,25 +761,28 @@ interface ProfileDao {
 
     // ---- dedupeKey lazy backfill ----
 
-    suspend fun profilesMissingDedupeKey(subscriptionId: String, limit: Int): List<ProfileItem> =
-        if (subscriptionId.isEmpty()) {
-            profilesMissingDedupeKeyInAll(limit)
-        } else {
-            profilesMissingDedupeKeyInGroup(subscriptionId, limit)
-        }
+    @Query(
+        """
+        SELECT p.* FROM profiles AS p
+        JOIN profile_payload AS payload ON payload.guid = p.guid
+        WHERE payload.dedupeKey = '' AND p.subscriptionId = :subscriptionId LIMIT :limit
+        """
+    )
+    suspend fun profilesMissingDedupeKeyInGroup(subscriptionId: String, limit: Int): List<ProfileMetadataItem>
 
     @Query(
-        "SELECT * FROM profiles WHERE dedupeKey = '' AND subscriptionId = :subscriptionId LIMIT :limit"
+        """
+        SELECT p.* FROM profiles AS p
+        JOIN profile_payload AS payload ON payload.guid = p.guid
+        WHERE payload.dedupeKey = '' LIMIT :limit
+        """
     )
-    suspend fun profilesMissingDedupeKeyInGroup(subscriptionId: String, limit: Int): List<ProfileItem>
+    suspend fun profilesMissingDedupeKeyInAll(limit: Int): List<ProfileMetadataItem>
 
-    @Query("SELECT * FROM profiles WHERE dedupeKey = '' LIMIT :limit")
-    suspend fun profilesMissingDedupeKeyInAll(limit: Int): List<ProfileItem>
-
-    @Query("UPDATE profiles SET dedupeKey = :key WHERE guid = :guid")
+    @Query("UPDATE profile_payload SET dedupeKey = :key WHERE guid = :guid")
     suspend fun setDedupeKey(guid: String, key: String)
 
-    @Query("UPDATE profiles SET dedupeKey = ''")
+    @Query("UPDATE profile_payload SET dedupeKey = ''")
     suspend fun clearAllDedupeKeys()
 
     /**
@@ -665,9 +792,18 @@ interface ProfileDao {
      */
     @Transaction
     suspend fun backfillDedupeKeyBatch(subscriptionId: String, limit: Int): Int {
-        val rows = profilesMissingDedupeKey(subscriptionId, limit)
-        rows.forEach { setDedupeKey(it.guid, it.computeDedupeKey()) }
-        return rows.size
+        val rows = if (subscriptionId.isEmpty()) {
+            profilesMissingDedupeKeyInAll(limit)
+        } else {
+            profilesMissingDedupeKeyInGroup(subscriptionId, limit)
+        }
+        val profiles = hydrate(rows)
+        profiles.forEach {
+            val key = it.computeDedupeKey()
+            check(key.isNotEmpty()) { "Computed empty dedupe key for ${it.guid}" }
+            setDedupeKey(it.guid, key)
+        }
+        return profiles.size
     }
 
     suspend fun backfillDedupeKeys(subscriptionId: String, batch: Int = DEDUPE_BATCH): Int {
@@ -698,11 +834,28 @@ interface ProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putRaw(raw: ProfileRaw)
 
+    @Query("DELETE FROM profile_raw WHERE guid = :guid")
+    suspend fun deleteRaw(guid: String)
+
     /** Batch variant: one prepared statement reused for the whole list. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putRaws(raws: List<ProfileRaw>)
 
+    @Transaction
+    suspend fun upsertWithRaw(profile: ProfileItem, rawContent: String) {
+        upsert(profile)
+        putRaw(ProfileRaw(profile.guid, rawContent))
+    }
+
     // ---- Orphan cleanup (replaces OrphanProfileCleaner / StoredProfileReference) ----
+
+    @Query(
+        """
+        SELECT p.guid FROM profiles AS p
+        WHERE NOT EXISTS (SELECT 1 FROM profile_payload AS payload WHERE payload.guid = p.guid)
+        """
+    )
+    suspend fun orphanMetadataGuids(): List<String>
 
     @Query("DELETE FROM profile_stats WHERE guid NOT IN (SELECT guid FROM profiles)")
     suspend fun deleteOrphanStats(): Int
@@ -710,8 +863,16 @@ interface ProfileDao {
     @Query("DELETE FROM profile_raw WHERE guid NOT IN (SELECT guid FROM profiles)")
     suspend fun deleteOrphanRaws(): Int
 
+    @Query("DELETE FROM profile_payload WHERE guid NOT IN (SELECT guid FROM profiles)")
+    suspend fun deleteOrphanPayloads(): Int
+
     @Transaction
-    suspend fun cleanupOrphans(): Int = deleteOrphanStats() + deleteOrphanRaws()
+    suspend fun cleanupOrphans(): Int {
+        // Metadata-only rows are real profile rows, so route them through deleteProfiles() to
+        // remove companion data and repair SELECTED_SERVER in the same transaction.
+        val removedMetadata = deleteProfiles(orphanMetadataGuids())
+        return removedMetadata + deleteOrphanStats() + deleteOrphanRaws() + deleteOrphanPayloads()
+    }
 
     /**
      * Batch import (subscription update / paste import). Replaces saveServerProfiles +
@@ -755,6 +916,7 @@ interface ProfileDao {
             }
             old.chunked(SQLITE_VAR_LIMIT).forEach {
                 deleteProfileRows(it)
+                deletePayloadRows(it)
                 deleteStatRows(it)
                 deleteRawRows(it)
             }
@@ -788,6 +950,9 @@ interface ProfileDao {
     @Query("DELETE FROM profile_raw WHERE guid IN (SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId)")
     suspend fun deleteGroupRaws(subscriptionId: String)
 
+    @Query("DELETE FROM profile_payload WHERE guid IN (SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId)")
+    suspend fun deleteGroupPayloads(subscriptionId: String)
+
     @Query("DELETE FROM profiles WHERE subscriptionId = :subscriptionId")
     suspend fun deleteGroupProfiles(subscriptionId: String)
 
@@ -816,6 +981,7 @@ interface ProfileDao {
         if (!append) {
             deleteGroupStats(subscriptionId)
             deleteGroupRaws(subscriptionId)
+            deleteGroupPayloads(subscriptionId)
             deleteGroupProfiles(subscriptionId)
         }
         var count = 0
@@ -905,13 +1071,16 @@ interface SubscriptionDao {
     suspend fun profileGuidsOf(subscriptionId: String): List<String>
 
     @Query("DELETE FROM profiles WHERE subscriptionId = :subscriptionId")
-    suspend fun deleteProfilesOf(subscriptionId: String)
+    suspend fun deleteProfileRowsOf(subscriptionId: String)
 
     @Query("DELETE FROM profile_stats WHERE guid IN (:guids)")
     suspend fun deleteStatsOf(guids: List<String>)
 
     @Query("DELETE FROM profile_raw WHERE guid IN (:guids)")
     suspend fun deleteRawsOf(guids: List<String>)
+
+    @Query("DELETE FROM profile_payload WHERE guid IN (:guids)")
+    suspend fun deletePayloadsOf(guids: List<String>)
 
     @Query("SELECT COUNT(*) FROM profiles WHERE subscriptionId NOT IN (SELECT guid FROM subscriptions)")
     suspend fun orphanProfileCount(): Int
@@ -941,6 +1110,17 @@ interface SubscriptionDao {
     @Transaction
     suspend fun saveOrder(guids: List<String>) {
         guids.forEachIndexed { index, guid -> setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP) }
+    }
+
+    @Transaction
+    suspend fun deleteProfilesOf(subscriptionId: String) {
+        val guids = profileGuidsOf(subscriptionId)
+        guids.chunked(ProfileDao.SQLITE_VAR_LIMIT).forEach {
+            deleteStatsOf(it)
+            deleteRawsOf(it)
+            deletePayloadsOf(it)
+        }
+        deleteProfileRowsOf(subscriptionId)
     }
 
     @Transaction
@@ -987,10 +1167,6 @@ interface SubscriptionDao {
     suspend fun removeWithDefault(guid: String, defaultRemarks: String) {
         val guids = profileGuidsOf(guid)
         val hadSelection = selectedGuid() in guids
-        guids.chunked(ProfileDao.SQLITE_VAR_LIMIT).forEach {
-            deleteStatsOf(it)
-            deleteRawsOf(it)
-        }
         deleteProfilesOf(guid)
         deleteRow(guid)
         ensureDefault(defaultRemarks)

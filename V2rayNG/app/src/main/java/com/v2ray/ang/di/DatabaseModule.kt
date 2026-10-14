@@ -9,6 +9,7 @@ import com.v2ray.ang.data.AppDatabase
 import com.v2ray.ang.data.AssetDao
 import com.v2ray.ang.data.GROUP_ORDER_TRIGGERS
 import com.v2ray.ang.data.MIGRATION_1_2
+import com.v2ray.ang.data.MIGRATION_2_3
 import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.data.RoutingDao
 import com.v2ray.ang.data.SettingsDao
@@ -48,7 +49,7 @@ object DatabaseModule {
         .setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(io)
         .enableMultiInstanceInvalidation()
-        .addMigrations(MIGRATION_1_2)
+        .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .fallbackToDestructiveMigrationOnDowngrade(dropAllTables = true)
         .addCallback(object : RoomDatabase.Callback() {
             override suspend fun onCreate(connection: SQLiteConnection) {

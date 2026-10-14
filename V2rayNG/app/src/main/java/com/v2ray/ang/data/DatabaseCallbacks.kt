@@ -1,6 +1,15 @@
 package com.v2ray.ang.data
 
 /** Triggers that keep ProfileItem.groupSortOrder aligned with subscriptions.sortOrder. */
+internal val GROUP_ORDER_TRIGGER_NAMES = listOf(
+    "profiles_group_order_insert",
+    "profiles_group_order_regroup",
+    "profiles_group_order_fix",
+    "subscriptions_group_order_cascade",
+    "subscriptions_group_order_adopt",
+    "subscriptions_group_order_orphan",
+)
+
 internal val GROUP_ORDER_TRIGGERS = listOf(
     """
     CREATE TRIGGER IF NOT EXISTS profiles_group_order_insert

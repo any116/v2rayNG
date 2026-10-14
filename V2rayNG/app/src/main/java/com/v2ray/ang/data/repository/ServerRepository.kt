@@ -12,7 +12,6 @@ import com.v2ray.ang.data.ProfileDao
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.SubscriptionDao
 import com.v2ray.ang.data.entities.ProfileItem
-import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.ServerEditData
 import com.v2ray.ang.dto.SubscriptionOption
@@ -106,7 +105,7 @@ open class ServerRepository @Inject constructor(
      * selection is claimed when nothing is selected yet, and dedupeKey is invalidated so the
      * lazy backfill recomputes it.
      */
-    open suspend fun saveProfile(guid: String, profile: ProfileItem): String = withIO {
+    open suspend fun saveProfile(guid: String, profile: ProfileItem, rawContent: String? = null): String = withIO {
         val targetGuid = guid.ifEmpty { profile.guid.ifEmpty { Utils.getUuid() } }
         val existing = profileDao.findByGuid(targetGuid)
         val subId = existing?.subscriptionId?.takeIf { it.isNotEmpty() }
@@ -115,24 +114,19 @@ open class ServerRepository @Inject constructor(
             subscriptionDao.ensureDefault(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
         }
 
-        profileDao.upsert(
-            profile.copy(
-                guid = targetGuid,
-                subscriptionId = subId,
-                sortOrder = existing?.sortOrder
-                    ?: (profileDao.minSortOrder(subId) - ProfileItem.SORT_STEP),
-                dedupeKey = "",
-            )
+        val saved = profile.copy(
+            guid = targetGuid,
+            subscriptionId = subId,
+            sortOrder = existing?.sortOrder
+                ?: (profileDao.minSortOrder(subId) - ProfileItem.SORT_STEP),
+            dedupeKey = "",
         )
+        if (rawContent == null) profileDao.upsert(saved) else profileDao.upsertWithRaw(saved, rawContent)
         if (profileDao.selectedGuid().isNullOrEmpty()) {
             profileDao.writeSelectedGuid(targetGuid)
             settings.poke(SettingsStore.KEY_SELECTED_SERVER, targetGuid)
         }
         targetGuid
-    }
-
-    open suspend fun saveRawConfig(guid: String, content: String) = withIO {
-        profileDao.putRaw(ProfileRaw(guid, content))
     }
 
     open suspend fun removeProfile(guid: String) = withIO {

@@ -120,8 +120,9 @@ data/                  # 唯一持久层（Room 3，数据库 v2rayng.db）
   SettingsStore（进程内同步快照）/ Prefs（给无注入点的 object 的同步门面）
   SettingsDefaults / DatabaseIntegrity / StorageBootstrap
   DatabaseCallbacks / DedupeKey
-  entities/            # @Entity：ProfileItem / ProfileRaw / ServerAffiliationInfo /
-                       # SubscriptionItem / AssetUrlItem / RulesetItem / SettingsEntry
+  entities/            # @Entity：ProfileMetadataItem / ProfilePayloadItem / ProfileRaw /
+                        # ServerAffiliationInfo / SubscriptionItem / AssetUrlItem /
+                        # RulesetItem / SettingsEntry；ProfileItem 是完整领域模型
   repository/          # UI 进程的数据层门面，ViewModel 唯一可依赖的数据入口
                        # BaseRepository + Main/Server/Sub/Settings/Routing/PerAppProxy/
                        # UserAsset/Backup/Logcat/Scanner/Shortcut/UrlScheme/AppList/
