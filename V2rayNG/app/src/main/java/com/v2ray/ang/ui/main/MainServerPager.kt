@@ -104,7 +104,10 @@ fun GroupPagerPage(
     if (doubleColumnDisplay) {
         val gridState = remember(handles, groupId) { handles.scrollStates.grid(groupId) }
         val reorderable = if (canReorder) {
-            rememberReorderableLazyGridState(gridState) { from, to ->
+            rememberReorderableLazyGridState(
+                lazyGridState = gridState,
+                scrollThresholdPadding = contentPadding
+            ) { from, to ->
                 val moved = from.key as? String ?: return@rememberReorderableLazyGridState
                 moveServerAndAwaitPresentation(
                     MainAction.MoveServer(groupId, moved, to.index),
@@ -145,7 +148,10 @@ fun GroupPagerPage(
     } else {
         val listState = remember(handles, groupId) { handles.scrollStates.list(groupId) }
         val reorderable = if (canReorder) {
-            rememberReorderableLazyListState(listState) { from, to ->
+            rememberReorderableLazyListState(
+                lazyListState = listState,
+                scrollThresholdPadding = contentPadding
+            ) { from, to ->
                 val moved = from.key as? String ?: return@rememberReorderableLazyListState
                 moveServerAndAwaitPresentation(
                     MainAction.MoveServer(groupId, moved, to.index),
