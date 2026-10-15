@@ -122,10 +122,11 @@ open class XxxRepository @Inject constructor(
 - 网络订阅流式下载到缓存文件，URI 导入直接提供可重开的 Reader；不得先 `readText()` 再构造全量节点 List。
 - `data/ImportBuffer` 只用于当前导入的临时 JSON-lines 暂存，成功/失败/取消后关闭并删除；不作为持久层或恢复数据源。
   `AngApplication` 启动时还会清理超过 1 小时的残留导入文件，以覆盖进程被杀的场景。
-- 全部内容先解析并序列化到临时缓冲，再以 `AppConfig.IMPORT_BATCH_SIZE`（300）分批交给 `ProfileDao.importGroupBatches`；
-  事务内只做缓冲行反序列化和 Room 写入。
-  删除旧行、写入所有批次及修复选中节点必须在**同一个事务**中；空结果保留原订阅，任一批失败/取消全部回滚。
-  JSON-lines 在该事务内反序列化，这是保留跨批原子替换的明确取舍，长订阅会持有更久的写锁。
+- 全部内容先解析并序列化到临时缓冲，再以 `AppConfig.IMPORT_BATCH_SIZE`（300）分批交给
+  `ProfileDao.importGroupBatchesPrefetched`；
+  导入端用有界 channel 最多预取两个批次，解析与 Room 写入流水线并行，避免把全部 profile 放进内存。
+  DAO 的删除、写入所有批次及修复选中节点仍必须在**同一个事务**中；空结果保留原订阅，任一批失败/取消全部回滚。
+  预取只缩短 JSON-lines 解析阻塞写入的等待，不是事务边界；禁止改成每批提交或把 selected/raw 修复移出事务。
 - 网络响应有 `AppConfig.MAX_IMPORT_CONTENT_CHARS` 上限；超限下载失败并清理临时文件。
 - WireGuard 文本配置有独立的 1 MiB 上限；JSON 数组按元素流式处理，CUSTOM 原文仍随单个配置暂存。
 - 普通链接去重仅保留 SHA-256 摘要；`v2rayn` 只保留 ID/备注索引，完整分享对象暂存到文件，第二遍逐个解析跨条目引用。

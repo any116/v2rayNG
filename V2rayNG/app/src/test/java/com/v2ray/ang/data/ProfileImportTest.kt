@@ -4,6 +4,7 @@ import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
 import com.v2ray.ang.dto.ProfileImportRecord
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -116,6 +117,48 @@ internal class ProfileImportTest {
             dao.insertFreshAll(listOf(profile("fresh").apply { dedupeKey = "caller-key" }))
 
             assertEquals("", dao.findPayloadByGuid("fresh")!!.dedupeKey)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun prefetchedBatchesKeepImportAtomic() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            db.subscriptionDao().upsert(subscription("subA"))
+            dao.upsert(profile("old", subscriptionId = "subA"))
+            val batches = Channel<List<ProfileImportRecord>>(2)
+            batches.send(listOf(ProfileImportRecord(profile("new"))))
+            batches.close()
+
+            assertEquals(1, dao.importGroupBatchesPrefetched("subA", batches, append = false))
+            assertEquals(listOf("new"), dao.guidsInGroup("subA").map { dao.findByGuid(it)!!.remarks })
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun prefetchedCancellationRollsBackReplacement() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            db.subscriptionDao().upsert(subscription("subA"))
+            dao.upsert(profile("old", subscriptionId = "subA"))
+            dao.writeSelectedGuid("old")
+            val batches = Channel<List<ProfileImportRecord>>(2)
+            batches.send(listOf(ProfileImportRecord(profile("new"))))
+            batches.close(CancellationException("cancelled while prefetching"))
+
+            try {
+                dao.importGroupBatchesPrefetched("subA", batches, append = false)
+                error("Expected cancellation")
+            } catch (_: CancellationException) {
+                assertEquals(listOf("old"), dao.guidsInGroup("subA").map { dao.findByGuid(it)!!.remarks })
+                assertEquals("old", dao.selectedGuid())
+            }
         } finally {
             db.close()
         }

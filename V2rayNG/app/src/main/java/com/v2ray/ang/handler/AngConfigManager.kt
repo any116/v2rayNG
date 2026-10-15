@@ -47,8 +47,12 @@ import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.util.distinctImportText
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 import java.io.Reader
@@ -59,6 +63,7 @@ import java.util.Locale
 object AngConfigManager {
 
     private const val MAX_WIREGUARD_CONFIG_CHARS = 1_048_576
+    private const val IMPORT_PREFETCH_BATCHES = 2
 
     private val profileDao: ProfileDao
         get() = PlatformDependencies.profileDao(AngApplication.application)
@@ -478,20 +483,28 @@ object AngConfigManager {
         val count = profiles.openReader().use { normalReader ->
             v2rayn.openReader().use { v2raynReader ->
                 val entries = v2rayn.entries(v2raynReader) + profiles.entries(normalReader)
-                val total = profiles.count + v2rayn.count
-                val batches = if (total <= AppConfig.IMPORT_BATCH_SIZE) {
-                    // Small imports can finish file I/O and JSON decoding before Room opens its
-                    // transaction. Large imports stay lazy to keep peak memory bounded.
-                    val materialized = ArrayList<ProfileImportRecord>(total)
-                    for (entry in entries) {
-                        currentCoroutineContext().ensureActive()
-                        materialized.add(entry)
+                coroutineScope {
+                    val batches = Channel<List<ProfileImportRecord>>(IMPORT_PREFETCH_BATCHES)
+                    val producer = launch {
+                        try {
+                            for (batch in entries.chunked(AppConfig.IMPORT_BATCH_SIZE)) {
+                                currentCoroutineContext().ensureActive()
+                                batches.send(batch)
+                            }
+                        } catch (error: Throwable) {
+                            batches.close(error)
+                            throw error
+                        } finally {
+                            batches.close()
+                        }
                     }
-                    sequenceOf(materialized)
-                } else {
-                    entries.chunked(AppConfig.IMPORT_BATCH_SIZE)
+                    try {
+                        profileDao.importGroupBatchesPrefetched(subid, batches, append)
+                    } finally {
+                        producer.cancelAndJoin()
+                        batches.cancel()
+                    }
                 }
-                profileDao.importGroupBatches(subid, batches, append)
             }
         }
         settingsStore.poke(SettingsStore.KEY_SELECTED_SERVER, profileDao.selectedGuid())

@@ -23,6 +23,7 @@ import com.v2ray.ang.dto.ProfileImportRecord
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
@@ -987,8 +988,8 @@ interface ProfileDao {
      * share one transaction, so a later read/write failure or cancellation restores the old group.
      * Empty input never deletes existing profiles. Only the selected old profile is materialized.
      * A subscription removed while parsing is not recreated as an orphan profile group.
-     * JSON-lines are deserialized while this transaction is open deliberately: this keeps the
-     * replacement all-or-nothing at the cost of a longer write lock for very large imports.
+     * The sequence adapter preserves the synchronous test and legacy callers; production imports
+     * use [importGroupBatchesPrefetched] to decode a bounded number of batches ahead of the write.
      */
     @Transaction
     suspend fun importGroupBatches(
@@ -996,8 +997,37 @@ interface ProfileDao {
         batches: Sequence<List<ProfileImportRecord>>,
         append: Boolean
     ): Int {
-        val iterator = batches.filter { it.isNotEmpty() }.iterator()
-        if (!iterator.hasNext()) return 0
+        val iterator = batches.iterator()
+        return importGroupBatchesInternal(subscriptionId, append) {
+            var nextBatch: List<ProfileImportRecord>? = null
+            while (iterator.hasNext() && nextBatch == null) {
+                val batch = iterator.next()
+                if (batch.isNotEmpty()) nextBatch = batch
+            }
+            nextBatch
+        }
+    }
+
+    /** Replays a bounded producer channel without parsing its next batch under the write lock. */
+    @Transaction
+    suspend fun importGroupBatchesPrefetched(
+        subscriptionId: String,
+        batches: ReceiveChannel<List<ProfileImportRecord>>,
+        append: Boolean,
+    ): Int = importGroupBatchesInternal(subscriptionId, append) {
+        val result = batches.receiveCatching()
+        result.exceptionOrNull()?.let { throw it }
+        result.getOrNull()
+    }
+
+    private suspend fun importGroupBatchesInternal(
+        subscriptionId: String,
+        append: Boolean,
+        nextBatch: suspend () -> List<ProfileImportRecord>?,
+    ): Int {
+        var batch = nextBatch()
+        while (batch != null && batch.isEmpty()) batch = nextBatch()
+        if (batch == null) return 0
         val groupOrder = groupSortOrderOf(subscriptionId) ?: return 0
         val selected = selectedGuid()
         val selectedProfile = if (!append && selected != null) findByGuid(selected) else null
@@ -1011,10 +1041,8 @@ interface ProfileDao {
             deleteGroupProfiles(subscriptionId)
         }
         var count = 0
-        while (true) {
+        while (batch != null) {
             currentCoroutineContext().ensureActive()
-            if (!iterator.hasNext()) break
-            val batch = iterator.next()
             val profiles = ArrayList<ProfileItem>(batch.size)
             val raws = ArrayList<ProfileRaw>()
             for (entry in batch) {
@@ -1035,6 +1063,8 @@ interface ProfileDao {
             }
             insertFreshAll(profiles)
             if (raws.isNotEmpty()) putRaws(raws)
+            batch = nextBatch()
+            while (batch != null && batch.isEmpty()) batch = nextBatch()
         }
         if (replacement != null) {
             writeSelectedGuid(replacement)

@@ -25,6 +25,7 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
         connection.prepare("DROP TRIGGER IF EXISTS `$name`").use { it.step() }
     }
 
+    // Copy configType verbatim so protocol ids unknown to this build survive the migration.
     connection.prepare(
         """
         CREATE TABLE IF NOT EXISTS `profile_payload` (
@@ -102,7 +103,6 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
             while (source.step()) {
                 val profile = source.toLegacyProfile()
 
-                payloadInsert.clearBindings()
                 payloadInsert.bindText(1, profile.guid)
                 payloadInsert.bindLong(2, PROFILE_PAYLOAD_VERSION.toLong())
                 payloadInsert.bindText(3, ProfilePayloadCodec.encode(profile))
