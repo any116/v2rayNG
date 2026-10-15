@@ -455,6 +455,32 @@ interface ProfileDao {
     @Upsert
     suspend fun upsertPayloadAll(payloads: List<ProfilePayloadItem>)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertFreshMetadataAll(profiles: List<ProfileMetadataItem>)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertFreshPayloadAll(payloads: List<ProfilePayloadItem>)
+
+    /** Inserts import-owned fresh GUIDs without querying payload rows that cannot exist yet. */
+    @Transaction
+    suspend fun insertFreshAll(profiles: List<ProfileItem>) {
+        if (profiles.isEmpty()) return
+        check(profiles.all { it.guid.isNotBlank() }) { "Fresh profile GUID must not be blank" }
+        check(profiles.map { it.guid }.toSet().size == profiles.size) {
+            "Fresh profile GUIDs must be unique within a batch"
+        }
+        insertFreshMetadataAll(profiles.map(ProfileItem::toMetadataItem))
+        insertFreshPayloadAll(
+            profiles.map { profile ->
+                profile.copy(dedupeKey = "").toPayloadItem()
+            }
+        )
+        profiles.filter { it.configType != EConfigType.CUSTOM }
+            .map { it.guid }
+            .chunked(SQLITE_VAR_LIMIT)
+            .forEach { deleteRawRows(it) }
+    }
+
     /** Writes one aggregate while avoiding a profiles UPDATE for payload-only edits. */
     @Transaction
     suspend fun upsert(profile: ProfileItem) {
@@ -1007,7 +1033,7 @@ interface ProfileDao {
                 profiles.add(profile)
                 entry.rawConfig?.let { raws.add(ProfileRaw(profile.guid, it)) }
             }
-            upsertAll(profiles)
+            insertFreshAll(profiles)
             if (raws.isNotEmpty()) putRaws(raws)
         }
         if (replacement != null) {

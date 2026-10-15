@@ -478,7 +478,20 @@ object AngConfigManager {
         val count = profiles.openReader().use { normalReader ->
             v2rayn.openReader().use { v2raynReader ->
                 val entries = v2rayn.entries(v2raynReader) + profiles.entries(normalReader)
-                profileDao.importGroupBatches(subid, entries.chunked(AppConfig.IMPORT_BATCH_SIZE), append)
+                val total = profiles.count + v2rayn.count
+                val batches = if (total <= AppConfig.IMPORT_BATCH_SIZE) {
+                    // Small imports can finish file I/O and JSON decoding before Room opens its
+                    // transaction. Large imports stay lazy to keep peak memory bounded.
+                    val materialized = ArrayList<ProfileImportRecord>(total)
+                    for (entry in entries) {
+                        currentCoroutineContext().ensureActive()
+                        materialized.add(entry)
+                    }
+                    sequenceOf(materialized)
+                } else {
+                    entries.chunked(AppConfig.IMPORT_BATCH_SIZE)
+                }
+                profileDao.importGroupBatches(subid, batches, append)
             }
         }
         settingsStore.poke(SettingsStore.KEY_SELECTED_SERVER, profileDao.selectedGuid())

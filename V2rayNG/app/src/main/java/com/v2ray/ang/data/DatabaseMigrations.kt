@@ -58,14 +58,22 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
         """.trimIndent()
     ).use { it.step() }
 
-    val metadataInsert = connection.prepare(
+    connection.prepare(
         """
         INSERT INTO `profiles_new`(
             `guid`, `sortOrder`, `groupSortOrder`, `configType`, `subscriptionId`, `addedTime`,
             `remarks`, `description`, `server`, `serverPort`, `network`, `security`, `insecure`
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        )
+        SELECT `guid`, `sortOrder`, `groupSortOrder`, `configType`, `subscriptionId`, `addedTime`,
+               `remarks`, `description`, `server`, `serverPort`, `network`, `security`,
+               CASE
+                   WHEN `insecure` IS NULL THEN NULL
+                   WHEN `insecure` <> 0 THEN 1
+                   ELSE 0
+               END
+          FROM `profiles`
         """.trimIndent()
-    )
+    ).use { it.step() }
     val payloadInsert = connection.prepare(
         """
         INSERT INTO `profile_payload`(`guid`, `payloadVersion`, `content`, `dedupeKey`)
@@ -94,24 +102,6 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
             while (source.step()) {
                 val profile = source.toLegacyProfile()
 
-                metadataInsert.clearBindings()
-                metadataInsert.bindText(1, profile.guid)
-                metadataInsert.bindLong(2, profile.sortOrder)
-                metadataInsert.bindLong(3, profile.groupSortOrder)
-                // Keep an unknown published protocol id in storage even though the current
-                // domain enum exposes it as CUSTOM until the protocol is understood.
-                metadataInsert.bindLong(4, source.getLong(5))
-                metadataInsert.bindText(5, profile.subscriptionId)
-                metadataInsert.bindLong(6, profile.addedTime)
-                metadataInsert.bindText(7, profile.remarks)
-                metadataInsert.bindNullableText(8, profile.description)
-                metadataInsert.bindNullableText(9, profile.server)
-                metadataInsert.bindNullableText(10, profile.serverPort)
-                metadataInsert.bindNullableText(11, profile.network)
-                metadataInsert.bindNullableText(12, profile.security)
-                metadataInsert.bindNullableBoolean(13, profile.insecure)
-                metadataInsert.step()
-
                 payloadInsert.clearBindings()
                 payloadInsert.bindText(1, profile.guid)
                 payloadInsert.bindLong(2, PROFILE_PAYLOAD_VERSION.toLong())
@@ -122,7 +112,6 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
             }
         }
     } finally {
-        metadataInsert.close()
         payloadInsert.close()
     }
 
@@ -219,11 +208,3 @@ private fun SQLiteStatement.nullableInt(index: Int): Int? = if (isNull(index)) n
 
 private fun SQLiteStatement.nullableBoolean(index: Int): Boolean? =
     if (isNull(index)) null else getLong(index) != 0L
-
-private fun SQLiteStatement.bindNullableText(index: Int, value: String?) {
-    if (value == null) bindNull(index) else bindText(index, value)
-}
-
-private fun SQLiteStatement.bindNullableBoolean(index: Int, value: Boolean?) {
-    if (value == null) bindNull(index) else bindLong(index, if (value) 1L else 0L)
-}

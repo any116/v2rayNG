@@ -6,6 +6,8 @@ import com.v2ray.ang.dto.ProfileImportRecord
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -73,6 +75,47 @@ internal class ProfileImportTest {
                 listOf("v2rayn", "normal"),
                 dao.guidsInGroup("subA").map { dao.findByGuid(it)!!.remarks }
             )
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun freshBatchRejectsGuidCollisionWithoutOverwritingExistingProfile() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            dao.upsert(profile("collision").apply { password = "old" })
+
+            var failure: Exception? = null
+            try {
+                dao.insertFreshAll(
+                    listOf(
+                        profile("collision").apply { password = "replacement" },
+                        profile("fresh"),
+                    )
+                )
+            } catch (error: Exception) {
+                failure = error
+            }
+
+            assertNotNull(failure)
+            assertEquals("old", dao.findByGuid("collision")!!.password)
+            assertNull(dao.findMetadataByGuid("fresh"))
+            assertNull(dao.findPayloadByGuid("fresh"))
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun freshBatchClearsCallerDedupeKey() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            dao.insertFreshAll(listOf(profile("fresh").apply { dedupeKey = "caller-key" }))
+
+            assertEquals("", dao.findPayloadByGuid("fresh")!!.dedupeKey)
         } finally {
             db.close()
         }
