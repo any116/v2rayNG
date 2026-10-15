@@ -1,6 +1,7 @@
 package com.v2ray.ang.data
 
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.dao.SettingsDao
 import com.v2ray.ang.data.entities.SettingsEntry
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.util.JsonUtil

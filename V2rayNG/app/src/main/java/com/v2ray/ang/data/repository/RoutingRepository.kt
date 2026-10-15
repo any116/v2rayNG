@@ -9,8 +9,8 @@ import androidx.paging.insertHeaderItem
 import androidx.paging.map
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.Prefs
-import com.v2ray.ang.data.ProfileDao
-import com.v2ray.ang.data.RoutingDao
+import com.v2ray.ang.data.dao.ProfileDao
+import com.v2ray.ang.data.dao.RoutingDao
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem

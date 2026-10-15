@@ -4,6 +4,11 @@ import androidx.room3.ColumnTypeConverter
 import androidx.room3.ColumnTypeConverters
 import androidx.room3.Database
 import androidx.room3.RoomDatabase
+import com.v2ray.ang.data.dao.AssetDao
+import com.v2ray.ang.data.dao.ProfileDao
+import com.v2ray.ang.data.dao.RoutingDao
+import com.v2ray.ang.data.dao.SettingsDao
+import com.v2ray.ang.data.dao.SubscriptionDao
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.data.entities.ProfileMetadataItem
 import com.v2ray.ang.data.entities.ProfilePayloadItem

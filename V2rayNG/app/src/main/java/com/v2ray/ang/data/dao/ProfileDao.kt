@@ -1,4 +1,4 @@
-package com.v2ray.ang.data
+package com.v2ray.ang.data.dao
 
 import androidx.paging.PagingSource
 import androidx.room3.Dao
@@ -10,15 +10,16 @@ import androidx.room3.Transaction
 import androidx.room3.Upsert
 import androidx.room3.paging.PagingSourceDaoReturnTypeConverter
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.data.entities.AssetUrlItem
+import com.v2ray.ang.data.PROFILE_PAYLOAD_VERSION
+import com.v2ray.ang.data.computeDedupeKey
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.ProfileMetadataItem
 import com.v2ray.ang.data.entities.ProfilePayloadItem
 import com.v2ray.ang.data.entities.ProfileRaw
-import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
-import com.v2ray.ang.data.entities.SettingsEntry
-import com.v2ray.ang.data.entities.SubscriptionItem
+import com.v2ray.ang.data.mergeOrNull
+import com.v2ray.ang.data.toMetadataItem
+import com.v2ray.ang.data.toPayloadItem
 import com.v2ray.ang.dto.ProfileImportRecord
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.util.LogUtil
@@ -27,31 +28,6 @@ import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-
-// ---- Projections: list queries never touch profile_raw ----
-
-data class ServerRowProjection(
-    val guid: String,
-    val remarks: String,
-    val description: String?,
-    val server: String?,
-    val serverPort: String?,
-    val configType: EConfigType,
-    val network: String?,
-    val security: String?,
-    val insecure: Boolean?,
-    val subscriptionId: String,
-    val subscriptionInitial: String?,
-    val testDelayMillis: Long,
-)
-
-data class GroupCount(val groupId: String, val count: Int)
-
-data class RemarkRow(val remarks: String)
-
-data class SortAnchor(val guid: String, val sortOrder: Long)
-
-data class DefaultGroupRepair(val createdDefault: Boolean, val adoptedProfiles: Int)
 
 // ---- Shared SQL fragments (compile-time constants, legal inside @Query) ----
 
@@ -1079,259 +1055,4 @@ interface ProfileDao {
         const val SQLITE_VAR_LIMIT = 900
         const val DEDUPE_BATCH = 300
     }
-}
-
-@Dao
-interface SubscriptionDao {
-
-    @Query("SELECT * FROM subscriptions ORDER BY sortOrder, guid")
-    fun observeAll(): Flow<List<SubscriptionItem>>
-
-    @Query("SELECT * FROM subscriptions ORDER BY sortOrder, guid")
-    suspend fun all(): List<SubscriptionItem>
-
-    @Query("SELECT guid FROM subscriptions ORDER BY sortOrder, guid")
-    suspend fun allGuids(): List<String>
-
-    @Query("SELECT * FROM subscriptions WHERE guid = :guid")
-    suspend fun find(guid: String): SubscriptionItem?
-
-    @Query("SELECT * FROM subscriptions WHERE enabled = 1 AND autoUpdate = 1 ORDER BY sortOrder, guid")
-    suspend fun autoUpdatable(): List<SubscriptionItem>
-
-    @Query("SELECT IFNULL(MAX(sortOrder), 0) FROM subscriptions")
-    suspend fun maxSortOrder(): Long
-
-    @Query("SELECT IFNULL(MIN(sortOrder), 0) FROM subscriptions")
-    suspend fun minSortOrder(): Long
-
-    @Query("SELECT COUNT(*) FROM subscriptions")
-    suspend fun count(): Int
-
-    @Upsert
-    suspend fun upsert(item: SubscriptionItem)
-
-    @Upsert
-    suspend fun upsertAll(items: List<SubscriptionItem>)
-
-    @Query("UPDATE subscriptions SET sortOrder = :sortOrder WHERE guid = :guid")
-    suspend fun setSortOrder(guid: String, sortOrder: Long)
-
-    @Query("UPDATE subscriptions SET lastUpdated = :time WHERE guid = :guid")
-    suspend fun touch(guid: String, time: Long)
-
-    @Query("DELETE FROM subscriptions WHERE guid = :guid")
-    suspend fun deleteRow(guid: String)
-
-    @Query("SELECT guid FROM profiles WHERE subscriptionId = :subscriptionId")
-    suspend fun profileGuidsOf(subscriptionId: String): List<String>
-
-    @Query("DELETE FROM profiles WHERE subscriptionId = :subscriptionId")
-    suspend fun deleteProfileRowsOf(subscriptionId: String)
-
-    @Query("DELETE FROM profile_stats WHERE guid IN (:guids)")
-    suspend fun deleteStatsOf(guids: List<String>)
-
-    @Query("DELETE FROM profile_raw WHERE guid IN (:guids)")
-    suspend fun deleteRawsOf(guids: List<String>)
-
-    @Query("DELETE FROM profile_payload WHERE guid IN (:guids)")
-    suspend fun deletePayloadsOf(guids: List<String>)
-
-    @Query("SELECT COUNT(*) FROM profiles WHERE subscriptionId NOT IN (SELECT guid FROM subscriptions)")
-    suspend fun orphanProfileCount(): Int
-
-    @Query("UPDATE profiles SET subscriptionId = :target WHERE subscriptionId NOT IN (SELECT guid FROM subscriptions)")
-    suspend fun adoptOrphanProfiles(target: String)
-
-    @Query("SELECT value FROM settings WHERE key = 'SELECTED_SERVER'")
-    suspend fun selectedGuid(): String?
-
-    @Query("INSERT OR REPLACE INTO settings(key, value, kind) VALUES ('SELECTED_SERVER', :guid, 's')")
-    suspend fun putSelectedGuid(guid: String)
-
-    @Query("DELETE FROM settings WHERE key = 'SELECTED_SERVER'")
-    suspend fun clearSelectedGuid()
-
-    /** Lowest-priority profile after this subscription was removed, in global list order. */
-    @Query("SELECT guid FROM profiles ORDER BY groupSortOrder, sortOrder, guid LIMIT 1")
-    suspend fun firstProfileGuid(): String?
-
-    @Transaction
-    suspend fun insertAtEnd(item: SubscriptionItem) {
-        upsert(item.copy(sortOrder = maxSortOrder() + ProfileItem.SORT_STEP))
-    }
-
-    /** Subscriptions number in the tens; rewriting the whole order on drag end is simplest. */
-    @Transaction
-    suspend fun saveOrder(guids: List<String>) {
-        guids.forEachIndexed { index, guid -> setSortOrder(guid, (index + 1) * ProfileItem.SORT_STEP) }
-    }
-
-    @Transaction
-    suspend fun deleteProfilesOf(subscriptionId: String) {
-        val guids = profileGuidsOf(subscriptionId)
-        guids.chunked(ProfileDao.SQLITE_VAR_LIMIT).forEach {
-            deleteStatsOf(it)
-            deleteRawsOf(it)
-            deletePayloadsOf(it)
-        }
-        deleteProfileRowsOf(subscriptionId)
-    }
-
-    @Transaction
-    suspend fun ensureDefault(defaultRemarks: String): DefaultGroupRepair =
-        repairDefault(defaultRemarks, force = false)
-
-    @Transaction
-    suspend fun ensureDefaultForced(defaultRemarks: String): DefaultGroupRepair =
-        repairDefault(defaultRemarks, force = true)
-
-    @Transaction
-    suspend fun repairDefault(defaultRemarks: String, force: Boolean): DefaultGroupRepair {
-        var exists = find(AppConfig.DEFAULT_SUBSCRIPTION_ID) != null
-        val orphans = orphanProfileCount()
-        // Read once; both former call sites read it before the upsert below, so one read is
-        // equivalent — and unlike the old shape the two checks can never disagree.
-        val total = count()
-        val created = !exists && (force || orphans > 0 || total == 0)
-        if (created) {
-            val head = if (total == 0) {
-                ProfileItem.SORT_STEP
-            } else {
-                minSortOrder() - ProfileItem.SORT_STEP
-            }
-            upsert(
-                SubscriptionItem(
-                    guid = AppConfig.DEFAULT_SUBSCRIPTION_ID,
-                    sortOrder = head,
-                    remarks = defaultRemarks,
-                )
-            )
-            exists = true
-        }
-        val adopted = if (exists && orphans > 0) {
-            adoptOrphanProfiles(AppConfig.DEFAULT_SUBSCRIPTION_ID)
-            orphans
-        } else {
-            0
-        }
-        return DefaultGroupRepair(createdDefault = created, adoptedProfiles = adopted)
-    }
-
-    @Transaction
-    suspend fun removeWithDefault(guid: String, defaultRemarks: String) {
-        val guids = profileGuidsOf(guid)
-        val hadSelection = selectedGuid() in guids
-        deleteProfilesOf(guid)
-        deleteRow(guid)
-        ensureDefault(defaultRemarks)
-        if (hadSelection) {
-            val fallback = firstProfileGuid()
-            if (fallback.isNullOrBlank()) clearSelectedGuid() else putSelectedGuid(fallback)
-        }
-    }
-}
-
-@Dao
-interface AssetDao {
-
-    @Query("SELECT * FROM assets ORDER BY addedTime")
-    fun observeAll(): Flow<List<AssetUrlItem>>
-
-    @Query("SELECT * FROM assets ORDER BY addedTime")
-    suspend fun all(): List<AssetUrlItem>
-
-    @Query("SELECT * FROM assets WHERE guid = :guid")
-    suspend fun find(guid: String): AssetUrlItem?
-
-    @Query("SELECT * FROM assets WHERE remarks = :remarks LIMIT 1")
-    suspend fun findByRemarks(remarks: String): AssetUrlItem?
-
-    @Upsert
-    suspend fun upsert(item: AssetUrlItem)
-
-    @Query("UPDATE assets SET lastUpdated = :time WHERE guid = :guid")
-    suspend fun touch(guid: String, time: Long)
-
-    @Query("DELETE FROM assets WHERE guid = :guid AND IFNULL(locked, 0) = 0")
-    suspend fun delete(guid: String)
-}
-
-@Dao
-interface RoutingDao {
-
-    @Query("SELECT * FROM routing_rules ORDER BY sortOrder, id")
-    fun observeAll(): Flow<List<RulesetItem>>
-
-    @Query("SELECT * FROM routing_rules ORDER BY sortOrder, id")
-    suspend fun all(): List<RulesetItem>
-
-    @Query("SELECT * FROM routing_rules WHERE enabled = 1 ORDER BY sortOrder, id")
-    suspend fun enabled(): List<RulesetItem>
-
-    @Query("SELECT * FROM routing_rules WHERE id = :id")
-    suspend fun find(id: String): RulesetItem?
-
-    @Query("SELECT IFNULL(MAX(sortOrder), 0) FROM routing_rules")
-    suspend fun maxSortOrder(): Long
-
-    @Query("SELECT COUNT(*) FROM routing_rules")
-    suspend fun count(): Int
-
-    @Upsert
-    suspend fun upsert(rule: RulesetItem)
-
-    @Upsert
-    suspend fun upsertAll(rules: List<RulesetItem>)
-
-    @Query("UPDATE routing_rules SET sortOrder = :sortOrder WHERE id = :id")
-    suspend fun setSortOrder(id: String, sortOrder: Long)
-
-    @Query("DELETE FROM routing_rules WHERE id = :id")
-    suspend fun delete(id: String)
-
-    @Query("DELETE FROM routing_rules WHERE IFNULL(locked, 0) = 0")
-    suspend fun deleteUnlocked()
-
-    @Transaction
-    suspend fun insertAtEnd(rule: RulesetItem) {
-        upsert(rule.copy(sortOrder = maxSortOrder() + ProfileItem.SORT_STEP))
-    }
-
-    @Transaction
-    suspend fun saveOrder(ids: List<String>) {
-        ids.forEachIndexed { index, id -> setSortOrder(id, (index + 1) * ProfileItem.SORT_STEP) }
-    }
-
-    /** Reset to presets. Rules with locked == true survive, matching resetRoutingRulesetsCommon. */
-    @Transaction
-    suspend fun replaceAll(rules: List<RulesetItem>) {
-        deleteUnlocked()
-        val base = maxSortOrder()
-        upsertAll(
-            rules.mapIndexed { index, rule ->
-                rule.copy(sortOrder = base + (index + 1) * ProfileItem.SORT_STEP)
-            }
-        )
-    }
-}
-
-@Dao
-interface SettingsDao {
-
-    @Query("SELECT * FROM settings")
-    suspend fun all(): List<SettingsEntry>
-
-    @Query("SELECT value FROM settings WHERE key = :key")
-    suspend fun value(key: String): String?
-
-    @Upsert
-    suspend fun upsert(entry: SettingsEntry)
-
-    @Upsert
-    suspend fun upsertAll(entries: List<SettingsEntry>)
-
-    @Query("DELETE FROM settings WHERE key = :key")
-    suspend fun delete(key: String)
 }

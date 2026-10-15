@@ -12,9 +12,9 @@ import com.v2ray.ang.AppConfig.GEOSITE_PRIVATE
 import com.v2ray.ang.AppConfig.TAG_DIRECT
 import com.v2ray.ang.AppConfig.VPN
 import com.v2ray.ang.data.Prefs
-import com.v2ray.ang.data.ProfileDao
-import com.v2ray.ang.data.RoutingDao
-import com.v2ray.ang.data.SubscriptionDao
+import com.v2ray.ang.data.dao.ProfileDao
+import com.v2ray.ang.data.dao.RoutingDao
+import com.v2ray.ang.data.dao.SubscriptionDao
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.di.PlatformDependencies

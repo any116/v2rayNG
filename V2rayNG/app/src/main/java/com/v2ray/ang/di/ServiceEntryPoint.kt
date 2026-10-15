@@ -1,12 +1,12 @@
 package com.v2ray.ang.di
 
 import android.content.Context
-import com.v2ray.ang.data.AssetDao
-import com.v2ray.ang.data.ProfileDao
-import com.v2ray.ang.data.RoutingDao
-import com.v2ray.ang.data.SettingsDao
+import com.v2ray.ang.data.dao.AssetDao
+import com.v2ray.ang.data.dao.ProfileDao
+import com.v2ray.ang.data.dao.RoutingDao
+import com.v2ray.ang.data.dao.SettingsDao
 import com.v2ray.ang.data.SettingsStore
-import com.v2ray.ang.data.SubscriptionDao
+import com.v2ray.ang.data.dao.SubscriptionDao
 import com.v2ray.ang.data.repository.ThemeStore
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn

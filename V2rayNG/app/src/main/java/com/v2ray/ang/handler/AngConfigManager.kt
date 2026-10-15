@@ -11,9 +11,9 @@ import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.CoreConfigManager
 import com.v2ray.ang.data.ImportBuffer
-import com.v2ray.ang.data.ProfileDao
+import com.v2ray.ang.data.dao.ProfileDao
 import com.v2ray.ang.data.SettingsStore
-import com.v2ray.ang.data.SubscriptionDao
+import com.v2ray.ang.data.dao.SubscriptionDao
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.PlatformDependencies

@@ -5,7 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
-import com.v2ray.ang.data.AssetDao
+import com.v2ray.ang.data.dao.AssetDao
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.entities.AssetUrlItem
 import com.v2ray.ang.di.IoDispatcher

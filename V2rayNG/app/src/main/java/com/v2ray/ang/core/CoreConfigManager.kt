@@ -11,7 +11,7 @@ import com.v2ray.ang.dto.V2rayConfig
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.data.Prefs
-import com.v2ray.ang.data.ProfileDao
+import com.v2ray.ang.data.dao.ProfileDao
 import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType

@@ -4,6 +4,8 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingSource
 import androidx.paging.testing.asSnapshot
+import com.v2ray.ang.data.dao.ProfileDao
+import com.v2ray.ang.data.dao.ServerRowProjection
 import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
 import com.v2ray.ang.enums.EConfigType

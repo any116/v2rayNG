@@ -16,7 +16,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
                                 │ 只能调用 suspend / 普通函数
 ┌───────────────────────────────▼──── Data Layer ────────────────────────┐
 │ data/repository/  UI 进程数据门面：聚合、线程收敛、投影、事件流、Paging Pager │
-│ data/             Room 3：AppDatabase / AppDao / SettingsStore / 迁移    │
+│ data/             Room 3：AppDatabase / dao/ / SettingsStore / 迁移      │
 │ handler/          进程无关的数据源与领域逻辑（object，跨进程可用）          │
 │ dto/ enums/ fmt/ util/ extension/  纯数据与纯函数                        │
 └───────────────────────────────┬────────────────────────────────────────┘
@@ -50,7 +50,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 
 | 包 | 放什么 |
 | --- | --- |
-| `data/` | `AppDatabase`、`AppDao`（全部 DAO + 投影）、`SettingsStore`、`Prefs`、`SettingsDefaults`、`DatabaseIntegrity`、`StorageBootstrap`、`DatabaseCallbacks`、`DedupeKey` |
+| `data/` | `AppDatabase`、`dao/`（各域 DAO + `DaoModels` 投影）、`SettingsStore`、`Prefs`、`SettingsDefaults`、`DatabaseIntegrity`、`StorageBootstrap`、`DatabaseCallbacks`、`DedupeKey` |
 | `data/entities/` | Room `@Entity`：`ProfileItem`、`ServerAffiliationInfo`、`ProfileRaw`、`SubscriptionItem`、`AssetUrlItem`、`RulesetItem`、`SettingsEntry`（+ `WebDavConfig` 值对象） |
 | `data/repository/` | 每屏一个 Repository（或一组屏共用一个），继承 `BaseRepository` |
 | `dto/` | 跨层传递的**不可变**数据类。UI 直接消费的行模型（`ServerRowItem`、`GroupMapItem`、`ConnectionTestResult`）也在这里 |

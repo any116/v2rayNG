@@ -1,7 +1,7 @@
 package com.v2ray.ang.service
 
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.data.ProfileDao
+import com.v2ray.ang.data.dao.ProfileDao
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
 import com.v2ray.ang.util.LogUtil
 import kotlinx.coroutines.CancellationException

@@ -2,9 +2,9 @@ package com.v2ray.ang.core
 
 import android.content.Context
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.data.ProfileDao
-import com.v2ray.ang.data.RoutingDao
-import com.v2ray.ang.data.SubscriptionDao
+import com.v2ray.ang.data.dao.ProfileDao
+import com.v2ray.ang.data.dao.RoutingDao
+import com.v2ray.ang.data.dao.SubscriptionDao
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.di.PlatformDependencies

@@ -10,7 +10,7 @@ import androidx.work.workDataOf
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.Prefs
-import com.v2ray.ang.data.SubscriptionDao
+import com.v2ray.ang.data.dao.SubscriptionDao
 import com.v2ray.ang.data.entities.SubscriptionItem
 import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.util.LogUtil

@@ -14,11 +14,11 @@ import androidx.paging.PagingData
 import androidx.paging.map
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.AppDatabase
-import com.v2ray.ang.data.ProfileDao
-import com.v2ray.ang.data.ServerRowProjection
+import com.v2ray.ang.data.dao.ProfileDao
+import com.v2ray.ang.data.dao.ServerRowProjection
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.StorageBootstrap
-import com.v2ray.ang.data.SubscriptionDao
+import com.v2ray.ang.data.dao.SubscriptionDao
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.ConnectionTestResponse
 import com.v2ray.ang.dto.ConnectionTestResult

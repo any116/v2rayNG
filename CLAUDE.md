@@ -116,7 +116,7 @@ core/                  # 与 Xray 内核交互（跨进程，无 UI 依赖）
   CoreServiceManager / CoreConfigManager / CoreNativeManager / CoreStartup
   CoreOutboundBuilder / CoreConfigContextBuilder / LauncherManager
 data/                  # 唯一持久层（Room 3，数据库 v2rayng.db）
-  AppDatabase / AppDao（Profile/Subscription/Asset/Routing/Settings 五个 DAO + 投影）
+  AppDatabase / dao/（Profile/Subscription/Asset/Routing/Settings 五个 DAO + 投影模型）
   SettingsStore（进程内同步快照）/ Prefs（给无注入点的 object 的同步门面）
   SettingsDefaults / DatabaseIntegrity / StorageBootstrap
   DatabaseCallbacks / DedupeKey
@@ -277,5 +277,5 @@ CI 不跑 `test`、不跑 `lint`，所以**本地必须自己跑**。
 3. 读 `AppConfig.kt` 找常量，不要自己造 key；
 4. 找一个同类型的现有屏作模板（pref 型看 `settings/`，编辑型看 `server/` 或
    `subscription/`，列表型看 `perappproxy/`，复杂型看 `main/`），保持风格一致；
-5. 改数据层前先看 `data/AppDao.kt` 已有的查询/事务，绝大多数已经存在；
+5. 改数据层前先看 `data/dao/` 已有的查询/事务，绝大多数已经存在；
    新增偏好项按 `repository-rules.md` §6 的四步流程走。

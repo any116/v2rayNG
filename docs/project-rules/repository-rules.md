@@ -72,8 +72,8 @@ open class XxxRepository @Inject constructor(
 
 ## 3. DAO / 查询规范
 
-- 所有 DAO 在 `data/AppDao.kt`（按域分为 `ProfileDao` / `SubscriptionDao` / `AssetDao` /
-  `RoutingDao` / `SettingsDao`），用 `@Dao` 标注；Paging 返回类型需要
+- 所有 DAO 在 `data/dao/`（按域分为 `ProfileDao` / `SubscriptionDao` / `AssetDao` /
+  `RoutingDao` / `SettingsDao`），共享投影类型在 `DaoModels.kt`，用 `@Dao` 标注；Paging 返回类型需要
   `@DaoReturnTypeConverters(PagingSourceDaoReturnTypeConverter::class)`。
 - 列表查询**只读轻量投影**，不要 `SELECT *` 把 `profiles` 全表读进内存。
   投影是一个普通 `data class`（如 `ServerRowProjection`），列名与 SQL 别名一一对应。

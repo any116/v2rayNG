@@ -1,7 +1,7 @@
 package com.v2ray.ang.data.repository
 
 import com.v2ray.ang.core.CoreServiceManager
-import com.v2ray.ang.data.ProfileDao
+import com.v2ray.ang.data.dao.ProfileDao
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.TaskerProfile
 import com.v2ray.ang.handler.AngConfigManager
