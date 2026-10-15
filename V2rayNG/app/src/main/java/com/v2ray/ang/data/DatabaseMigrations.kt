@@ -103,6 +103,10 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
             while (source.step()) {
                 val profile = source.toLegacyProfile()
 
+                // SQLiteStatement must be reset before it can be executed again after SQLITE_DONE.
+                // clearBindings() alone does not reset the native statement state.
+                payloadInsert.reset()
+                payloadInsert.clearBindings()
                 payloadInsert.bindText(1, profile.guid)
                 payloadInsert.bindLong(2, PROFILE_PAYLOAD_VERSION.toLong())
                 payloadInsert.bindText(3, ProfilePayloadCodec.encode(profile))

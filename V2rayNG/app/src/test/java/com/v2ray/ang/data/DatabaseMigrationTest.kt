@@ -39,24 +39,30 @@ internal class DatabaseMigrationTest {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent()
             ).use { statement ->
-                statement.bindText(1, "legacy")
-                statement.bindLong(2, 1024L)
-                statement.bindLong(3, Long.MAX_VALUE)
-                statement.bindText(4, "old-key")
-                statement.bindLong(5, 7L)
-                statement.bindLong(6, 9001L)
-                statement.bindText(7, "sub")
-                statement.bindLong(8, 123L)
-                statement.bindText(9, "legacy node")
-                statement.bindText(10, "description")
-                statement.bindText(11, "1.2.3.4")
-                statement.bindText(12, "443")
-                statement.bindText(13, "secret")
-                statement.bindText(14, "ws")
-                statement.bindText(15, "tls")
-                statement.bindLong(16, 1L)
-                statement.bindText(17, "8.8.8.8")
-                statement.step()
+                listOf(
+                    Triple("legacy", 9001L, "secret"),
+                    Triple("legacy-2", 1L, "secret-2"),
+                ).forEachIndexed { index, (guid, configType, password) ->
+                    statement.bindText(1, guid)
+                    statement.bindLong(2, (index + 1) * 1024L)
+                    statement.bindLong(3, Long.MAX_VALUE)
+                    statement.bindText(4, "old-key-$index")
+                    statement.bindLong(5, 7L)
+                    statement.bindLong(6, configType)
+                    statement.bindText(7, "sub")
+                    statement.bindLong(8, 123L + index)
+                    statement.bindText(9, "legacy node $index")
+                    statement.bindText(10, "description")
+                    statement.bindText(11, "1.2.3.${index + 4}")
+                    statement.bindText(12, "443")
+                    statement.bindText(13, password)
+                    statement.bindText(14, "ws")
+                    statement.bindText(15, "tls")
+                    statement.bindLong(16, 1L)
+                    statement.bindText(17, "8.8.8.8")
+                    statement.step()
+                    statement.reset()
+                }
             }
         } finally {
             old.close()
@@ -84,6 +90,11 @@ internal class DatabaseMigrationTest {
                 assertTrue(content.contains("\"remoteDNS\":\"8.8.8.8\""))
                 assertFalse(content.contains("\"network\""))
                 assertEquals("", statement.getText(2))
+            }
+
+            migrated.prepare("SELECT COUNT(*) FROM profile_payload").use { statement ->
+                assertTrue(statement.step())
+                assertEquals(2L, statement.getLong(0))
             }
 
             GROUP_ORDER_TRIGGER_NAMES.forEach { name ->
