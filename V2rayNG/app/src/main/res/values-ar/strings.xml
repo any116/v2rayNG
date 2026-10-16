@@ -136,6 +136,14 @@
     <string name="server_lab_bandwidth_up">عرض النطاق للرفع (الوحدات المدعومة: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">وضع XHTTP</string>
     <string name="server_lab_xhttp_extra">JSON خام لحقل XHTTP Extra، بالتنسيق: { XHTTPObject }</string>
+    <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
+    <string name="server_lab_xdrive_service">service</string>
+    <string name="server_lab_xdrive_service_google_drive" translatable="false">Google Drive</string>
+    <string name="server_lab_xdrive_secrets">secrets (واحد في كل سطر)</string>
+    <string name="server_lab_xdrive_template">template JSON</string>
+    <string name="server_lab_xdrive_secrets_error">يتطلب Google Drive ثلاثة secrets غير فارغة تماماً، واحداً في كل سطر</string>
+    <string name="server_lab_xdrive_reality_error">لا يدعم XDRIVE أمان النقل REALITY</string>
+    <string name="server_lab_xdrive_service_error">خدمة XDRIVE غير مدعومة</string>
     <string name="server_lab_final_mask">JSON خام لحقل finalMask، بالتنسيق: { FinalMaskObject }</string>
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">التحقق من شهادة النظير بالاسم</string>

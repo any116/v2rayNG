@@ -438,6 +438,23 @@ object CoreOutboundBuilder {
                 streamSettings.xhttpSettings = xhttpSetting
             }
 
+            NetworkType.XDRIVE.type -> {
+                val xdriveSetting = OutboundBean.StreamSettingsBean.XdriveSettingsBean(
+                    remoteFolder = profileItem.remoteFolder
+                        ?.takeIf { profileItem.service != AppConfig.XDRIVE_SERVICE_TEMPLATE },
+                    service = profileItem.service ?: AppConfig.XDRIVE_SERVICE_LOCAL,
+                    secrets = profileItem.secrets
+                        ?.takeIf { profileItem.service == AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE }
+                        ?.split("\n")
+                        ?.map { it.trim() }
+                        ?.filter { it.isNotEmpty() },
+                    template = profileItem.template
+                        ?.takeIf { profileItem.service == AppConfig.XDRIVE_SERVICE_TEMPLATE }
+                        ?.let { JsonUtil.parseString(it) }
+                )
+                streamSettings.xdriveSettings = xdriveSetting
+            }
+
             NetworkType.H2.type, NetworkType.HTTP.type -> {
                 streamSettings.network = NetworkType.H2.type
                 val h2Setting = OutboundBean.StreamSettingsBean.HttpSettingsBean()

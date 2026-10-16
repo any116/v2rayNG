@@ -1,9 +1,14 @@
 package com.v2ray.ang.ui.server
 
 import androidx.annotation.StringRes
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_LOCAL
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
+import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.R
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
+import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
@@ -53,6 +58,15 @@ internal object ServerValidator {
                 errors[ServerField.REMOTE_DNS] = R.string.server_lab_remote_dns
             }
         }
+        if (form.network == NetworkType.XDRIVE.type &&
+            form.service != XDRIVE_SERVICE_TEMPLATE &&
+            form.remoteFolder.isBlank()
+        ) {
+            errors[ServerField.REMOTE_FOLDER] = R.string.server_lab_xdrive_remote_folder
+        }
+        if (form.network == NetworkType.XDRIVE.type && form.streamSecurity == REALITY) {
+            errors[ServerField.STREAM_SECURITY] = R.string.server_lab_xdrive_reality_error
+        }
         return errors
     }
 
@@ -68,6 +82,31 @@ internal object ServerValidator {
         if (configType == EConfigType.TROJAN && profile.security.isNullOrBlank()) {
             return BaseText.of(R.string.server_lab_stream_security)
         }
+        if (profile.network == NetworkType.XDRIVE.type) {
+            if (profile.service !in setOf(
+                    XDRIVE_SERVICE_LOCAL,
+                    XDRIVE_SERVICE_GOOGLE_DRIVE,
+                    XDRIVE_SERVICE_TEMPLATE,
+                )
+            ) {
+                return BaseText.of(R.string.server_lab_xdrive_service_error)
+            }
+            if (profile.service != XDRIVE_SERVICE_TEMPLATE && profile.remoteFolder.isNullOrBlank()) {
+                return BaseText.of(R.string.server_lab_xdrive_remote_folder)
+            }
+            if (profile.security == REALITY) {
+                return BaseText.of(R.string.server_lab_xdrive_reality_error)
+            }
+            if (profile.service == XDRIVE_SERVICE_GOOGLE_DRIVE && xdriveSecrets(profile.secrets).size != 3) {
+                return BaseText.of(R.string.server_lab_xdrive_secrets_error)
+            }
+            if (profile.service == XDRIVE_SERVICE_TEMPLATE && profile.template.isNullOrBlank()) {
+                return BaseText.of(R.string.server_lab_xdrive_template)
+            }
+            if (profile.service == XDRIVE_SERVICE_TEMPLATE && !isValidXdriveTemplate(profile.template)) {
+                return BaseText.of(R.string.server_lab_xdrive_template)
+            }
+        }
         if (!profile.xhttpExtra.isNullOrBlank() && JsonUtil.parseString(profile.xhttpExtra) == null) {
             return BaseText.of(R.string.server_lab_xhttp_extra)
         }
@@ -75,5 +114,58 @@ internal object ServerValidator {
             return BaseText.of(R.string.server_lab_final_mask)
         }
         return null
+    }
+
+    private fun xdriveSecrets(value: String?): List<String> = value.orEmpty()
+        .lineSequence()
+        .map(String::trim)
+        .filter(String::isNotEmpty)
+        .toList()
+
+    private fun isValidXdriveTemplate(value: String?): Boolean {
+        val template = JsonUtil.parseString(value) ?: return false
+        val requiredOperations = listOf("put", "get", "delete", "list")
+        if (requiredOperations.any { operation ->
+                val config = template.get(operation)?.takeIf { it.isJsonObject }?.asJsonObject
+                    ?: return@any true
+                val url = config.get("url")
+                url == null || !url.isJsonPrimitive || !url.asJsonPrimitive.isString || url.asString.isBlank()
+            }
+        ) {
+            return false
+        }
+
+        val namesRegex = template.get("list")?.takeIf { it.isJsonObject }
+            ?.asJsonObject?.get("namesRegex") ?: return false
+        if (!namesRegex.isJsonPrimitive || !namesRegex.asJsonPrimitive.isString || namesRegex.asString.isBlank()) {
+            return false
+        }
+        return hasCaptureGroup(namesRegex.asString)
+    }
+
+    /**
+     * XDRIVE evaluates this expression with Go's RE2 implementation. Avoid using Java's regex
+     * compiler here because the two dialects accept different syntax; the core remains the
+     * authority for full regex validation, while the editor only checks the required capture.
+     */
+    private fun hasCaptureGroup(pattern: String): Boolean {
+        var escaped = false
+        pattern.forEachIndexed { index, char ->
+            if (escaped) {
+                escaped = false
+                return@forEachIndexed
+            }
+            if (char == '\\') {
+                escaped = true
+                return@forEachIndexed
+            }
+            if (char != '(') return@forEachIndexed
+
+            val suffix = pattern.substring(index)
+            if (suffix.startsWith("(?P<") || suffix.startsWith("(?<")) return true
+            if (suffix.startsWith("(?")) return@forEachIndexed
+            return true
+        }
+        return false
     }
 }

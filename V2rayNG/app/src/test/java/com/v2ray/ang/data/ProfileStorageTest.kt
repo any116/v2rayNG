@@ -85,6 +85,24 @@ internal class ProfileStorageTest {
     }
 
     @Test
+    fun retiredXdriveTuningFieldsAreRemovedWhenPayloadIsUpdated() {
+        val payload = profile("guid").toPayloadItem(
+            previousContent = """
+                {
+                  "configType":"VMESS",
+                  "segmentBytes":1024,
+                  "flushIntervalMs":10,
+                  "futureOption":"keep"
+                }
+            """.trimIndent()
+        )
+
+        assertFalse(payload.content.contains("segmentBytes"))
+        assertFalse(payload.content.contains("flushIntervalMs"))
+        assertTrue(payload.content.contains("futureOption"))
+    }
+
+    @Test
     fun knownFieldsCoversEverySerializableProfileProperty() {
         val declared = ProfileItem::class.java.declaredFields
             .filterNot { it.isSynthetic || Modifier.isStatic(it.modifiers) || Modifier.isTransient(it.modifiers) }

@@ -1,5 +1,6 @@
 package com.v2ray.ang.dto
 
+import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.enums.EConfigType
@@ -123,6 +124,7 @@ data class V2rayConfig(
             var realitySettings: TlsSettingsBean? = null,
             var grpcSettings: GrpcSettingsBean? = null,
             var hysteriaSettings: HysteriaSettingsBean? = null,
+            var xdriveSettings: XdriveSettingsBean? = null,
             var finalmask: Any? = null,
             val dsSettings: Any? = null,
             var sockopt: SockoptBean? = null
@@ -252,6 +254,13 @@ data class V2rayConfig(
             data class HysteriaSettingsBean(
                 var version: Int,
                 var auth: String? = null
+            )
+
+            data class XdriveSettingsBean(
+                var remoteFolder: String? = null,
+                var service: String? = null,
+                var secrets: List<String>? = null,
+                var template: JsonObject? = null
             )
 
             //https://xtls.github.io/config/transport.html#finalmaskobject

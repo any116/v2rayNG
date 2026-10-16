@@ -92,6 +92,7 @@ internal data class FieldOptions(
     val vmessSecurities: StringOptions,
     val ssSecurities: StringOptions,
     val flows: StringOptions,
+    val xdriveServices: StringOptions,
     val policyGroupTypes: StringOptions,
 )
 
@@ -109,5 +110,6 @@ internal fun rememberFieldOptions(): FieldOptions = FieldOptions(
     vmessSecurities = rememberStringOptions(R.array.securitys),
     ssSecurities = rememberStringOptions(R.array.ss_securitys),
     flows = rememberStringOptions(R.array.flows),
+    xdriveServices = rememberStringOptions(R.array.xdrive_services),
     policyGroupTypes = rememberStringOptions(R.array.policy_group_type),
 )
