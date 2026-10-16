@@ -34,9 +34,7 @@ gomobile init
 #[ -n "$v" ] && go get google.golang.org/grpc@$v || echo "错误：获取分支版本失败" >&2
 #[ -n "$rpc_ver" ] && go get google.golang.org/genproto/googleapis/rpc@"$rpc_ver" || echo "错误：获取rpc_ver版本失败" >&2
 
-go get \
-    golang.org/x/mobile@latest \
-    gvisor.dev/gvisor@go
+go get golang.org/x/mobile@latest
 go mod tidy -v
 
 tar --exclude=.git -czf ../xraylite_android.tar.gz * .[!.]* .??*
