@@ -5,6 +5,7 @@ import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_LOCAL
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.AppConfig.REALITY
+import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.R
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
@@ -12,6 +13,7 @@ import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
+import java.net.URI
 
 /**
  * Centralised validation rules for the server configuration screen.
@@ -47,16 +49,46 @@ internal object ServerValidator {
                     errors[ServerField.PASSWORD] = R.string.server_lab_id
                 EConfigType.TROJAN, EConfigType.SHADOWSOCKS, EConfigType.HYSTERIA2 ->
                     errors[ServerField.PASSWORD] = R.string.server_lab_id3
+                EConfigType.MASQUE -> if (!hasMasqueAuthorization(form.masqueHeaders)) {
+                    errors[ServerField.PASSWORD] = R.string.server_lab_masque_password
+                }
                 else -> Unit
             }
+        }
+        if (configType == EConfigType.MASQUE && form.password.isNotBlank() && form.username.isBlank()) {
+            errors[ServerField.USERNAME] = R.string.server_lab_masque_user
+        }
+        if (configType == EConfigType.MASQUE && form.username.contains(':')) {
+            errors[ServerField.USERNAME] = R.string.server_lab_masque_user_error
         }
         if (configType == EConfigType.TROJAN && form.streamSecurity.isBlank()) {
             errors[ServerField.STREAM_SECURITY] = R.string.server_lab_stream_security
         }
-        if (configType == EConfigType.WIREGUARD) {
+        if (configType == EConfigType.MASQUE && form.streamSecurity.isNotBlank() && form.streamSecurity != TLS) {
+            errors[ServerField.STREAM_SECURITY] = R.string.server_lab_masque_tls_error
+        }
+        if (configType == EConfigType.WIREGUARD || configType == EConfigType.MASQUE) {
             if (!isIpList(form.remoteDNS)) {
                 errors[ServerField.REMOTE_DNS] = R.string.server_lab_remote_dns
             }
+        }
+        if (configType == EConfigType.MASQUE &&
+            form.masqueHeaders.isNotBlank() &&
+            !isValidMasqueHeaders(form.masqueHeaders)
+        ) {
+            errors[ServerField.MASQUE_HEADERS] = R.string.server_lab_masque_headers_error
+        }
+        if (configType == EConfigType.MASQUE &&
+            form.password.isNotBlank() &&
+            hasMasqueAuthorization(form.masqueHeaders)
+        ) {
+            errors[ServerField.MASQUE_HEADERS] = R.string.server_lab_masque_auth_error
+        }
+        if (configType == EConfigType.MASQUE && !isValidMasqueHost(form.host)) {
+            errors[ServerField.HOST] = R.string.server_lab_masque_host_error
+        }
+        if (configType == EConfigType.MASQUE && !isValidMasquePath(form.path)) {
+            errors[ServerField.PATH] = R.string.server_lab_masque_path_error
         }
         if (form.network == NetworkType.XDRIVE.type &&
             form.service != XDRIVE_SERVICE_TEMPLATE &&
@@ -81,6 +113,32 @@ internal object ServerValidator {
     fun validateProfile(configType: EConfigType, profile: ProfileItem): BaseText? {
         if (configType == EConfigType.TROJAN && profile.security.isNullOrBlank()) {
             return BaseText.of(R.string.server_lab_stream_security)
+        }
+        if (configType == EConfigType.MASQUE) {
+            if (profile.security != TLS) {
+                return BaseText.of(R.string.server_lab_masque_tls_error)
+            }
+            if (profile.password.isNullOrBlank() && !hasMasqueAuthorization(profile.masqueHeaders)) {
+                return BaseText.of(R.string.server_lab_masque_password)
+            }
+            if (!profile.password.isNullOrBlank() && profile.username.isNullOrBlank()) {
+                return BaseText.of(R.string.server_lab_masque_user)
+            }
+            if (profile.username?.contains(':') == true) {
+                return BaseText.of(R.string.server_lab_masque_user_error)
+            }
+            if (!profile.masqueHeaders.isNullOrBlank() && !isValidMasqueHeaders(profile.masqueHeaders)) {
+                return BaseText.of(R.string.server_lab_masque_headers_error)
+            }
+            if (!profile.password.isNullOrBlank() && hasMasqueAuthorization(profile.masqueHeaders)) {
+                return BaseText.of(R.string.server_lab_masque_auth_error)
+            }
+            if (!isValidMasqueHost(profile.host.orEmpty())) {
+                return BaseText.of(R.string.server_lab_masque_host_error)
+            }
+            if (!isValidMasquePath(profile.path.orEmpty())) {
+                return BaseText.of(R.string.server_lab_masque_path_error)
+            }
         }
         if (profile.network == NetworkType.XDRIVE.type) {
             if (profile.service !in setOf(
@@ -121,6 +179,86 @@ internal object ServerValidator {
         .map(String::trim)
         .filter(String::isNotEmpty)
         .toList()
+
+    private fun hasMasqueAuthorization(value: String?): Boolean {
+        return hasMasqueHeader(value, "Authorization") { it.isNotBlank() }
+    }
+
+    private fun hasMasqueHeader(
+        value: String?,
+        expectedName: String,
+        valuePredicate: (String) -> Boolean = { true },
+    ): Boolean {
+        val headers = masqueHeaderEntries(value.orEmpty()) ?: return false
+        return headers.any { (name, headerValue) ->
+            name.equals(expectedName, ignoreCase = true) && valuePredicate(headerValue)
+        }
+    }
+
+    private fun isValidMasqueHeaders(value: String?): Boolean {
+        return masqueHeaderEntries(value)?.all { (name, headerValue) ->
+            isValidHeaderName(name) &&
+                !name.equals("Host", ignoreCase = true) &&
+                !name.equals("Capsule-Protocol", ignoreCase = true) &&
+                isValidHeaderValue(headerValue)
+        } == true
+    }
+
+    private fun masqueHeaderEntries(value: String?): List<Pair<String, String>>? {
+        val raw = value.orEmpty().trim()
+        if (raw.startsWith("{")) {
+            val headers = JsonUtil.parseString(raw) ?: return null
+            val entries = mutableListOf<Pair<String, String>>()
+            for ((name, headerValue) in headers.entrySet()) {
+                if (!headerValue.isJsonPrimitive || !headerValue.asJsonPrimitive.isString) {
+                    return null
+                }
+                entries += name to headerValue.asString
+            }
+            return entries
+        }
+        val entries = mutableListOf<Pair<String, String>>()
+        for (line in raw.lineSequence().filter(String::isNotBlank)) {
+            val separator = line.indexOf(':')
+            if (separator <= 0) return null
+            entries += line.substring(0, separator).trim() to line.substring(separator + 1).trim()
+        }
+        return entries
+    }
+
+    private fun isValidMasqueHost(value: String): Boolean {
+        if (value.isBlank()) return true
+        return runCatching {
+            val uri = URI("https://$value")
+            uri.host != null &&
+                uri.rawAuthority == value &&
+                uri.rawPath.isNullOrEmpty() &&
+                uri.rawQuery == null &&
+                uri.rawFragment == null
+        }.getOrDefault(false)
+    }
+
+    private fun isValidMasquePath(value: String): Boolean {
+        if (value.isBlank()) return true
+        return value.startsWith('/') &&
+            value.replace("{target}", "")
+                .replace("{ipproto}", "")
+                .replace("{?target,ipproto}", "")
+                .replace("{?ipproto,target}", "")
+                .replace("{&target,ipproto}", "")
+                .replace("{&ipproto,target}", "")
+                .none { it == '{' || it == '}' } &&
+            !value.contains('\r') &&
+            !value.contains('\n')
+    }
+
+    private fun isValidHeaderName(value: String): Boolean =
+        HEADER_NAME_PATTERN.matches(value)
+
+    private fun isValidHeaderValue(value: String): Boolean =
+        value.all { it == '\t' || it.code in 0x20..0x7e || it.code >= 0x80 }
+
+    private val HEADER_NAME_PATTERN = Regex("""^[!#$%&'*+.^_`|~0-9A-Za-z-]+$""")
 
     private fun isValidXdriveTemplate(value: String?): Boolean {
         val template = JsonUtil.parseString(value) ?: return false

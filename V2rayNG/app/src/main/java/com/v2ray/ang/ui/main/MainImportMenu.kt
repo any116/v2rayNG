@@ -25,6 +25,7 @@ private enum class ImportMenuItem(@StringRes val labelRes: Int, val action: Main
     Trojan(R.string.menu_item_import_config_manually_trojan, MainAction.AddServer(EConfigType.TROJAN)),
     WireGuard(R.string.menu_item_import_config_manually_wireguard, MainAction.AddServer(EConfigType.WIREGUARD)),
     Hysteria2(R.string.menu_item_import_config_manually_hysteria2, MainAction.AddServer(EConfigType.HYSTERIA2)),
+    Masque(R.string.menu_item_import_config_manually_masque, MainAction.AddServer(EConfigType.MASQUE)),
 }
 
 private enum class MoreMenuItem(@StringRes val labelRes: Int) {

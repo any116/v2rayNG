@@ -62,6 +62,8 @@ data class V2rayNShareItem(
         val SubChildItems: String?,
         val Filter: String?,
         val MultipleLoad: Int?,
+        val MasquePath: String?,
+        val MasqueHeaders: String?,
     )
 
     data class V2rayNTransportExtraShareItem(
@@ -90,15 +92,20 @@ data class V2rayNShareItem(
             // 8 -> EConfigType.TUIC
             9 -> EConfigType.WIREGUARD
             10 -> EConfigType.HTTP
+            14 -> EConfigType.MASQUE
             101 -> EConfigType.POLICYGROUP
             102 -> EConfigType.PROXYCHAIN
             else -> error("Unknown ConfigType: $ConfigType")
         }
-        val network = if (configType == EConfigType.HYSTERIA2) "hysteria" else
-            when (Network) {
+        val network = when {
+            configType == EConfigType.HYSTERIA2 -> "hysteria"
+            configType == EConfigType.MASQUE -> NetworkType.MASQUE.type
+            else -> when (Network) {
                 "raw" -> "tcp"
+                NetworkType.MASQUE.type -> NetworkType.TCP.type
                 else -> NetworkType.fromString(Network).type
             }
+        }
         val profile = ProfileItem(
             guid = Utils.getUuid(),
             configType = configType,
@@ -121,7 +128,8 @@ data class V2rayNShareItem(
                 else -> null
             },
             host = TransportExtraObj?.Host,
-            path = TransportExtraObj?.Path,
+            path = if (configType == EConfigType.MASQUE) ProtoExtraObj?.MasquePath else TransportExtraObj?.Path,
+            masqueHeaders = ProtoExtraObj?.MasqueHeaders,
             seed = TransportExtraObj?.KcpSeed,
             kcpMtu = TransportExtraObj?.KcpMtu,
             mode = TransportExtraObj?.GrpcMode,
@@ -130,11 +138,11 @@ data class V2rayNShareItem(
             xhttpMode = TransportExtraObj?.XhttpMode,
             xhttpExtra = TransportExtraObj?.XhttpExtra,
             finalMask = Finalmask,
-            security = StreamSecurity,
+            security = if (configType == EConfigType.MASQUE) "tls" else StreamSecurity,
             sni = Sni,
             alpn = Alpn,
             fingerPrint = Fingerprint,
-            insecure = AllowInsecure?.toBoolean(),
+            insecure = if (configType == EConfigType.MASQUE) false else AllowInsecure?.toBoolean(),
             echConfigList = EchConfigList,
             verifyPeerCertByName = VerifyPeerCertByName,
             pinnedCA256 = CertSha,

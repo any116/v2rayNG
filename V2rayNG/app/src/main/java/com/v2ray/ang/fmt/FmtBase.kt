@@ -2,6 +2,7 @@ package com.v2ray.ang.fmt
 
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.util.HttpUtil
@@ -42,7 +43,13 @@ open class FmtBase {
      */
     fun getQueryParam(uri: URI): Map<String, String> {
         return uri.rawQuery.split("&")
-            .associate { it.split("=").let { (k, v) -> k to Utils.decodeURIComponent(v) } }
+            .associate {
+                it.split("=", limit = 2).let { parts ->
+                    val key = parts.firstOrNull().orEmpty()
+                    val value = parts.getOrNull(1).orEmpty()
+                    key to Utils.decodeURIComponent(value)
+                }
+            }
     }
 
     /**
@@ -52,7 +59,12 @@ open class FmtBase {
      * @param queryParam the query parameters to use for populating the ProfileItem
      */
     fun getItemFormQuery(config: ProfileItem, queryParam: Map<String, String>) {
-        config.network = queryParam["type"] ?: NetworkType.TCP.type
+        val requestedNetwork = queryParam["type"]
+        config.network = if (requestedNetwork == NetworkType.MASQUE.type && config.configType != EConfigType.MASQUE) {
+            NetworkType.TCP.type
+        } else {
+            requestedNetwork ?: NetworkType.TCP.type
+        }
         config.headerType = queryParam["headerType"]
         config.host = queryParam["host"]
         config.path = queryParam["path"]

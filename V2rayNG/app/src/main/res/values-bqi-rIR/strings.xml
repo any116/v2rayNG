@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">ٱووردن [Trojan]</string>
     <string name="menu_item_import_config_manually_wireguard">ٱووردن [WireGuard]</string>
     <string name="menu_item_import_config_manually_hysteria2">ٱووردن [Hysteria2]</string>
+    <string name="menu_item_import_config_manually_masque">ٱووردن [MASQUE]</string>
     <string name="confirm_delete_visible_profiles">پوی کانفیگا ک هیم سکو نشووݩ داڌه ابۊن پاک ابۊن، هنی هم اخۊی پاکسووݩ کۊنی؟</string>
     <string name="confirm_delete_duplicate_profiles">پوی کانفیگا تکراری ک هیم سکو نشووݩ داڌه ابۊن پاک ابۊن، هنی هم اخۊی پاکسووݩ کۊنی؟</string>
     <string name="confirm_delete_invalid_profiles">ٱول کانفیگا ن آزمایش کۊنین. پوی کانفیگا نا موئتبر ک هیم سکو نشووݩ داڌه ابۊن پاک ابۊن، هنی هم اخۊی پاکسووݩ کۊنی؟</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">وا روء رئڌن پئنا باند (واهڌ)</string>
     <string name="server_lab_xhttp_mode">حالت XHTTP</string>
     <string name="server_lab_xhttp_extra">XHTTP Extra خام JSON، قالوو: { XHTTPObject }</string>
+    <string name="server_lab_masque_user">کاربَر</string>
+    <string name="server_lab_masque_user_error">کاربَر MASQUE نباید \':\' دشته بۊ</string>
+    <string name="server_lab_masque_password">رمز</string>
+    <string name="server_lab_masque_host">هاست MASQUE (اختیاری)</string>
+    <string name="server_lab_masque_host_error">یه authority درست وری هاست MASQUE بنویسین</string>
+    <string name="server_lab_masque_path">مسیر MASQUE (اختیاری)</string>
+    <string name="server_lab_masque_path_error">مسیر MASQUE باید وا \'/\' شروع بۊ و تنها متغیرهای target/ipproto ره کار ببره</string>
+    <string name="server_lab_masque_headers">هدرهای MASQUE (هر خط key: value یا JSON)</string>
+    <string name="server_lab_masque_headers_error">هدرهای MASQUE ره وری خطوط key: value یا یه JSON درست بنویسین</string>
+    <string name="server_lab_masque_auth_error">وقتی کاربَر/رمز MASQUE واره، Authorization ره پاک کۊنین</string>
+    <string name="server_lab_masque_tls_error">MASQUE امنیت انتقال TLS ن ره لازم داره</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">Google Drive</string>

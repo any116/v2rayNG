@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">添加 [Trojan]</string>
     <string name="menu_item_import_config_manually_wireguard">添加 [WireGuard]</string>
     <string name="menu_item_import_config_manually_hysteria2">添加 [Hysteria2]</string>
+    <string name="menu_item_import_config_manually_masque">添加 [MASQUE]</string>
     <string name="confirm_delete_visible_profiles">确定要删除当前显示的所有配置吗？</string>
     <string name="confirm_delete_duplicate_profiles">确定要删除当前显示的所有重复配置吗？</string>
     <string name="confirm_delete_invalid_profiles">请先测试配置。确定要删除当前显示的所有无效配置吗？</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">带宽上行 (支持的单位 k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">XHTTP 模式</string>
     <string name="server_lab_xhttp_extra">XHTTP Extra 原始 JSON，格式： { XHTTPObject }</string>
+    <string name="server_lab_masque_user">用户</string>
+    <string name="server_lab_masque_user_error">MASQUE 用户不得包含 \':\'</string>
+    <string name="server_lab_masque_password">密码</string>
+    <string name="server_lab_masque_host">MASQUE 主机（可选）</string>
+    <string name="server_lab_masque_host_error">请输入有效的 MASQUE 主机 authority</string>
+    <string name="server_lab_masque_path">MASQUE 路径（可选）</string>
+    <string name="server_lab_masque_path_error">MASQUE 路径必须以“/”开头，并且只能使用 target/ipproto 变量</string>
+    <string name="server_lab_masque_headers">MASQUE 请求头（每行 key: value 或 JSON）</string>
+    <string name="server_lab_masque_headers_error">请输入格式正确的 MASQUE 请求头（key: value 行或 JSON 对象）</string>
+    <string name="server_lab_masque_auth_error">设置 MASQUE 用户名/密码时请移除 Authorization</string>
+    <string name="server_lab_masque_tls_error">MASQUE 需要 TLS 传输安全</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">Google Drive</string>

@@ -101,7 +101,9 @@ class ServerEditViewModel @Inject constructor(
         }
         val form = when {
             saver.dirty -> state.form
-            data.profile == null -> ServerForm()
+            data.profile == null -> ServerForm(
+                streamSecurity = if (configType == EConfigType.MASQUE) AppConfig.TLS else ""
+            )
             else -> ServerForm.from(data.profile)
         }
         val rawContent = when {

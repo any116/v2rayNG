@@ -55,6 +55,7 @@ data class ServerForm(
     val host: String = "",
     val path: String = "",
     val xhttpExtra: String = "",
+    val masqueHeaders: String = "",
     val remoteFolder: String = "",
     val service: String = XDRIVE_SERVICE_LOCAL,
     val secrets: String = "",
@@ -95,6 +96,7 @@ data class ServerForm(
         val isSocksOrHttp = configType == EConfigType.SOCKS || configType == EConfigType.HTTP
         val isWireguard = configType == EConfigType.WIREGUARD
         val isHysteria2 = configType == EConfigType.HYSTERIA2
+        val isMasque = configType == EConfigType.MASQUE
         val isXdrive = network == NetworkType.XDRIVE.type
 
         return initial.copy(
@@ -109,7 +111,7 @@ data class ServerForm(
                 else -> null
             },
             flow = if (isVless) flow else null,
-            username = if (isSocksOrHttp) username else null,
+            username = if (isSocksOrHttp || isMasque) username else null,
             secretKey = if (isWireguard) secretKey else null,
             publicKey = when {
                 isWireguard -> publicKey
@@ -120,13 +122,13 @@ data class ServerForm(
             reserved = if (isWireguard) reserved else null,
             localAddress = if (isWireguard) localAddress else null,
             mtu = if (isWireguard) mtu.toIntOrNull() else null,
-            remoteDNS = if (isWireguard) remoteDNS.nullIfBlank() else null,
+            remoteDNS = if (isWireguard || isMasque) remoteDNS.nullIfBlank() else null,
             obfsPassword = if (isHysteria2) obfsPassword else null,
             portHopping = if (isHysteria2) portHopping else null,
             portHoppingInterval = if (isHysteria2) portHoppingInterval else null,
             bandwidthDown = if (isHysteria2) bandwidthDown else null,
             bandwidthUp = if (isHysteria2) bandwidthUp else null,
-            network = network,
+            network = if (isMasque) NetworkType.MASQUE.type else network,
             headerType = headerType,
             mode = mode.nullIfBlank(),
             xhttpMode = xhttpMode.nullIfBlank(),
@@ -135,6 +137,7 @@ data class ServerForm(
             host = host,
             path = path,
             xhttpExtra = xhttpExtra.nullIfBlank(),
+            masqueHeaders = if (isMasque) masqueHeaders.nullIfBlank() else null,
             remoteFolder = if (isXdrive && service != XDRIVE_SERVICE_TEMPLATE) remoteFolder.nullIfBlank() else null,
             service = if (isXdrive) service.nullIfBlank() else null,
             secrets = if (isXdrive && service == XDRIVE_SERVICE_GOOGLE_DRIVE) secrets.nullIfBlank() else null,
@@ -146,9 +149,9 @@ data class ServerForm(
             browserDialerMode =
                 if (network in listOf(NetworkType.WS.type, NetworkType.XHTTP.type))
                     browserDialerMode.nullIfBlank() else null,
-            security = streamSecurity,
+            security = if (isMasque) TLS else streamSecurity,
             sni = sni,
-            insecure = allowInsecure,
+            insecure = if (isMasque) false else allowInsecure,
             fingerPrint = fingerPrint,
             alpn = alpn,
             shortId = shortId,
@@ -201,6 +204,7 @@ data class ServerForm(
                 host = profile.host.orEmpty(),
                 path = profile.path.orEmpty(),
                 xhttpExtra = profile.xhttpExtra.orEmpty(),
+                masqueHeaders = profile.masqueHeaders.orEmpty(),
                 remoteFolder = profile.remoteFolder.orEmpty(),
                 service = profile.service ?: XDRIVE_SERVICE_LOCAL,
                 secrets = profile.secrets.orEmpty(),
@@ -210,7 +214,7 @@ data class ServerForm(
                 kcpMtu = profile.kcpMtu?.toString().orEmpty(),
                 kcpTti = profile.kcpTti?.toString().orEmpty(),
                 browserDialerMode = profile.browserDialerMode.orEmpty(),
-                streamSecurity = profile.security.orEmpty(),
+                streamSecurity = if (profile.configType == EConfigType.MASQUE) TLS else profile.security.orEmpty(),
                 sni = profile.sni.orEmpty(),
                 allowInsecure = profile.insecure == true,
                 fingerPrint = profile.fingerPrint.orEmpty(),
@@ -263,6 +267,7 @@ enum class ServerField(
     HOST({ it.host }, { f, v -> f.copy(host = v) }),
     PATH({ it.path }, { f, v -> f.copy(path = v) }),
     XHTTP_EXTRA({ it.xhttpExtra }, { f, v -> f.copy(xhttpExtra = v) }),
+    MASQUE_HEADERS({ it.masqueHeaders }, { f, v -> f.copy(masqueHeaders = v) }),
     REMOTE_FOLDER({ it.remoteFolder }, { f, v -> f.copy(remoteFolder = v) }),
     SERVICE({ it.service }, { f, v -> f.copy(service = v) }),
     SECRETS({ it.secrets }, { f, v -> f.copy(secrets = v) }),

@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">Thêm [Trojan]</string>
     <string name="menu_item_import_config_manually_wireguard">Thêm [WireGuard]</string>
     <string name="menu_item_import_config_manually_hysteria2">Thêm [Hysteria2]</string>
+    <string name="menu_item_import_config_manually_masque">Thêm [MASQUE]</string>
     <string name="confirm_delete_visible_profiles">Bạn có chắc muốn xóa tất cả cấu hình đang hiển thị không?</string>
     <string name="confirm_delete_duplicate_profiles">Bạn có chắc muốn xóa tất cả cấu hình trùng lặp đang hiển thị không?</string>
     <string name="confirm_delete_invalid_profiles">Vui lòng kiểm tra các cấu hình trước. Bạn có chắc muốn xóa tất cả cấu hình không hợp lệ đang hiển thị không?</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">Băng thông tải lên (đơn vị hỗ trợ: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">Chế độ XHTTP</string>
     <string name="server_lab_xhttp_extra">JSON thô của XHTTP Extra, định dạng: { XHTTPObject }</string>
+    <string name="server_lab_masque_user">người dùng</string>
+    <string name="server_lab_masque_user_error">Người dùng MASQUE không được chứa \':\'</string>
+    <string name="server_lab_masque_password">mật khẩu</string>
+    <string name="server_lab_masque_host">Máy chủ MASQUE (không bắt buộc)</string>
+    <string name="server_lab_masque_host_error">Nhập authority máy chủ MASQUE hợp lệ</string>
+    <string name="server_lab_masque_path">Đường dẫn MASQUE (không bắt buộc)</string>
+    <string name="server_lab_masque_path_error">Đường dẫn MASQUE phải bắt đầu bằng \'/\' và chỉ dùng biến target/ipproto</string>
+    <string name="server_lab_masque_headers">Header MASQUE (key: value mỗi dòng hoặc JSON)</string>
+    <string name="server_lab_masque_headers_error">Nhập header MASQUE dưới dạng các dòng key: value hoặc một đối tượng JSON</string>
+    <string name="server_lab_masque_auth_error">Xóa Authorization khi đã đặt người dùng/mật khẩu MASQUE</string>
+    <string name="server_lab_masque_tls_error">MASQUE yêu cầu bảo mật truyền tải TLS</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">Google Drive</string>

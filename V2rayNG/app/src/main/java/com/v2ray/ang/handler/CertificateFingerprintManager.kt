@@ -11,13 +11,14 @@ import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 import libv2ray.Libv2ray
+import java.net.URI
 
 object CertificateFingerprintManager {
     private const val TIMEOUT_MS = 5000L
 
     fun fetchForManualFill(profile: ProfileItem): String? {
         val request = buildRequest(profile) ?: return null
-        val result = if (profile.configType == EConfigType.HYSTERIA2) {
+        val result = if (usesQuicCertificate(profile)) {
             fetch("quic", request) { Libv2ray.fetchQuicCertSha256(it) }
         } else {
             fetch("tls", request) { Libv2ray.fetchTlsCertSha256(it) }
@@ -45,6 +46,13 @@ object CertificateFingerprintManager {
 
     private fun isFetchable(profile: ProfileItem): Boolean {
         return profile.configType == EConfigType.HYSTERIA2 || profile.security == AppConfig.TLS
+    }
+
+    private fun usesQuicCertificate(profile: ProfileItem): Boolean {
+        if (profile.configType == EConfigType.HYSTERIA2) return true
+        if (profile.configType != EConfigType.MASQUE) return false
+        val alpn = profile.alpn?.split(',')?.map { it.trim().lowercase() }.orEmpty()
+        return "h3" in alpn || "h2" !in alpn
     }
 
     private fun fetch(
@@ -75,6 +83,15 @@ object CertificateFingerprintManager {
 
     private fun inferServerName(profile: ProfileItem): String? {
         val sni = profile.sni?.takeIf { it.isNotBlank() }
-        return sni?.takeUnless { Utils.isPureIpAddress(it) }
+        if (sni != null && !Utils.isPureIpAddress(sni)) return sni
+        if (profile.configType == EConfigType.MASQUE) {
+            val rawHost = profile.host?.trim()?.takeIf { it.isNotBlank() }
+            val host = rawHost?.let {
+                runCatching { URI("https://$it").host }.getOrNull()
+                    ?: it.substringBefore(':')
+            }?.takeIf { it.isNotBlank() }
+            if (host != null && !Utils.isPureIpAddress(host)) return host
+        }
+        return null
     }
 }

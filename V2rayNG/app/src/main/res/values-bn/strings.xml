@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">[Trojan] যোগ করুন</string>
     <string name="menu_item_import_config_manually_wireguard">[WireGuard] যোগ করুন</string>
     <string name="menu_item_import_config_manually_hysteria2">[Hysteria2] যোগ করুন</string>
+    <string name="menu_item_import_config_manually_masque">[MASQUE] যোগ করুন</string>
     <string name="confirm_delete_visible_profiles">আপনি কি বর্তমানে প্রদর্শিত সব প্রোফাইল মুছে ফেলতে চান?</string>
     <string name="confirm_delete_duplicate_profiles">আপনি কি বর্তমানে প্রদর্শিত সব সদৃশ প্রোফাইল মুছে ফেলতে চান?</string>
     <string name="confirm_delete_invalid_profiles">প্রথমে প্রোফাইলগুলো পরীক্ষা করুন। আপনি কি বর্তমানে প্রদর্শিত সব অবৈধ প্রোফাইল মুছে ফেলতে চান?</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">আপলোড ব্যান্ডউইডথ (সমর্থিত একক: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">XHTTP মোড</string>
     <string name="server_lab_xhttp_extra">XHTTP Extra-এর কাঁচা JSON, ফরম্যাট: { XHTTPObject }</string>
+    <string name="server_lab_masque_user">ব্যবহারকারী</string>
+    <string name="server_lab_masque_user_error">MASQUE ব্যবহারকারীর মধ্যে \':\' থাকা যাবে না</string>
+    <string name="server_lab_masque_password">পাসওয়ার্ড</string>
+    <string name="server_lab_masque_host">MASQUE হোস্ট (ঐচ্ছিক)</string>
+    <string name="server_lab_masque_host_error">একটি বৈধ MASQUE host authority লিখুন</string>
+    <string name="server_lab_masque_path">MASQUE পথ (ঐচ্ছিক)</string>
+    <string name="server_lab_masque_path_error">MASQUE পথ \'/\' দিয়ে শুরু হতে হবে এবং শুধু target/ipproto ভেরিয়েবল ব্যবহার করতে হবে</string>
+    <string name="server_lab_masque_headers">MASQUE হেডার (প্রতি লাইনে key: value অথবা JSON)</string>
+    <string name="server_lab_masque_headers_error">MASQUE হেডার key: value লাইন বা JSON অবজেক্ট হিসেবে লিখুন</string>
+    <string name="server_lab_masque_auth_error">MASQUE user/password সেট থাকলে Authorization সরান</string>
+    <string name="server_lab_masque_tls_error">MASQUE-এর জন্য TLS পরিবহন নিরাপত্তা প্রয়োজন</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">Google Drive</string>

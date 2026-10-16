@@ -1,5 +1,6 @@
 package com.v2ray.ang.core
 
+import android.util.Base64
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.v2ray.ang.AppConfig
@@ -31,6 +32,7 @@ object CoreOutboundBuilder {
             EConfigType.TROJAN -> toOutboundTrojan(profileItem)
             EConfigType.WIREGUARD -> toOutboundWireguard(profileItem)
             EConfigType.HYSTERIA2 -> toOutboundHysteria2(profileItem)
+            EConfigType.MASQUE -> toOutboundMasque(profileItem)
             EConfigType.HTTP -> toOutboundHttp(profileItem)
             else -> null
         }
@@ -53,6 +55,7 @@ object CoreOutboundBuilder {
                 || protocol.equals(EConfigType.WIREGUARD.name, true)
                 || protocol.equals(EConfigType.HYSTERIA2.name, true)
                 || protocol.equals(EConfigType.HYSTERIA.name, true)
+                || protocol.equals(EConfigType.MASQUE.name, true)
             ) {
                 muxEnabled = false
             } else if (outbound.streamSettings?.network == NetworkType.XHTTP.type) {
@@ -87,7 +90,8 @@ object CoreOutboundBuilder {
             EConfigType.SHADOWSOCKS,
             EConfigType.SOCKS,
             EConfigType.HTTP,
-            EConfigType.TROJAN -> OutboundBean(
+            EConfigType.TROJAN,
+            EConfigType.MASQUE -> OutboundBean(
                 protocol = configType.name.lowercase(),
                 settings = OutboundBean.OutSettingsBean(),
                 streamSettings = OutboundBean.StreamSettingsBean()
@@ -306,6 +310,29 @@ object CoreOutboundBuilder {
         return outboundBean
     }
 
+    private fun toOutboundMasque(profileItem: ProfileItem): OutboundBean? {
+        val outboundBean = createInitOutbound(EConfigType.MASQUE) ?: return null
+        profileItem.network = NetworkType.MASQUE.type
+
+        outboundBean.settings?.let { settings ->
+            settings.address = getServerAddress(profileItem)
+            settings.port = profileItem.serverPort.orEmpty().toInt()
+            settings.remoteDNS = profileItem.remoteDNS
+                ?.split(",")
+                ?.map(String::trim)
+                ?.filter { Utils.isPureIpAddress(it) && !it.startsWith("[") }
+                ?.takeIf { it.isNotEmpty() }
+        }
+
+        val sni = outboundBean.streamSettings?.let {
+            populateTransportSettings(it, profileItem)
+        }
+        outboundBean.streamSettings?.let {
+            populateTlsSettings(it, profileItem, sni)
+        }
+        return outboundBean
+    }
+
     private fun createTcpHttpRequest(
         host: String?,
         path: String?
@@ -438,6 +465,16 @@ object CoreOutboundBuilder {
                 streamSettings.xhttpSettings = xhttpSetting
             }
 
+            NetworkType.MASQUE.type -> {
+                val masqueSetting = OutboundBean.StreamSettingsBean.MasqueSettingsBean(
+                    host = host.nullIfBlank(),
+                    path = normalizeMasquePath(path.nullIfBlank() ?: AppConfig.MASQUE_DEFAULT_PATH),
+                    headers = buildMasqueHeaders(profileItem),
+                )
+                sni = host
+                streamSettings.masqueSettings = masqueSetting
+            }
+
             NetworkType.XDRIVE.type -> {
                 val xdriveSetting = OutboundBean.StreamSettingsBean.XdriveSettingsBean(
                     remoteFolder = profileItem.remoteFolder
@@ -566,7 +603,8 @@ object CoreOutboundBuilder {
      */
     fun populateTlsSettings(streamSettings: OutboundBean.StreamSettingsBean, profileItem: ProfileItem, sniExt: String?) {
         val streamSecurity = profileItem.security.orEmpty()
-        val allowInsecure = profileItem.insecure == true && profileItem.pinnedCA256.isNullOrEmpty()
+        val allowInsecure = profileItem.network != NetworkType.MASQUE.type &&
+            profileItem.insecure == true && profileItem.pinnedCA256.isNullOrEmpty()
         val sni = if (profileItem.sni.isNullOrEmpty()) {
             when {
                 sniExt.isNotNullEmpty() && Utils.isDomainName(sniExt) -> sniExt
@@ -577,7 +615,12 @@ object CoreOutboundBuilder {
             profileItem.sni
         }
 
-        streamSettings.security = streamSecurity.nullIfBlank()
+        val effectiveSecurity = if (profileItem.network == NetworkType.MASQUE.type) {
+            AppConfig.TLS
+        } else {
+            streamSecurity
+        }
+        streamSettings.security = effectiveSecurity.nullIfBlank()
         if (streamSettings.security == null) return
         val tlsSetting = OutboundBean.StreamSettingsBean.TlsSettingsBean(
             allowInsecure = allowInsecure,
@@ -687,6 +730,43 @@ object CoreOutboundBuilder {
         }
         return true
     }
+
+    /** Builds MASQUE request headers, including optional HTTP Basic authentication. */
+    private fun buildMasqueHeaders(profileItem: ProfileItem): Map<String, String>? {
+        val headers = parseMasqueHeaders(profileItem.masqueHeaders)
+        val user = profileItem.username?.takeIf { it.isNotBlank() }
+        val password = profileItem.password?.takeIf { it.isNotBlank() }
+        if (user != null || password != null) {
+            val credentials = "${user.orEmpty()}:${password.orEmpty()}".toByteArray(Charsets.UTF_8)
+            headers["Authorization"] = "Basic ${Base64.encodeToString(credentials, Base64.NO_WRAP)}"
+        }
+        return headers.takeIf { it.isNotEmpty() }
+    }
+
+    private fun parseMasqueHeaders(value: String?): MutableMap<String, String> {
+        val raw = value?.trim().orEmpty()
+        if (raw.startsWith("{")) {
+            return JsonUtil.parseHeadersToMap(raw).toMutableMap()
+        }
+        return raw.lineSequence()
+            .mapNotNull { line ->
+                val separator = line.indexOf(':')
+                if (separator <= 0) return@mapNotNull null
+                val name = line.substring(0, separator).trim()
+                val headerValue = line.substring(separator + 1).trim()
+                name.takeIf { it.isNotEmpty() }?.let { it to headerValue }
+            }
+            .toMap()
+            .toMutableMap()
+    }
+
+    private fun normalizeMasquePath(path: String): String = path
+        .replace("{?target,ipproto}", "?target=*&ipproto=*")
+        .replace("{?ipproto,target}", "?ipproto=*&target=*")
+        .replace("{&target,ipproto}", "&target=*&ipproto=*")
+        .replace("{&ipproto,target}", "&ipproto=*&target=*")
+        .replace("{target}", "*")
+        .replace("{ipproto}", "*")
 
     private fun getServerAddress(profileItem: ProfileItem): String {
         if (Utils.isPureIpAddress(profileItem.server.orEmpty())) {

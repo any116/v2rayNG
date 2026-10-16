@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">Add [Trojan]</string>
     <string name="menu_item_import_config_manually_wireguard">Add [WireGuard]</string>
     <string name="menu_item_import_config_manually_hysteria2">Add [Hysteria2]</string>
+    <string name="menu_item_import_config_manually_masque">Add [MASQUE]</string>
     <string name="confirm_delete_visible_profiles">Are you sure you want to delete all profiles currently shown?</string>
     <string name="confirm_delete_duplicate_profiles">Are you sure you want to delete all duplicate profiles currently shown?</string>
     <string name="confirm_delete_invalid_profiles">Please test the profiles first. Are you sure you want to delete all invalid profiles currently shown?</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">Upload bandwidth (supported units: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">XHTTP Mode</string>
     <string name="server_lab_xhttp_extra">XHTTP Extra raw JSON, format: { XHTTPObject }</string>
+    <string name="server_lab_masque_user">user</string>
+    <string name="server_lab_masque_user_error">MASQUE user must not contain \':\'</string>
+    <string name="server_lab_masque_password">password</string>
+    <string name="server_lab_masque_host">MASQUE host (optional)</string>
+    <string name="server_lab_masque_host_error">Enter a valid MASQUE host authority</string>
+    <string name="server_lab_masque_path">MASQUE path (optional)</string>
+    <string name="server_lab_masque_path_error">MASQUE path must start with \'/\' and use only target/ipproto variables</string>
+    <string name="server_lab_masque_headers">MASQUE headers (key: value per line or JSON)</string>
+    <string name="server_lab_masque_headers_error">Enter MASQUE headers as key: value lines or a JSON object</string>
+    <string name="server_lab_masque_auth_error">Remove Authorization when MASQUE user/password is set</string>
+    <string name="server_lab_masque_tls_error">MASQUE requires TLS transport security</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">Google Drive</string>
