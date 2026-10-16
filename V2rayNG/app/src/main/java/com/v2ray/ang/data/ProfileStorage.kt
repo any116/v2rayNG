@@ -18,7 +18,7 @@ internal object ProfilePayloadCodec {
         "subscriptionId", "addedTime", "remarks", "description", "server", "serverPort",
         "password", "method", "flow", "username", "network", "headerType", "host", "path",
         "seed", "kcpMtu", "kcpTti", "quicSecurity", "quicKey", "mode", "serviceName",
-        "authority", "xhttpMode", "xhttpExtra", "remoteFolder", "service", "secrets",
+        "authority", "xhttpMode", "xhttpExtra", "masqueHeaders", "remoteFolder", "service", "secrets",
         "template",
         "finalMask", "security", "sni", "alpn",
         "fingerPrint", "insecure", "echConfigList", "verifyPeerCertByName", "pinnedCA256",

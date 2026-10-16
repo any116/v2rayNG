@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">افزودن [Trojan]</string>
     <string name="menu_item_import_config_manually_wireguard">افزودن [WireGuard]</string>
     <string name="menu_item_import_config_manually_hysteria2">افزودن [Hysteria2]</string>
+    <string name="menu_item_import_config_manually_masque">افزودن [MASQUE]</string>
     <string name="confirm_delete_visible_profiles">آیا مطمئن هستید که می‌خواهید همه پروفایل‌های نمایش‌داده‌شده را حذف کنید؟</string>
     <string name="confirm_delete_duplicate_profiles">آیا مطمئن هستید که می‌خواهید همه پروفایل‌های تکراری نمایش‌داده‌شده را حذف کنید؟</string>
     <string name="confirm_delete_invalid_profiles">لطفاً ابتدا پروفایل‌ها را آزمایش کنید. آیا مطمئن هستید که می‌خواهید همه پروفایل‌های نامعتبر نمایش‌داده‌شده را حذف کنید؟</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">پهنای باند آپلود (واحدهای پشتیبانی‌شده: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">حالت XHTTP</string>
     <string name="server_lab_xhttp_extra">خام JSON XHTTP Extra، قالب: { XHTTPObject }</string>
+    <string name="server_lab_masque_user">کاربر</string>
+    <string name="server_lab_masque_user_error">کاربر MASQUE نباید شامل \':\' باشد</string>
+    <string name="server_lab_masque_password">گذرواژه</string>
+    <string name="server_lab_masque_host">میزبان MASQUE (اختیاری)</string>
+    <string name="server_lab_masque_host_error">یک authority معتبر برای میزبان MASQUE وارد کنید</string>
+    <string name="server_lab_masque_path">مسیر MASQUE (اختیاری)</string>
+    <string name="server_lab_masque_path_error">مسیر MASQUE باید با \'/\' شروع شود و فقط از متغیرهای target/ipproto استفاده کند</string>
+    <string name="server_lab_masque_headers">هدرهای MASQUE (هر خط key: value یا JSON)</string>
+    <string name="server_lab_masque_headers_error">هدرهای MASQUE را به‌صورت خطوط key: value یا یک شیء JSON وارد کنید</string>
+    <string name="server_lab_masque_auth_error">اگر کاربر/گذرواژه MASQUE تنظیم شده، Authorization را حذف کنید</string>
+    <string name="server_lab_masque_tls_error">MASQUE به امنیت انتقال TLS نیاز دارد</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

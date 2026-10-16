@@ -34,6 +34,7 @@ private data class ProtocolSpec(
 private fun EConfigType.spec(): ProtocolSpec = when (this) {
     EConfigType.VMESS, EConfigType.VLESS, EConfigType.TROJAN, EConfigType.SHADOWSOCKS ->
         ProtocolSpec(showNetwork = true, showStreamSecurity = true)
+    EConfigType.MASQUE -> ProtocolSpec(showStreamSecurity = true)
     else -> ProtocolSpec()
 }
 
@@ -66,9 +67,13 @@ internal fun ProtocolForm(
 
         ProtocolFields(configType, form, fieldErrors, isFetchingCert, options, onAction)
 
+        if (configType == EConfigType.MASQUE) {
+            MasqueFields(form, fieldErrors, onAction)
+        }
+
         if (spec.showNetwork) NetworkFields(configType, form, fieldErrors, options, onAction)
         if (spec.showStreamSecurity) {
-            StreamSecurityFields(form, fieldErrors, isFetchingCert, options, onAction)
+            StreamSecurityFields(configType, form, fieldErrors, isFetchingCert, options, onAction)
         }
     }
 }
@@ -111,6 +116,20 @@ private fun ProtocolFields(
             ServerTextField(
                 R.string.server_lab_id3, ServerField.PASSWORD, form.password, onAction, fieldErrors
             )
+        EConfigType.MASQUE -> {
+            ServerTextField(
+                R.string.server_lab_masque_user, ServerField.USERNAME, form.username,
+                onAction, fieldErrors,
+            )
+            ServerTextField(
+                R.string.server_lab_masque_password, ServerField.PASSWORD, form.password,
+                onAction, fieldErrors,
+            )
+            ServerTextField(
+                R.string.server_lab_remote_dns, ServerField.REMOTE_DNS, form.remoteDNS,
+                onAction, fieldErrors,
+            )
+        }
         EConfigType.SHADOWSOCKS -> {
             ServerTextField(
                 R.string.server_lab_id3, ServerField.PASSWORD, form.password, onAction, fieldErrors
@@ -205,6 +224,26 @@ private fun ProtocolFields(
                 R.string.server_lab_id4, ServerField.PASSWORD, form.password, onAction, fieldErrors
             )
         }
+    }
+}
+
+@Composable
+private fun MasqueFields(
+    form: ServerForm,
+    fieldErrors: Map<ServerField, Int>,
+    onAction: (ServerAction) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
+        ServerTextField(
+            R.string.server_lab_masque_host, ServerField.HOST, form.host, onAction, fieldErrors,
+        )
+        ServerTextField(
+            R.string.server_lab_masque_path, ServerField.PATH, form.path, onAction, fieldErrors,
+        )
+        ServerTextField(
+            R.string.server_lab_masque_headers, ServerField.MASQUE_HEADERS,
+            form.masqueHeaders, onAction, fieldErrors,
+        )
     }
 }
 
@@ -377,13 +416,18 @@ private fun NetworkFields(
 
 @Composable
 private fun StreamSecurityFields(
+    configType: EConfigType,
     form: ServerForm,
     fieldErrors: Map<ServerField, Int>,
     isFetchingCert: Boolean,
     options: FieldOptions,
     onAction: (ServerAction) -> Unit,
 ) {
-    val streamSecurityOptions = options.streamSecurities
+    val streamSecurityOptions = if (configType == EConfigType.MASQUE) {
+        StringOptions(listOf(TLS))
+    } else {
+        options.streamSecurities
+    }
     Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
         ServerDropdownField(
             R.string.server_lab_stream_security, ServerField.STREAM_SECURITY,
@@ -401,13 +445,15 @@ private fun StreamSecurityFields(
 
         when (form.streamSecurity) {
             TLS -> {
-                SettingsSwitchItem(
-                    title = stringResource(R.string.server_lab_allow_insecure),
-                    checked = form.allowInsecure,
-                    onCheckedChange = {
-                        onAction(ServerAction.FlagChanged(ServerFlag.ALLOW_INSECURE, it))
-                    },
-                )
+                if (configType != EConfigType.MASQUE) {
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.server_lab_allow_insecure),
+                        checked = form.allowInsecure,
+                        onCheckedChange = {
+                            onAction(ServerAction.FlagChanged(ServerFlag.ALLOW_INSECURE, it))
+                        },
+                    )
+                }
                 ServerDropdownField(
                     R.string.server_lab_stream_alpn, ServerField.ALPN, form.alpn, options.alpn,
                     onAction, fieldErrors,

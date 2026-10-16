@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">إضافة [Trojan]</string>
     <string name="menu_item_import_config_manually_wireguard">إضافة [WireGuard]</string>
     <string name="menu_item_import_config_manually_hysteria2">إضافة [Hysteria2]</string>
+    <string name="menu_item_import_config_manually_masque">إضافة [MASQUE]</string>
     <string name="confirm_delete_visible_profiles">هل أنت متأكد من أنك تريد حذف جميع ملفات التعريف المعروضة حاليًا؟</string>
     <string name="confirm_delete_duplicate_profiles">هل أنت متأكد من أنك تريد حذف جميع ملفات التعريف المكررة المعروضة حاليًا؟</string>
     <string name="confirm_delete_invalid_profiles">يرجى اختبار ملفات التعريف أولًا. هل أنت متأكد من أنك تريد حذف جميع ملفات التعريف غير الصالحة المعروضة حاليًا؟</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">عرض النطاق للرفع (الوحدات المدعومة: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">وضع XHTTP</string>
     <string name="server_lab_xhttp_extra">JSON خام لحقل XHTTP Extra، بالتنسيق: { XHTTPObject }</string>
+    <string name="server_lab_masque_user">المستخدم</string>
+    <string name="server_lab_masque_user_error">يجب ألا يحتوي مستخدم MASQUE على \':\'</string>
+    <string name="server_lab_masque_password">كلمة المرور</string>
+    <string name="server_lab_masque_host">مضيف MASQUE (اختياري)</string>
+    <string name="server_lab_masque_host_error">أدخل authority صالحاً لمضيف MASQUE</string>
+    <string name="server_lab_masque_path">مسار MASQUE (اختياري)</string>
+    <string name="server_lab_masque_path_error">يجب أن يبدأ مسار MASQUE بـ \'/\' وأن يستخدم متغيري target/ipproto فقط</string>
+    <string name="server_lab_masque_headers">ترويسات MASQUE (key: value في كل سطر أو JSON)</string>
+    <string name="server_lab_masque_headers_error">أدخل ترويسات MASQUE كسطور key: value أو كائن JSON</string>
+    <string name="server_lab_masque_auth_error">أزل Authorization عند تعيين مستخدم/كلمة مرور MASQUE</string>
+    <string name="server_lab_masque_tls_error">يتطلب MASQUE أمان نقل TLS</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

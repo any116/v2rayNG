@@ -51,6 +51,7 @@
     <string name="menu_item_import_config_manually_trojan">Добавить Trojan</string>
     <string name="menu_item_import_config_manually_wireguard">Добавить WireGuard</string>
     <string name="menu_item_import_config_manually_hysteria2">Добавить Hysteria2</string>
+    <string name="menu_item_import_config_manually_masque">Добавить MASQUE</string>
     <string name="confirm_delete_visible_profiles">Удалить все отображаемые профили?</string>
     <string name="confirm_delete_duplicate_profiles">Удалить все отображаемые дубликаты профилей?</string>
     <string name="confirm_delete_invalid_profiles">Выполните проверку перед удалением! Удалить все отображаемые нерабочие профили?</string>
@@ -136,6 +137,17 @@
     <string name="server_lab_bandwidth_up">Исходящая пропускная способность (допускаются: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">Режим XHTTP</string>
     <string name="server_lab_xhttp_extra">Необработанный JSON XHTTP Extra, формат: { XHTTPObject }</string>
+    <string name="server_lab_masque_user">пользователь</string>
+    <string name="server_lab_masque_user_error">Пользователь MASQUE не должен содержать \':\'</string>
+    <string name="server_lab_masque_password">пароль</string>
+    <string name="server_lab_masque_host">Узел MASQUE (необязательно)</string>
+    <string name="server_lab_masque_host_error">Введите допустимый authority узла MASQUE</string>
+    <string name="server_lab_masque_path">Путь MASQUE (необязательно)</string>
+    <string name="server_lab_masque_path_error">Путь MASQUE должен начинаться с \'/\' и использовать только переменные target/ipproto</string>
+    <string name="server_lab_masque_headers">Заголовки MASQUE (key: value по одному в строке или JSON)</string>
+    <string name="server_lab_masque_headers_error">Введите заголовки MASQUE в виде строк key: value или JSON-объекта</string>
+    <string name="server_lab_masque_auth_error">Удалите Authorization, если заданы пользователь/пароль MASQUE</string>
+    <string name="server_lab_masque_tls_error">MASQUE требует защиты транспорта TLS</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

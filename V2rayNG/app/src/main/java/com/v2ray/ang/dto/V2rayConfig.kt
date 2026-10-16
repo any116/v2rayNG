@@ -124,6 +124,7 @@ data class V2rayConfig(
             var realitySettings: TlsSettingsBean? = null,
             var grpcSettings: GrpcSettingsBean? = null,
             var hysteriaSettings: HysteriaSettingsBean? = null,
+            var masqueSettings: MasqueSettingsBean? = null,
             var xdriveSettings: XdriveSettingsBean? = null,
             var finalmask: Any? = null,
             val dsSettings: Any? = null,
@@ -254,6 +255,12 @@ data class V2rayConfig(
             data class HysteriaSettingsBean(
                 var version: Int,
                 var auth: String? = null
+            )
+
+            data class MasqueSettingsBean(
+                var host: String? = null,
+                var path: String? = null,
+                var headers: Map<String, String>? = null,
             )
 
             data class XdriveSettingsBean(
