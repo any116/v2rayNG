@@ -1,12 +1,16 @@
 package com.v2ray.ang.ui.server
 
 import androidx.annotation.StringRes
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.R
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
+import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
+import com.v2ray.ang.util.XdriveConfigValidator
 
 /**
  * Centralised validation rules for the server configuration screen.
@@ -53,6 +57,37 @@ internal object ServerValidator {
                 errors[ServerField.REMOTE_DNS] = R.string.server_lab_remote_dns
             }
         }
+        if (form.network == NetworkType.XDRIVE.type) {
+            if (configType != EConfigType.VLESS) {
+                errors[ServerField.NETWORK] = R.string.server_lab_xdrive_vless_error
+            }
+            if (form.service !in XdriveConfigValidator.services) {
+                errors[ServerField.SERVICE] = R.string.server_lab_xdrive_service_error
+            }
+            if (form.service != XDRIVE_SERVICE_TEMPLATE && form.remoteFolder.isBlank()) {
+                errors[ServerField.REMOTE_FOLDER] = R.string.server_lab_xdrive_remote_folder
+            }
+            if (configType == EConfigType.VLESS) {
+                if (form.encryption.isBlank() || form.encryption.equals("none", ignoreCase = true)) {
+                    errors[ServerField.ENCRYPTION] = R.string.server_lab_xdrive_encryption_error
+                }
+                if (form.flow.isNotBlank()) {
+                    errors[ServerField.FLOW] = R.string.server_lab_xdrive_flow_error
+                }
+            }
+            when (form.service) {
+                XDRIVE_SERVICE_GOOGLE_DRIVE -> {
+                    if (XdriveConfigValidator.secrets(form.secrets).size != 3) {
+                        errors[ServerField.SECRETS] = R.string.server_lab_xdrive_secrets_error
+                    }
+                }
+                XDRIVE_SERVICE_TEMPLATE -> {
+                    if (form.template.isBlank() || !XdriveConfigValidator.isValidTemplate(form.template)) {
+                        errors[ServerField.TEMPLATE] = R.string.server_lab_xdrive_template
+                    }
+                }
+            }
+        }
         return errors
     }
 
@@ -68,6 +103,36 @@ internal object ServerValidator {
         if (configType == EConfigType.TROJAN && profile.security.isNullOrBlank()) {
             return BaseText.of(R.string.server_lab_stream_security)
         }
+        if (profile.network == NetworkType.XDRIVE.type) {
+            if (configType != EConfigType.VLESS) {
+                return BaseText.of(R.string.server_lab_xdrive_vless_error)
+            }
+            if (profile.service !in XdriveConfigValidator.services) {
+                return BaseText.of(R.string.server_lab_xdrive_service_error)
+            }
+            if (profile.service != XDRIVE_SERVICE_TEMPLATE && profile.remoteFolder.isNullOrBlank()) {
+                return BaseText.of(R.string.server_lab_xdrive_remote_folder)
+            }
+            if (profile.method.isNullOrBlank() || profile.method.equals("none", ignoreCase = true)) {
+                return BaseText.of(R.string.server_lab_xdrive_encryption_error)
+            }
+            if (!profile.flow.isNullOrBlank()) {
+                return BaseText.of(R.string.server_lab_xdrive_flow_error)
+            }
+            if (profile.service == XDRIVE_SERVICE_GOOGLE_DRIVE &&
+                XdriveConfigValidator.secrets(profile.secrets).size != 3
+            ) {
+                return BaseText.of(R.string.server_lab_xdrive_secrets_error)
+            }
+            if (profile.service == XDRIVE_SERVICE_TEMPLATE && profile.template.isNullOrBlank()) {
+                return BaseText.of(R.string.server_lab_xdrive_template)
+            }
+            if (profile.service == XDRIVE_SERVICE_TEMPLATE &&
+                !XdriveConfigValidator.isValidTemplate(profile.template)
+            ) {
+                return BaseText.of(R.string.server_lab_xdrive_template)
+            }
+        }
         if (!profile.xhttpExtra.isNullOrBlank() && JsonUtil.parseString(profile.xhttpExtra) == null) {
             return BaseText.of(R.string.server_lab_xhttp_extra)
         }
@@ -76,4 +141,5 @@ internal object ServerValidator {
         }
         return null
     }
+
 }

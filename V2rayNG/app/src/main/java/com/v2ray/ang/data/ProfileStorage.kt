@@ -18,7 +18,9 @@ internal object ProfilePayloadCodec {
         "subscriptionId", "addedTime", "remarks", "description", "server", "serverPort",
         "password", "method", "flow", "username", "network", "headerType", "host", "path",
         "seed", "kcpMtu", "kcpTti", "quicSecurity", "quicKey", "mode", "serviceName",
-        "authority", "xhttpMode", "xhttpExtra", "finalMask", "security", "sni", "alpn",
+        "authority", "xhttpMode", "xhttpExtra", "remoteFolder", "service", "secrets",
+        "template",
+        "finalMask", "security", "sni", "alpn",
         "fingerPrint", "insecure", "echConfigList", "verifyPeerCertByName", "pinnedCA256",
         "publicKey", "shortId", "spiderX", "mldsa65Verify", "secretKey", "preSharedKey",
         "localAddress", "reserved", "mtu", "obfsPassword", "portHopping", "portHoppingInterval",
@@ -26,6 +28,11 @@ internal object ProfilePayloadCodec {
         "policyGroupSubscriptionId", "policyGroupFilter", "policyGroupTestOutbounds",
         "policyGroupFallbackTag", "proxyChainProfiles", "browserDialerMode", "remoteDNS",
         "persistedConfigType"
+    )
+
+    private val retiredFields = setOf(
+        "segmentBytes", "flushIntervalMs", "pollIntervalMs", "maxPollIntervalMs",
+        "sessionTtlSeconds", "concurrency", "eagerWindowMs", "holeTimeoutMs",
     )
 
     internal val knownFieldNames: Set<String>
@@ -49,6 +56,7 @@ internal object ProfilePayloadCodec {
         // Keep fields introduced by a newer client. Known fields are replaced, including fields
         // that became null, so an older editor cannot silently resurrect stale values.
         knownFields.forEach { previous.remove(it) }
+        retiredFields.forEach { previous.remove(it) }
         fresh.entrySet().forEach { (name, value) -> previous.add(name, value) }
         return previous.toString()
     }

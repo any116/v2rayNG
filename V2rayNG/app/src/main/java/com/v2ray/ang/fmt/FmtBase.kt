@@ -57,6 +57,13 @@ open class FmtBase {
         config.host = queryParam["host"]
         config.path = queryParam["path"]
 
+        if (config.network == NetworkType.XDRIVE.type) {
+            config.remoteFolder = queryParam["remoteFolder"]
+            config.service = queryParam["service"]
+            config.secrets = queryParam["secrets"]
+            config.template = queryParam["template"]
+        }
+
         config.seed = queryParam["seed"]
         config.kcpMtu = queryParam["mtu"]?.toIntOrNull()
         config.kcpTti = queryParam["tti"]?.toIntOrNull()
@@ -165,6 +172,13 @@ open class FmtBase {
                 config.mode?.nullIfBlank()?.let { dicQuery["mode"] = it }
                 config.authority?.nullIfBlank()?.let { dicQuery["authority"] = it }
                 config.serviceName?.nullIfBlank()?.let { dicQuery["serviceName"] = it }
+            }
+
+            NetworkType.XDRIVE -> {
+                config.remoteFolder?.nullIfBlank()?.let { dicQuery["remoteFolder"] = it }
+                config.service?.nullIfBlank()?.let { dicQuery["service"] = it }
+                config.secrets?.nullIfBlank()?.let { dicQuery["secrets"] = it }
+                config.template?.nullIfBlank()?.let { dicQuery["template"] = it }
             }
 
             else -> {}

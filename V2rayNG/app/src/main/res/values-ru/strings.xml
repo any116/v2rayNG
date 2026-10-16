@@ -136,6 +136,16 @@
     <string name="server_lab_bandwidth_up">Исходящая пропускная способность (допускаются: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">Режим XHTTP</string>
     <string name="server_lab_xhttp_extra">Необработанный JSON XHTTP Extra, формат: { XHTTPObject }</string>
+    <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
+    <string name="server_lab_xdrive_service">service</string>
+    <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
+    <string name="server_lab_xdrive_secrets">secrets (по одному в строке)</string>
+    <string name="server_lab_xdrive_template">template JSON</string>
+    <string name="server_lab_xdrive_secrets_error">Для Google Drive нужны ровно 3 непустых secret, по одному в строке</string>
+    <string name="server_lab_xdrive_service_error">Неподдерживаемый сервис XDRIVE</string>
+    <string name="server_lab_xdrive_vless_error">Для XDRIVE требуется исходящий VLESS</string>
+    <string name="server_lab_xdrive_encryption_error">Для XDRIVE требуется шифрование VLESS, созданное через xray vlessenc</string>
+    <string name="server_lab_xdrive_flow_error">XDRIVE не поддерживает VLESS flow</string>
     <string name="server_lab_final_mask">Необработанный JSON FinalMask, формат: { FinalMaskObject }</string>
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">Проверять сертификат узла по имени</string>

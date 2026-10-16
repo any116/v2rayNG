@@ -6,6 +6,9 @@ import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.AppConfig.WIREGUARD_LOCAL_ADDRESS_V4
 import com.v2ray.ang.AppConfig.WIREGUARD_LOCAL_MTU
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_LOCAL
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.dto.SubscriptionOption
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.BalancerStrategyType
@@ -52,6 +55,10 @@ data class ServerForm(
     val host: String = "",
     val path: String = "",
     val xhttpExtra: String = "",
+    val remoteFolder: String = "",
+    val service: String = XDRIVE_SERVICE_LOCAL,
+    val secrets: String = "",
+    val template: String = "",
     val finalMask: String = "",
     val kcpMtu: String = "",
     val kcpTti: String = "",
@@ -88,6 +95,7 @@ data class ServerForm(
         val isSocksOrHttp = configType == EConfigType.SOCKS || configType == EConfigType.HTTP
         val isWireguard = configType == EConfigType.WIREGUARD
         val isHysteria2 = configType == EConfigType.HYSTERIA2
+        val isXdrive = network == NetworkType.XDRIVE.type
 
         return initial.copy(
             configType = configType,
@@ -100,7 +108,7 @@ data class ServerForm(
                 isVless -> encryption
                 else -> null
             },
-            flow = if (isVless) flow else null,
+            flow = if (isVless && !isXdrive) flow else null,
             username = if (isSocksOrHttp) username else null,
             secretKey = if (isWireguard) secretKey else null,
             publicKey = when {
@@ -127,6 +135,14 @@ data class ServerForm(
             host = host,
             path = path,
             xhttpExtra = xhttpExtra.nullIfBlank(),
+            remoteFolder = if (isXdrive) remoteFolder.nullIfBlank() else null,
+            service = if (isXdrive) service.nullIfBlank() else null,
+            secrets = if (isXdrive && service in setOf(XDRIVE_SERVICE_GOOGLE_DRIVE, XDRIVE_SERVICE_TEMPLATE)) {
+                secrets.nullIfBlank()
+            } else {
+                null
+            },
+            template = if (isXdrive && service == XDRIVE_SERVICE_TEMPLATE) template.nullIfBlank() else null,
             finalMask = finalMask.nullIfBlank(),
             seed = seed.nullIfBlank(),
             kcpMtu = kcpMtu.toIntOrNull(),
@@ -189,6 +205,10 @@ data class ServerForm(
                 host = profile.host.orEmpty(),
                 path = profile.path.orEmpty(),
                 xhttpExtra = profile.xhttpExtra.orEmpty(),
+                remoteFolder = profile.remoteFolder.orEmpty(),
+                service = profile.service ?: XDRIVE_SERVICE_LOCAL,
+                secrets = profile.secrets.orEmpty(),
+                template = profile.template.orEmpty(),
                 finalMask = profile.finalMask.orEmpty(),
                 seed = profile.seed.orEmpty(),
                 kcpMtu = profile.kcpMtu?.toString().orEmpty(),
@@ -247,6 +267,10 @@ enum class ServerField(
     HOST({ it.host }, { f, v -> f.copy(host = v) }),
     PATH({ it.path }, { f, v -> f.copy(path = v) }),
     XHTTP_EXTRA({ it.xhttpExtra }, { f, v -> f.copy(xhttpExtra = v) }),
+    REMOTE_FOLDER({ it.remoteFolder }, { f, v -> f.copy(remoteFolder = v) }),
+    SERVICE({ it.service }, { f, v -> f.copy(service = v) }),
+    SECRETS({ it.secrets }, { f, v -> f.copy(secrets = v) }),
+    TEMPLATE({ it.template }, { f, v -> f.copy(template = v) }),
     FINAL_MASK({ it.finalMask }, { f, v -> f.copy(finalMask = v) }),
     KCP_MTU({ it.kcpMtu }, { f, v -> f.copy(kcpMtu = v) }),
     KCP_TTI({ it.kcpTti }, { f, v -> f.copy(kcpTti = v) }),

@@ -4,6 +4,7 @@ import com.v2ray.ang.data.entities.ProfileMetadataItem
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.ProfilePayloadItem
 import com.v2ray.ang.enums.EConfigType
+import com.v2ray.ang.enums.NetworkType
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -82,6 +83,42 @@ internal class ProfileStorageTest {
         } finally {
             db.close()
         }
+    }
+
+    @Test
+    fun retiredXdriveTuningFieldsAreRemovedWhenPayloadIsUpdated() {
+        val payload = profile("guid").toPayloadItem(
+            previousContent = """
+                {
+                  "configType":"VMESS",
+                  "segmentBytes":1024,
+                  "flushIntervalMs":10,
+                  "futureOption":"keep"
+                }
+            """.trimIndent()
+        )
+
+        assertFalse(payload.content.contains("segmentBytes"))
+        assertFalse(payload.content.contains("flushIntervalMs"))
+        assertTrue(payload.content.contains("futureOption"))
+    }
+
+    @Test
+    fun xdriveServiceFieldsRoundTripThroughThePayload() {
+        val original = profile("xdrive", type = EConfigType.VLESS).apply {
+            network = NetworkType.XDRIVE.type
+            remoteFolder = "folder"
+            service = "template"
+            secrets = "user\npass"
+            template = "{\"put\":{\"url\":\"https://storage.example/{name}\"}}"
+        }
+
+        val restored = original.toMetadataItem().merge(original.toPayloadItem())
+
+        assertEquals(original.remoteFolder, restored.remoteFolder)
+        assertEquals(original.service, restored.service)
+        assertEquals(original.secrets, restored.secrets)
+        assertEquals(original.template, restored.template)
     }
 
     @Test

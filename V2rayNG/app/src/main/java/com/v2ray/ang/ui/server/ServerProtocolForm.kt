@@ -15,6 +15,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.R
@@ -22,6 +24,7 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.ui.components.FormTextField
 import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.StringOptions
 
 private data class ProtocolSpec(
     val showNetwork: Boolean = false,
@@ -63,7 +66,7 @@ internal fun ProtocolForm(
 
         ProtocolFields(configType, form, fieldErrors, isFetchingCert, options, onAction)
 
-        if (spec.showNetwork) NetworkFields(form, options, onAction)
+        if (spec.showNetwork) NetworkFields(configType, form, fieldErrors, options, onAction)
         if (spec.showStreamSecurity) {
             StreamSecurityFields(form, fieldErrors, isFetchingCert, options, onAction)
         }
@@ -97,10 +100,12 @@ private fun ProtocolFields(
                 R.string.server_lab_encryption, ServerField.ENCRYPTION, form.encryption,
                 onAction, fieldErrors,
             )
-            ServerDropdownField(
-                R.string.server_lab_flow, ServerField.FLOW, form.flow, options.flows,
-                onAction, fieldErrors,
-            )
+            if (form.network != NetworkType.XDRIVE.type) {
+                ServerDropdownField(
+                    R.string.server_lab_flow, ServerField.FLOW, form.flow, options.flows,
+                    onAction, fieldErrors,
+                )
+            }
         }
         EConfigType.TROJAN ->
             ServerTextField(
@@ -233,16 +238,46 @@ private fun PinnedCertFields(
 
 @Composable
 private fun NetworkFields(
+    configType: EConfigType,
     form: ServerForm,
+    fieldErrors: Map<ServerField, Int>,
     options: FieldOptions,
     onAction: (ServerAction) -> Unit,
 ) {
-    val noErrors = emptyMap<ServerField, Int>()
+    val networkOptions = if (configType == EConfigType.VLESS) {
+        options.networks
+    } else {
+        StringOptions(options.networks.values.filter { it != NetworkType.XDRIVE.type })
+    }
     Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
         ServerDropdownField(
-            R.string.server_lab_network, ServerField.NETWORK, form.network, options.networks,
-            onAction, noErrors,
+            R.string.server_lab_network, ServerField.NETWORK, form.network, networkOptions,
+            onAction, fieldErrors,
         )
+
+        if (form.network == NetworkType.XDRIVE.type) {
+            ServerDropdownField(
+                R.string.server_lab_xdrive_service, ServerField.SERVICE, form.service,
+                options.xdriveServices, onAction, fieldErrors,
+            )
+            ServerTextField(
+                R.string.server_lab_xdrive_remote_folder, ServerField.REMOTE_FOLDER,
+                form.remoteFolder, onAction, fieldErrors,
+            )
+            if (form.service == XDRIVE_SERVICE_GOOGLE_DRIVE || form.service == XDRIVE_SERVICE_TEMPLATE) {
+                ServerTextField(
+                    R.string.server_lab_xdrive_secrets, ServerField.SECRETS, form.secrets,
+                    onAction, fieldErrors,
+                )
+            }
+            if (form.service == XDRIVE_SERVICE_TEMPLATE) {
+                ServerTextField(
+                    R.string.server_lab_xdrive_template, ServerField.TEMPLATE,
+                    form.template, onAction, fieldErrors,
+                )
+            }
+            return@Column
+        }
 
         val headerOptions = when (form.network) {
             NetworkType.TCP.type -> options.tcpHeaders
@@ -267,7 +302,7 @@ private fun NetworkFields(
                 value = headerField.get(form),
                 options = headerOptions,
                 onAction = onAction,
-                fieldErrors = noErrors,
+                fieldErrors = fieldErrors,
             )
         }
 
@@ -286,7 +321,7 @@ private fun NetworkFields(
             field = hostField,
             value = hostField.get(form),
             onAction = onAction,
-            fieldErrors = noErrors,
+            fieldErrors = fieldErrors,
         )
 
         if (form.network != NetworkType.KCP.type) {
@@ -304,37 +339,37 @@ private fun NetworkFields(
                 field = pathField,
                 value = pathField.get(form),
                 onAction = onAction,
-                fieldErrors = noErrors,
+                fieldErrors = fieldErrors,
             )
         }
 
         if (form.network == NetworkType.XHTTP.type) {
             ServerTextField(
                 R.string.server_lab_xhttp_extra, ServerField.XHTTP_EXTRA, form.xhttpExtra,
-                onAction, noErrors,
+                onAction, fieldErrors,
             )
         }
         if (form.network == NetworkType.KCP.type) {
             ServerTextField(
-                R.string.server_lab_path_kcp, ServerField.SEED, form.seed, onAction, noErrors
+                R.string.server_lab_path_kcp, ServerField.SEED, form.seed, onAction, fieldErrors
             )
             ServerTextField(
                 R.string.server_lab_kcp_mtu, ServerField.KCP_MTU, form.kcpMtu,
-                onAction, noErrors, KeyboardType.Number,
+                onAction, fieldErrors, KeyboardType.Number,
             )
             ServerTextField(
                 R.string.server_lab_kcp_tti, ServerField.KCP_TTI, form.kcpTti,
-                onAction, noErrors, KeyboardType.Number,
+                onAction, fieldErrors, KeyboardType.Number,
             )
         }
         ServerTextField(
             R.string.server_lab_final_mask, ServerField.FINAL_MASK, form.finalMask,
-            onAction, noErrors,
+            onAction, fieldErrors,
         )
         if (form.network == NetworkType.WS.type || form.network == NetworkType.XHTTP.type) {
             ServerDropdownField(
                 R.string.server_lab_browser_dialer, ServerField.BROWSER_DIALER,
-                form.browserDialerMode, options.browserDialer, onAction, noErrors,
+                form.browserDialerMode, options.browserDialer, onAction, fieldErrors,
             )
         }
     }
@@ -348,10 +383,11 @@ private fun StreamSecurityFields(
     options: FieldOptions,
     onAction: (ServerAction) -> Unit,
 ) {
+    val streamSecurityOptions = options.streamSecurities
     Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
         ServerDropdownField(
             R.string.server_lab_stream_security, ServerField.STREAM_SECURITY,
-            form.streamSecurity, options.streamSecurities, onAction, fieldErrors,
+            form.streamSecurity, streamSecurityOptions, onAction, fieldErrors,
         )
         if (form.streamSecurity.isBlank()) return@Column
 

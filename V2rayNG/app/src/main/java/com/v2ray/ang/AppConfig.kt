@@ -287,6 +287,9 @@ object AppConfig {
     const val DEFAULT_SECURITY = "auto"
     const val DEFAULT_LEVEL = 8
     const val DEFAULT_NETWORK = "tcp"
+    const val XDRIVE_SERVICE_LOCAL = "local"
+    const val XDRIVE_SERVICE_GOOGLE_DRIVE = "google-drive"
+    const val XDRIVE_SERVICE_TEMPLATE = "template"
     const val TLS = "tls"
     const val REALITY = "reality"
     const val HEADER_TYPE_HTTP = "http"

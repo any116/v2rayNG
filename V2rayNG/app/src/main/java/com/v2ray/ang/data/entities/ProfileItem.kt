@@ -60,6 +60,10 @@ data class ProfileItem(
     var authority: String? = null,
     var xhttpMode: String? = null,
     var xhttpExtra: String? = null,
+    var remoteFolder: String? = null,
+    var service: String? = null,
+    var secrets: String? = null,
+    var template: String? = null,
     var finalMask: String? = null,
 
     var security: String? = null,

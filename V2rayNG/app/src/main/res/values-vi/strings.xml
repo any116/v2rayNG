@@ -136,6 +136,16 @@
     <string name="server_lab_bandwidth_up">Băng thông tải lên (đơn vị hỗ trợ: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">Chế độ XHTTP</string>
     <string name="server_lab_xhttp_extra">JSON thô của XHTTP Extra, định dạng: { XHTTPObject }</string>
+    <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
+    <string name="server_lab_xdrive_service">service</string>
+    <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
+    <string name="server_lab_xdrive_secrets">secrets (mỗi dòng một giá trị)</string>
+    <string name="server_lab_xdrive_template">template JSON</string>
+    <string name="server_lab_xdrive_secrets_error">Google Drive yêu cầu đúng 3 secret không rỗng, mỗi dòng một secret</string>
+    <string name="server_lab_xdrive_service_error">Dịch vụ XDRIVE không được hỗ trợ</string>
+    <string name="server_lab_xdrive_vless_error">XDRIVE yêu cầu outbound VLESS</string>
+    <string name="server_lab_xdrive_encryption_error">XDRIVE yêu cầu mã hóa VLESS được tạo bằng xray vlessenc</string>
+    <string name="server_lab_xdrive_flow_error">XDRIVE không hỗ trợ VLESS flow</string>
     <string name="server_lab_final_mask">JSON thô của finalMask, định dạng: { FinalMaskObject }</string>
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">Xác minh chứng chỉ ngang hàng theo tên</string>

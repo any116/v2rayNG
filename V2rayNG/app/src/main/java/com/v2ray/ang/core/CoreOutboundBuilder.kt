@@ -14,6 +14,7 @@ import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
+import com.v2ray.ang.util.XdriveConfigValidator
 
 /**
  * Centralizes ProfileItem -> OutboundBean conversion.
@@ -23,6 +24,10 @@ object CoreOutboundBuilder {
 
     /** Dispatches a profile to protocol-specific outbound builder. */
     fun convert(profileItem: ProfileItem): OutboundBean? {
+        if (profileItem.network == NetworkType.XDRIVE.type && !isUsableXdriveProfile(profileItem)) {
+            LogUtil.w(AppConfig.TAG, "Skipping invalid XDRIVE profile '${profileItem.remarks}'")
+            return null
+        }
         val outbound = when (profileItem.configType) {
             EConfigType.VMESS -> toOutboundVmess(profileItem)
             EConfigType.SHADOWSOCKS -> toOutboundShadowsocks(profileItem)
@@ -44,6 +49,18 @@ object CoreOutboundBuilder {
     /** Applies global outbound options (mux, protocol-specific tweaks, etc.). */
     private fun updateOutboundWithGlobalSettings(outbound: OutboundBean): Boolean {
         try {
+            if (outbound.streamSettings?.network == NetworkType.XDRIVE.type) {
+                val mux = outbound.mux ?: OutboundBean.MuxBean(enabled = true).also { outbound.mux = it }
+                mux.enabled = true
+                mux.concurrency = nonNegativeMuxPreference(AppConfig.PREF_MUX_CONCURRENCY, 8)
+                mux.xudpConcurrency = nonNegativeMuxPreference(AppConfig.PREF_MUX_XUDP_CONCURRENCY, 16)
+                mux.xudpProxyUDP443 = when (Prefs.string(AppConfig.PREF_MUX_XUDP_QUIC, "reject")) {
+                    "allow", "reject" -> Prefs.string(AppConfig.PREF_MUX_XUDP_QUIC, "reject")
+                    else -> "reject"
+                }
+                return true
+            }
+
             var muxEnabled = Prefs.bool(AppConfig.PREF_MUX_ENABLED, false)
             val protocol = outbound.protocol
             if (protocol.equals(EConfigType.SHADOWSOCKS.name, true)
@@ -77,6 +94,25 @@ object CoreOutboundBuilder {
             return false
         }
         return true
+    }
+
+    private fun nonNegativeMuxPreference(key: String, default: Int): Int =
+        Prefs.string(key, default.toString())?.toIntOrNull()?.coerceAtLeast(0) ?: default
+
+    private fun isUsableXdriveProfile(profileItem: ProfileItem): Boolean {
+        if (profileItem.configType != EConfigType.VLESS) return false
+        if (profileItem.method.isNullOrBlank() || profileItem.method.equals("none", ignoreCase = true)) return false
+        if (!profileItem.flow.isNullOrBlank()) return false
+
+        val service = profileItem.service ?: return false
+        if (service !in XdriveConfigValidator.services) return false
+        if (service != AppConfig.XDRIVE_SERVICE_TEMPLATE && profileItem.remoteFolder.isNullOrBlank()) return false
+
+        return when (service) {
+            AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE -> XdriveConfigValidator.secrets(profileItem.secrets).size == 3
+            AppConfig.XDRIVE_SERVICE_TEMPLATE -> XdriveConfigValidator.isValidTemplate(profileItem.template)
+            else -> true
+        }
     }
 
     /** Creates an initial outbound template for a protocol type. */
@@ -144,7 +180,7 @@ object CoreOutboundBuilder {
             settings.port = profileItem.serverPort.orEmpty().toInt()
             settings.id = profileItem.password.orEmpty()
             settings.encryption = profileItem.method
-            settings.flow = profileItem.flow
+            settings.flow = profileItem.flow?.takeUnless { profileItem.network == NetworkType.XDRIVE.type }
             settings.level = AppConfig.DEFAULT_LEVEL
         }
 
@@ -436,6 +472,24 @@ object CoreOutboundBuilder {
                 xhttpSetting.mode = xhttpMode
                 xhttpSetting.extra = JsonUtil.parseString(xhttpExtra)
                 streamSettings.xhttpSettings = xhttpSetting
+            }
+
+            NetworkType.XDRIVE.type -> {
+                val service = profileItem.service ?: AppConfig.XDRIVE_SERVICE_LOCAL
+                val xdriveSetting = OutboundBean.StreamSettingsBean.XdriveSettingsBean(
+                    remoteFolder = profileItem.remoteFolder?.nullIfBlank(),
+                    service = service,
+                    secrets = profileItem.secrets
+                        ?.takeIf {
+                            service == AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE ||
+                                service == AppConfig.XDRIVE_SERVICE_TEMPLATE
+                        }
+                        ?.let { XdriveConfigValidator.secrets(it) },
+                    template = profileItem.template
+                        ?.takeIf { service == AppConfig.XDRIVE_SERVICE_TEMPLATE }
+                        ?.let { JsonUtil.parseString(it) }
+                )
+                streamSettings.xdriveSettings = xdriveSetting
             }
 
             NetworkType.H2.type, NetworkType.HTTP.type -> {

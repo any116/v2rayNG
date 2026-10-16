@@ -29,6 +29,13 @@
         <item>xhttp</item>
         <item>h2</item>
         <item>grpc</item>
+        <item>xdrive</item>
+    </string-array>
+
+    <string-array name="xdrive_services" translatable="false">
+        <item>local</item>
+        <item>@string/server_lab_xdrive_service_google_drive</item>
+        <item>template</item>
     </string-array>
 
     <string-array name="header_type_tcp" translatable="false">

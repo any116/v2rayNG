@@ -16,6 +16,7 @@ import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.CoreResolvedType
 import com.v2ray.ang.enums.EConfigType
+import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.util.HttpUtil
@@ -472,7 +473,9 @@ object CoreConfigManager {
         v2rayConfig.fakedns = null
         v2rayConfig.stats = null
         v2rayConfig.policy = null
-        v2rayConfig.outbounds.forEach { key -> key.mux = null }
+        v2rayConfig.outbounds
+            .filter { it.streamSettings?.network != NetworkType.XDRIVE.type }
+            .forEach { outbound -> outbound.mux = null }
     }
 
     /**
