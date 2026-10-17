@@ -14,7 +14,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Stable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,38 +50,22 @@ private val ButtonStartPadding = 16.dp
 private val ButtonIconSpacing = 8.dp
 private val BottomSpacerHeight = 36.dp
 
-@Stable
-private class RoutingFieldCallbacks(onAction: (RoutingEditAction) -> Unit) {
-    private val callbacks = mapOf(
-        RoutingField.REMARKS to { value: String -> onAction(RoutingEditAction.UpdateRemarks(value)) },
-        RoutingField.DOMAIN to { value: String -> onAction(RoutingEditAction.UpdateDomain(value)) },
-        RoutingField.IP to { value: String -> onAction(RoutingEditAction.UpdateIp(value)) },
-        RoutingField.PROCESS to { value: String -> onAction(RoutingEditAction.UpdateProcess(value)) },
-        RoutingField.PROTOCOL to { value: String -> onAction(RoutingEditAction.UpdateProtocol(value)) },
-        RoutingField.NETWORK to { value: String -> onAction(RoutingEditAction.UpdateNetwork(value)) },
-        RoutingField.PORT to { value: String -> onAction(RoutingEditAction.UpdatePort(value)) },
-        RoutingField.OUTBOUND to { value: String -> onAction(RoutingEditAction.UpdateOutbound(value)) },
-    )
-    operator fun get(field: RoutingField): (String) -> Unit = callbacks.getValue(field)
-}
-
 @Composable
 fun RoutingEditScreen(
     viewModel: RoutingEditViewModel,
     modifier: Modifier = Modifier
 ) {
+    val editor = rememberRoutingEditorState(documentKey = viewModel.uiState.value.ruleId)
     val onAction = remember(viewModel) { viewModel::onAction }
-    val callbacks = remember(onAction) { RoutingFieldCallbacks(onAction) }
 
     val outboundItems = viewModel.slices.outboundTags.collectAsLazyPagingItems()
     val query by viewModel.slices.query.collectAsStateWithLifecycle()
-
     val isEditFlow = remember(viewModel) {
         viewModel.uiState.map { it.isEdit }.distinctUntilChanged()
     }
-    val isEdit by isEditFlow.collectAsStateWithLifecycle(
-        initialValue = viewModel.uiState.value.isEdit
-    )
+    val isReadyFlow = remember(viewModel) {
+        viewModel.uiState.map { it.isReady }.distinctUntilChanged()
+    }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -90,8 +74,23 @@ fun RoutingEditScreen(
     BaseScreen(
         viewModel = viewModel,
         modifier = modifier,
-        topBar = { RoutingEditTopBar(isEdit = isEdit, onAction = onAction) },
-        onResult = { result -> onAction(RoutingEditAction.ResultReceived(result)) },
+        topBar = {
+            val isEdit by isEditFlow.collectAsStateWithLifecycle(
+                initialValue = viewModel.uiState.value.isEdit
+            )
+            val isReady by isReadyFlow.collectAsStateWithLifecycle(
+                initialValue = viewModel.uiState.value.isReady
+            )
+            val isMutating by viewModel.isMutating.collectAsStateWithLifecycle()
+            RoutingEditTopBar(
+                isEdit = isEdit,
+                canSave = isReady && editor.text.isInitialized && !isMutating,
+                isMutating = isMutating,
+                onSave = { onAction(RoutingEditAction.Save(editor.snapshot())) },
+                onAction = onAction
+            )
+        },
+        onResult = editor::onPickerResult,
         onEvent = { event ->
             when (event) {
                 is RoutingEditEvent.ShowDeleteDialog -> {
@@ -102,14 +101,17 @@ fun RoutingEditScreen(
             }
         }
     ) { state, _ ->
-        RoutingEditForm(
+        LaunchedEffect(state.isReady, state.ruleId) {
+            if (state.isReady) state.initialForm?.let(editor::initialize)
+        }
+        if (state.isReady && editor.text.isInitialized) RoutingEditForm(
             state = state,
-            callbacks = callbacks,
+            editor = editor,
             outboundItems = outboundItems,
             query = query,
             onQueryChange = viewModel.slices.onQueryChange,
             onAction = onAction,
-            modifier = Modifier.fillMaxSize().imePadding(),
+            modifier = Modifier.fillMaxSize().imePadding()
         )
         if (showDeleteDialog) {
             DeleteConfirmDialog(
@@ -118,7 +120,7 @@ fun RoutingEditScreen(
                     showDeleteDialog = false
                     onAction(RoutingEditAction.ConfirmDelete)
                 },
-                onDismiss = { showDeleteDialog = false },
+                onDismiss = { showDeleteDialog = false }
             )
         }
     }
@@ -127,6 +129,9 @@ fun RoutingEditScreen(
 @Composable
 private fun RoutingEditTopBar(
     isEdit: Boolean,
+    canSave: Boolean,
+    isMutating: Boolean,
+    onSave: () -> Unit,
     onAction: (RoutingEditAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -134,29 +139,33 @@ private fun RoutingEditTopBar(
         title = stringResource(R.string.routing_settings_rule_title),
         onBackClick = { onAction(RoutingEditAction.Back) },
         modifier = modifier,
+        isLoading = isMutating,
         actions = {
             if (isEdit) {
-                IconButton(onClick = { onAction(RoutingEditAction.Delete) }) {
+                IconButton(
+                    onClick = { onAction(RoutingEditAction.Delete) },
+                    enabled = !isMutating
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_delete_24dp),
-                        contentDescription = stringResource(R.string.acc_delete),
+                        contentDescription = stringResource(R.string.acc_delete)
                     )
                 }
             }
-            IconButton(onClick = { onAction(RoutingEditAction.Save) }) {
+            IconButton(onClick = onSave, enabled = canSave) {
                 Icon(
                     painter = painterResource(R.drawable.ic_fab_check),
-                    contentDescription = stringResource(R.string.acc_save),
+                    contentDescription = stringResource(R.string.acc_save)
                 )
             }
-        },
+        }
     )
 }
 
 @Composable
 private fun RoutingEditForm(
     state: RoutingEditUiState,
-    callbacks: RoutingFieldCallbacks,
+    editor: RoutingEditorState,
     outboundItems: LazyPagingItems<DropdownOption>,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -164,54 +173,49 @@ private fun RoutingEditForm(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    val form = state.form
-    val remarksError = state.fieldErrors[RoutingField.REMARKS]
+    val remarksError = editor.error(RoutingField.REMARKS, state.fieldErrors[RoutingField.REMARKS])
 
     Column(
         modifier = modifier
             .verticalScrollbar(scrollState)
             .verticalScroll(scrollState)
-            .padding(vertical = FormVerticalPadding),
+            .padding(vertical = FormVerticalPadding)
     ) {
         FormTextField(
             label = stringResource(R.string.sub_setting_remarks),
-            value = form.remarks,
-            onValueChange = callbacks[RoutingField.REMARKS],
+            state = editor[RoutingField.REMARKS],
             isError = remarksError != null,
-            supportingText = remarksError?.let { stringResource(it) },
+            supportingText = remarksError?.let { stringResource(it) }
         )
         SettingsSwitchItem(
             title = stringResource(R.string.routing_settings_locked),
-            checked = form.locked,
-            onCheckedChange = { locked -> onAction(RoutingEditAction.ToggleLocked(locked)) },
+            checked = editor.locked,
+            onCheckedChange = { editor.locked = it }
         )
         FormTextField(
             label = stringResource(R.string.routing_settings_domain),
             placeholder = stringResource(R.string.routing_settings_tips),
-            value = form.domain,
-            onValueChange = callbacks[RoutingField.DOMAIN],
+            state = editor[RoutingField.DOMAIN]
         )
         FormTextField(
             label = stringResource(R.string.routing_settings_ip),
             placeholder = stringResource(R.string.routing_settings_tips),
-            value = form.ip,
-            onValueChange = callbacks[RoutingField.IP],
+            state = editor[RoutingField.IP]
         )
         FormTextField(
             label = stringResource(R.string.routing_settings_process),
             placeholder = stringResource(R.string.routing_settings_tips),
-            value = form.process,
-            onValueChange = callbacks[RoutingField.PROCESS],
-            enabled = state.canUseProcess,
+            state = editor[RoutingField.PROCESS],
+            enabled = state.canUseProcess
         )
         if (state.canUseProcess) {
             TextButton(
-                onClick = { onAction(RoutingEditAction.SelectProcess) },
-                modifier = Modifier.padding(start = ButtonStartPadding),
+                onClick = { onAction(editor.selectProcessAction()) },
+                modifier = Modifier.padding(start = ButtonStartPadding)
             ) {
                 Icon(
                     painter = painterResource(R.drawable.ic_per_apps_24dp),
-                    contentDescription = null,
+                    contentDescription = null
                 )
                 Spacer(modifier = Modifier.width(ButtonIconSpacing))
                 Text(stringResource(R.string.routing_settings_process_select))
@@ -219,32 +223,28 @@ private fun RoutingEditForm(
         }
         FormTextField(
             label = stringResource(R.string.routing_settings_port),
-            value = form.port,
-            onValueChange = callbacks[RoutingField.PORT],
+            state = editor[RoutingField.PORT]
         )
         FormTextField(
             label = stringResource(R.string.routing_settings_protocol),
             placeholder = stringResource(R.string.routing_settings_protocol_tip),
-            value = form.protocol,
-            onValueChange = callbacks[RoutingField.PROTOCOL],
+            state = editor[RoutingField.PROTOCOL]
         )
         FormDropdownField(
             label = stringResource(R.string.routing_settings_network),
-            value = form.networkOrDefault,
-            options = RoutingNetworkOptions,
-            onValueChange = callbacks[RoutingField.NETWORK],
+            state = editor[RoutingField.NETWORK],
+            options = RoutingNetworkOptions
         )
         FormPagedDropdownField(
             label = stringResource(R.string.routing_settings_outbound_tag),
             placeholder = stringResource(
                 R.string.routing_settings_outbound_tag_hint,
-                stringResource(R.string.server_lab_remarks),
+                stringResource(R.string.server_lab_remarks)
             ),
-            value = form.outboundTag,
+            state = editor[RoutingField.OUTBOUND],
             items = outboundItems,
             query = query,
-            onQueryChange = onQueryChange,
-            onValueChange = callbacks[RoutingField.OUTBOUND],
+            onQueryChange = onQueryChange
         )
         Spacer(modifier = Modifier.height(BottomSpacerHeight))
         NavigationBarsSpacer()
@@ -260,14 +260,17 @@ private fun PreviewRoutingEditForm() {
         RoutingEditForm(
             state = RoutingEditUiState(
                 ruleId = "preview",
-                form = RoutingForm(remarks = "Preview", domain = "geosite:google"),
-                canUseProcess = true,
+                canUseProcess = true
             ),
-            callbacks = RoutingFieldCallbacks {},
+            editor = remember {
+                RoutingEditorState().apply {
+                    initialize(RoutingForm(remarks = "Preview", domain = "geosite:google"))
+                }
+            },
             outboundItems = rememberPreviewDropdownItems(listOf("proxy", "direct")),
             query = "",
             onQueryChange = {},
-            onAction = {},
+            onAction = {}
         )
     }
 }

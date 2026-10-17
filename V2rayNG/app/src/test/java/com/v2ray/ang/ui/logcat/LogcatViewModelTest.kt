@@ -1,11 +1,13 @@
 package com.v2ray.ang.ui.logcat
 
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.lifecycle.ViewModelStore
 import androidx.paging.PagingDataEvent
 import androidx.paging.PagingDataPresenter
 import com.v2ray.ang.data.repository.LOGCAT_RETENTION_MS
 import com.v2ray.ang.data.repository.LogcatRepository
 import com.v2ray.ang.data.repository.retainLogcatLines
+import com.v2ray.ang.ui.components.closeSearchField
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -159,6 +161,51 @@ class LogcatViewModelTest {
         runCurrent()
         assertEquals(2, rows.size)
         assertEquals("", vm.uiState.value.query)
+    }
+
+    @Test
+    fun closingDuringDebounceClearsInputAndOldSearchNeverReplacesTheUnfilteredPage() = runTest(dispatcher) {
+        val repo = FakeRepository(dispatcher)
+        val vm = viewModel(repo)
+        val rows = collectRows(vm)
+        vm.onAction(LogcatAction.Started)
+        runCurrent()
+        vm.onAction(LogcatAction.SearchOpened)
+        vm.onAction(LogcatAction.QueryChanged("ERROR"))
+        runCurrent()
+        advanceTimeBy(299)
+
+        val input = TextFieldState("ERROR plus an unobserved edit")
+        closeSearchField(input) { vm.onAction(LogcatAction.SearchClosed) }
+        assertEquals("", input.text.toString())
+        assertEquals("", vm.uiState.value.query)
+        assertFalse(vm.uiState.value.searchActive)
+        runCurrent()
+        assertEquals(2, rows.size)
+        advanceTimeBy(301)
+        runCurrent()
+        assertEquals(2, rows.size)
+    }
+
+    @Test
+    fun clearingAnOpenQueryCancelsDebounceWithoutClosingSearch() = runTest(dispatcher) {
+        val repo = FakeRepository(dispatcher)
+        val vm = viewModel(repo)
+        val rows = collectRows(vm)
+        vm.onAction(LogcatAction.Started)
+        runCurrent()
+        vm.onAction(LogcatAction.SearchOpened)
+        vm.onAction(LogcatAction.QueryChanged("ERROR"))
+        runCurrent()
+        advanceTimeBy(299)
+
+        vm.onAction(LogcatAction.QueryChanged(""))
+        runCurrent()
+        assertTrue(vm.uiState.value.searchActive)
+        assertEquals(2, rows.size)
+        advanceTimeBy(301)
+        runCurrent()
+        assertEquals(2, rows.size)
     }
 
     @Test

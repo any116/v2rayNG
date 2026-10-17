@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -32,8 +33,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
@@ -73,7 +72,7 @@ fun CollapsiblePreferenceGroupHeader(
     title: String,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -160,10 +159,9 @@ fun SettingsEditItem(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isPassword: Boolean = false,
-    keyboardNumber: Boolean = false,
+    keyboardNumber: Boolean = false
 ) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
-    var text by remember(value) { mutableStateOf(value) }
     val description = value.ifEmpty { null }?.let { if (isPassword) MaskedValue else it }
 
     SettingsItemRow(
@@ -172,25 +170,26 @@ fun SettingsEditItem(
         description = description,
         enabled = enabled,
         onClick = if (enabled) {
-            { text = value; showDialog = true }
+            { showDialog = true }
         } else {
             null
         },
-        modifier = modifier,
+        modifier = modifier
     )
     if (showDialog) {
-        val fields = remember(text, title, isPassword, keyboardNumber) {
+        // A new opening seeds the committed value; restoration keeps text and directed selection.
+        val editState = rememberSaveable(saver = TextFieldState.Saver) { TextFieldState(value) }
+        val fields = remember(editState, title, isPassword, keyboardNumber) {
             listOf(
                 InputField(
                     label = title,
-                    value = text,
-                    keyboardType = if (keyboardNumber) KeyboardType.Number else KeyboardType.Text,
-                    visualTransformation = if (isPassword) {
-                        PasswordVisualTransformation()
-                    } else {
-                        VisualTransformation.None
+                    state = editState,
+                    keyboardType = when {
+                        isPassword -> KeyboardType.Password
+                        keyboardNumber -> KeyboardType.Number
+                        else -> KeyboardType.Text
                     },
-                    onValueChange = { text = it }
+                    isPassword = isPassword
                 )
             )
         }
@@ -199,7 +198,10 @@ fun SettingsEditItem(
             fields = fields,
             confirmText = stringResource(R.string.action_ok),
             dismissText = stringResource(R.string.action_cancel),
-            onConfirm = { showDialog = false; onValueChanged(text) },
+            onConfirm = {
+                showDialog = false
+                onValueChanged(editState.text.toString())
+            },
             onDismiss = { showDialog = false }
         )
     }
@@ -214,7 +216,7 @@ fun SettingsListItem(
     selectedValue: String,
     onSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
+    enabled: Boolean = true
 ) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
     val options = remember(entries, values) { entries.values.zip(values.values) }
@@ -231,7 +233,7 @@ fun SettingsListItem(
         } else {
             null
         },
-        modifier = modifier,
+        modifier = modifier
     )
     if (showDialog) {
         SelectListDialog(
@@ -253,14 +255,14 @@ fun SettingsMenuItem(
     title: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
+    subtitle: String? = null
 ) = SettingsItemRow(
     icon = icon,
     title = title,
     description = subtitle,
     enabled = true,
     onClick = onClick,
-    modifier = modifier,
+    modifier = modifier
 )
 
 @Composable
@@ -271,7 +273,7 @@ fun SettingsSwitchItem(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     summary: String? = null,
-    enabled: Boolean = true,
+    enabled: Boolean = true
 ) {
     SettingsItemRow(
         icon = icon,

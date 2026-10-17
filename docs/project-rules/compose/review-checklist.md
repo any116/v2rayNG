@@ -28,8 +28,10 @@
       （分页切片、计数切片、`ThemeManager` 属于既定例外）
 - [ ] `isLoading` 没有被塞进 UiState
 - [ ] 一次性效果（消息、导航、弹窗触发、Bitmap）没有进 UiState
-- [ ] Composable 没有把 State 里的值 `remember` 成第二份可变副本
-- [ ] 表单输入的唯一来源是 UiState，不是 Composable 局部 `mutableStateOf`
+- [ ] Composable 没有把 State 里的业务值 `remember` 成第二份可变副本
+- [ ] 编辑文本只由 UI-owned `TextFieldState` 持有，UiState 仅有一次加载初值，无逐字 String 回灌
+- [ ] Save/Confirm 等 Action 同步捕获不可变草稿快照，无 registry/flush，异步操作不读取旧初值
+- [ ] 草稿和定向选区可保存，加载前不能提交空表单，迟到 load 不覆盖已恢复草稿
 - [ ] 大列表数据没有塞进 UiState（用 Paging 3 的 `Flow<PagingData<T>>`）
 
 ## C. UDF（Blocker）
@@ -42,7 +44,7 @@
 - [ ] Action 命名表达用户意图，不是 setter
 - [ ] 一次性效果走 `BaseEvent`；`BaseEvent.Platform` 由 Activity 翻译或屏内 `onEvent` 截获
 - [ ] 提示文案用 `BaseText` 描述，由 UI 渲染；ViewModel 没有直接弹 toast/Snackbar
-- [ ] 子页结果通过 `BaseResult` 回传，父页用 `onResult` → Action 处理
+- [ ] 子页结果通过 `BaseResult` 回传；草稿字段结果在 UI 更新明确目标，业务处理经 Action
 - [ ] Activity 里没有业务判断，只有 VM 构造、平台能力翻译、系统回调
 
 ## D. 数据层（Room 3 / Repository）（Blocker）

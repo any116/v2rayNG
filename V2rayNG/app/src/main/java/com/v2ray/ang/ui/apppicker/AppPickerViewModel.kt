@@ -12,6 +12,8 @@ import com.v2ray.ang.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import javax.inject.Inject
 
 @HiltViewModel
@@ -37,7 +39,6 @@ class AppPickerViewModel @Inject constructor(
         handle.setSavedStateProvider(KEY_SAVED) {
             Bundle().apply {
                 putStringArrayList(KEY_SELECTED, ArrayList(state.selected))
-                putString(KEY_QUERY, state.query)
             }
         }
         load()
@@ -51,8 +52,7 @@ class AppPickerViewModel @Inject constructor(
 
             AppPickerAction.SearchOpen -> setState { copy(searchActive = true) }
             AppPickerAction.SearchClose -> closeSearch()
-            is AppPickerAction.QueryChanged ->
-                applyQuery(action.value, searchActive = true, debounce = true)
+            is AppPickerAction.QueryChanged -> changeQuery(action.value)
 
             AppPickerAction.SelectAll -> mutateSelection(repo::selectAll)
             AppPickerAction.InvertSelection -> mutateSelection(repo::invert)
@@ -70,18 +70,24 @@ class AppPickerViewModel @Inject constructor(
     private fun restoreSavedState() {
         val saved = handle.get<Bundle>(KEY_SAVED) ?: return
         val selected = saved.getStringArrayList(KEY_SELECTED)?.toSet() ?: return
-        val query = saved.getString(KEY_QUERY).orEmpty()
-        setState { copy(selected = selected, query = query, searchActive = query.isNotEmpty()) }
+        setState { copy(selected = selected) }
     }
 
     // ===== search =====
+
+    private fun changeQuery(query: String) {
+        if (query == state.query) return
+        applyQuery(query, searchActive = true, debounce = query.isNotEmpty())
+    }
 
     private fun applyQuery(query: String, searchActive: Boolean, debounce: Boolean) {
         setState { copy(query = query, searchActive = searchActive) }
         queryJob?.cancel()
         queryJob = launch(context = Dispatchers.Default) {
             if (debounce) delay(SEARCH_DEBOUNCE_MS)
-            publishRows(repo.filter(allApps, query))
+            val filtered = repo.filter(allApps, query)
+            currentCoroutineContext().ensureActive()
+            publishRows(filtered)
         }
     }
 
@@ -134,6 +140,7 @@ class AppPickerViewModel @Inject constructor(
     )
 
     override fun onCleared() {
+        queryJob?.cancel()
         queryJob = null
         allApps = emptyList()
         super.onCleared()
@@ -143,7 +150,6 @@ class AppPickerViewModel @Inject constructor(
         const val SEARCH_DEBOUNCE_MS = 300L
         const val KEY_SAVED = "app_picker_saved_state"
         const val KEY_SELECTED = "selected"
-        const val KEY_QUERY = "query"
     }
 }
 

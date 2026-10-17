@@ -154,8 +154,8 @@ ui/                    # 全部 Compose UI
                        # BaseViewModel / BaseEditViewModel / BaseResult / EditFormSaver
                        # （BaseViewModelFactory 为遗留死代码，生产路径禁止使用）
   components/          # 跨屏共享组件：Theme / Common / Dialog / FormFields /
-                       # FormPagedDropdownField / PrefsState / SettingsItem / Menu /
-                       # Scrollbar / SnackBar
+                       # FormPagedDropdownField / TextEditorState / SearchFieldController / PrefsState /
+                       # SettingsItem / Menu / Scrollbar / SnackBar
   main/ settings/ server/ subscription/ routing/ perappproxy/ apppicker/
   userasset/ backup/ logcat/ scanner/ about/ checkupdate/ shortcut/ urlscheme/
   widght/              # Glance 桌面组件 SwitchWidget（包名 com.v2ray.ang.ui.widget，目录名为历史拼写）
@@ -165,11 +165,11 @@ ui/                    # 全部 Compose UI
 
 - `BaseUiState` / `BaseAction` / `BaseEvent` / `BaseRoute` / `BaseText` / `BaseMessage`
   —— 在 `BaseContract.kt`，是 SSOT/UDF 的类型基座。
-- `BaseViewModel<S, A>`：持有唯一 `MutableStateFlow<S>`，`setState { }` 是唯一改状态入口；
+- `BaseViewModel<S, A>`：持有业务元数据的唯一 `MutableStateFlow<S>`，`setState { }` 是其改状态入口；
   引用计数的 `isLoading`；`Channel(UNLIMITED)` 承载一次性事件；
   统一 `launch(loading, context, onError) { }`。
-- `BaseEditViewModel<S, A>`：编辑页父类，子类实现 `doSave()` / `doDelete()`，
-  返回 `null` 表示校验失败留在原页；`mutationJob` 负责防重入。
+- `BaseEditViewModel<S, A>`：编辑页父类，`save { saveSnapshot(action.form) }` 捕获提交快照，
+  子类实现 `doDelete()`；操作返回 `null` 留在原页，`mutationJob` 负责防重入。
 - `BaseScreen(...)`：**唯一**收集 `uiState` 的地方，提供 Scaffold 槽位、事件消费、
   `BaseResultContract` 启动子页并回传 `BaseResult`。
   它**不**订阅 `isLoading`（也无全屏遮罩）；需要顶栏进度时在槽位内自行收集。
@@ -177,7 +177,8 @@ ui/                    # 全部 Compose UI
   `ScreenContent()`；需要文件、权限、扫码时继承 `BaseHelperActivity`，
   能力通过 `LocalPlatformActions` 下发，**禁止在 Composable 里 `context as XxxActivity`**。
 - `BaseRepository`：只做线程收敛，`withIO { }` 包住所有阻塞调用，注入 `@IoDispatcher`。
-- `EditFormSaver`：进程死亡后的表单恢复，带 `dirty` 门（没改过就不写快照）。
+- 编辑草稿由 UI-owned `TextFieldState` 及 feature Saver 保存，ViewModel 接收不可变动作快照；
+  `EditFormSaver.consume()` 仅用于一次读取并移除旧版本带 dirty 标记的恢复数据，不再写入 String 草稿镜像。
 
 ### 每个功能屏的固定文件集
 

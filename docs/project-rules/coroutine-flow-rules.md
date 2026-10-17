@@ -52,7 +52,9 @@ protected fun launch(
 - **搜索去抖**：`MutableStateFlow` + `.debounce { if (it.isEmpty()) 0L else SEARCH_DEBOUNCE_MS }`
   + `.distinctUntilChanged()`（`MainViewModel`，常量 300ms）。
   空串必须走 `0L`，否则首屏会被无意义地延迟一帧。
-- **下拉框筛选去抖**：`FormPagedDropdownField` 内 `snapshotFlow { draftQuery }.collectLatest { delay(250) }`。
+- **下拉框筛选去抖**：`FormPagedDropdownField` 单向观察 caller-owned `TextFieldState` 及查询
+  抑制元数据，`collectLatest` + 250ms debounce；延时后重查最新文本和 pick 抑制，不把选项当输入查询。
+  查询结果不回写编辑缓冲，保存不依赖 collector；raw 编辑已无逐字 ViewModel 回写 debounce。
 - **高频写结果合并**：`TestResultWriter` 用 `ConcurrentHashMap` 累积 + 单协程 400ms 循环 flush，
   不要每个测速回调都写一次库（每次写都会让主列表 `PagingSource` 失效）。
   样板见 `service/TestResultWriter.kt`。

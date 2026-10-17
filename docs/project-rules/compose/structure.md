@@ -16,8 +16,10 @@ ui/components/ 跨屏共享组件与主题
   Dialog.kt                   ConfirmDialog、DeleteConfirmDialog、InputDialog、QRCodeDialog、SelectListDialog
   FormFields.kt               FormTextField、FormDropdownField、appFieldColors、StringOptions、
                               rememberStringOptions
-  FormPagedDropdownField.kt   Paging 3 支撑的可搜索下拉（DropdownOption / FormPagedDropdownField），
-                              Popup + LazyColumn + 去抖，替代 ExposedDropdownMenu
+  FormPagedDropdownField.kt    Paging 3 支撑的可搜索下拉（DropdownOption / FormPagedDropdownField），
+                               Popup + LazyColumn + 去抖，替代 ExposedDropdownMenu
+  TextEditorState.kt          UI-owned TextFieldState 集合、一次初始化及 foundation Saver
+  SearchFieldController.kt    四个列表屏共用的搜索 TextFieldState 生命周期、清空与单向查询观察
   PrefsState.kt               rememberSettingBool / rememberSettingString（无 ViewModel 的小开关两向绑定）
   SettingsItem.kt             PreferenceGroupHeader、SettingsSwitchItem/ListItem/EditItem/MenuItem
   Menu.kt                     AppDropdownMenuItems
@@ -104,9 +106,11 @@ fun XxxScreen(viewModel: XxxViewModel) {
 ## 5. Content 层
 
 - `XxxContent(state, onAction)` 必须是**无状态**的：能被 Preview 直接调用。
-- 允许的局部状态只有纯 UI 的：展开/折叠、滚动位置、输入焦点、当前弹窗。
-  凡是需要在进程重建后保留的，用 `rememberSaveable`。
-- 业务数据一律来自 `state`（或 Paging 的 `LazyPagingItems`）。
+- 局部 UI 状态包括展开/折叠、滚动位置、焦点、弹窗，以及根屏拥有的 state-based 编辑草稿。
+  草稿通过 `@Stable` feature holder 下传，文本只在 `TextFieldState` 中；需要进程恢复的状态用
+  `rememberSaveable` + Saver，不能按当前 String 值作为重建 key。
+- 持久化业务数据、加载初值及元数据来自 `state`（或 Paging 的 `LazyPagingItems`）；
+  编辑草稿只在 Save/Confirm 等明确动作边界输出不可变快照，不回灌 UiState 逐字镜像。
 - Paging 分支必须处理 `items[index] == null`（占位行仍会被 `LazyColumn` 请求），
   样板：`MainServerPager` 的 `ServerRowPlaceholder()`。
 

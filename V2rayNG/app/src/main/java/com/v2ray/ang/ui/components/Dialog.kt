@@ -18,16 +18,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.TextObfuscationMode
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -35,7 +43,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
@@ -45,6 +52,9 @@ private val OptionVerticalPad = 12.dp
 private val OptionHorizontalPad = 4.dp
 private val ConfirmIconSize = 18.dp
 private const val OptionContentType = "select-option"
+
+/** Delegate each field's text and directed selection to the foundation saver. */
+internal val InputFieldStatesSaver: Saver<List<TextFieldState>, Any> = TextFieldStateListSaver
 
 @Composable
 fun ConfirmDialog(
@@ -112,23 +122,32 @@ fun DeleteConfirmDialog(
     )
 }
 
-@Immutable
+@Stable
 data class InputField(
     val label: String,
-    val value: String,
+    val state: TextFieldState,
     val singleLine: Boolean = true,
     val keyboardType: KeyboardType = KeyboardType.Text,
-    val visualTransformation: VisualTransformation = VisualTransformation.None,
-    val onValueChange: (String) -> Unit
+    /** Use Material3's secure state-based field. Secure fields are always single-line. */
+    val isPassword: Boolean = false
 )
 
+/** A confirmation snapshot is independent of collectors, recomposition and subsequent edits. */
+internal fun snapshotInputFields(fields: List<InputField>): List<String> =
+    fields.map { it.state.text.toString() }
+
+/**
+ * Renders caller-owned fields and reads them synchronously on confirmation.
+ * The caller owns saveable state and decides when a new dialog seeds committed values.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InputDialog(
     title: String,
     fields: List<InputField>,
     confirmText: String,
     dismissText: String,
-    onConfirm: () -> Unit,
+    onConfirm: (List<String>) -> Unit,
     onDismiss: () -> Unit,
     confirmEnabled: Boolean = true
 ) {
@@ -141,26 +160,53 @@ fun InputDialog(
                 verticalArrangement = Arrangement.spacedBy(DialogGap)
             ) {
                 fields.forEach { field ->
-                    OutlinedTextField(
-                        value = field.value,
-                        onValueChange = field.onValueChange,
-                        label = { Text(field.label) },
-                        singleLine = field.singleLine,
-                        maxLines = if (field.singleLine) 1 else 5,
-                        keyboardOptions = KeyboardOptions(keyboardType = field.keyboardType),
-                        visualTransformation = field.visualTransformation,
-                        colors = appFieldColors(),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    key(field.state) {
+                        InputDialogField(field)
+                    }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm, enabled = confirmEnabled) { Text(confirmText) }
+            TextButton(
+                onClick = { onConfirm(snapshotInputFields(fields)) },
+                enabled = confirmEnabled
+            ) {
+                Text(confirmText)
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(dismissText) } },
         containerColor = MaterialTheme.colorScheme.surface
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InputDialogField(field: InputField) {
+    val keyboardOptions = KeyboardOptions(keyboardType = field.keyboardType)
+    val modifier = Modifier.fillMaxWidth()
+    if (field.isPassword) {
+        OutlinedSecureTextField(
+            state = field.state,
+            label = { Text(field.label) },
+            textObfuscationMode = TextObfuscationMode.Hidden,
+            keyboardOptions = keyboardOptions,
+            colors = appFieldColors(),
+            modifier = modifier
+        )
+    } else {
+        OutlinedTextField(
+            state = field.state,
+            label = { Text(field.label) },
+            lineLimits = if (field.singleLine) {
+                TextFieldLineLimits.SingleLine
+            } else {
+                TextFieldLineLimits.MultiLine(maxHeightInLines = 5)
+            },
+            keyboardOptions = keyboardOptions,
+            colors = appFieldColors(),
+            modifier = modifier
+        )
+    }
 }
 
 @Composable
@@ -269,9 +315,8 @@ private fun InputDialogPreview() = AppTheme {
         fields = listOf(
             InputField(
                 label = "Port",
-                value = "10808",
-                keyboardType = KeyboardType.Number,
-                onValueChange = {}
+                state = rememberTextFieldState("10808"),
+                keyboardType = KeyboardType.Number
             )
         ),
         confirmText = "OK",

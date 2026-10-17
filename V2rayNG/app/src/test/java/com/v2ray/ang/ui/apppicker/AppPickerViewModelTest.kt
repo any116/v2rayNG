@@ -1,10 +1,14 @@
 package com.v2ray.ang.ui.apppicker
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.ui.text.TextRange
 import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.data.repository.AppListRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseResult
+import com.v2ray.ang.ui.components.closeSearchField
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -59,7 +63,12 @@ class AppPickerViewModelTest {
         viewModel.onAction(AppPickerAction.QueryChanged("v2ray"))
         assertEquals("v2ray", viewModel.uiState.value.query)
 
-        viewModel.onAction(AppPickerAction.SearchClose)
+        val input = TextFieldState("v2ray")
+        input.setTextAndPlaceCursorAtEnd("last unobserved keystroke")
+        closeSearchField(input) { viewModel.onAction(AppPickerAction.SearchClose) }
+
+        assertEquals("", input.text.toString())
+        assertEquals(TextRange.Zero, input.selection)
         assertEquals("", viewModel.uiState.value.query)
         assertFalse(viewModel.uiState.value.searchActive)
     }

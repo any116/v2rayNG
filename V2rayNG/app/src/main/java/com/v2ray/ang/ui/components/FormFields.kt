@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -21,11 +25,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
@@ -34,6 +40,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 internal val FieldHorizontalPad = 16.dp
 internal val FieldVerticalPad = 4.dp
@@ -71,7 +79,7 @@ fun rememberStringOptions(@ArrayRes id: Int): StringOptions {
 @Composable
 internal fun appFieldColors(
     borderless: Boolean = false,
-    isError: Boolean = false,
+    isError: Boolean = false
 ): TextFieldColors {
     val secondary = MaterialTheme.colorScheme.secondary
     val error = MaterialTheme.colorScheme.error
@@ -107,11 +115,12 @@ internal fun appFieldColors(
     )
 }
 
+/** Renders the caller-owned editing state; saving reads that same state directly. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormTextField(
     label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: TextFieldState,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isError: Boolean = false,
@@ -121,13 +130,11 @@ fun FormTextField(
     maxLines: Int = 15
 ) {
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+        state = state,
         label = { Text(label) },
         placeholder = placeholder?.let { { Text(it) } },
         supportingText = supportingText?.let { { Text(it) } },
-        singleLine = false,
-        maxLines = maxLines,
+        lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = maxLines),
         enabled = enabled,
         isError = isError,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
@@ -143,9 +150,8 @@ fun FormTextField(
 @Composable
 fun FormDropdownField(
     label: String,
-    value: String,
+    state: TextFieldState,
     options: StringOptions,
-    onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     editable: Boolean = false,
     enabled: Boolean = true,
@@ -156,6 +162,18 @@ fun FormDropdownField(
     var expanded by rememberSaveable { mutableStateOf(false) }
     val menuScrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
+    // Observation metadata only: picks advance it synchronously so they cannot reopen the menu.
+    var lastObservedText by rememberSaveable(state) { mutableStateOf(state.text.toString()) }
+    LaunchedEffect(state, editable, enabled) {
+        snapshotFlow { state.text.toString() }
+            .distinctUntilChanged()
+            .collect { text ->
+                if (text != lastObservedText) {
+                    lastObservedText = text
+                    if (editable && enabled) expanded = true
+                }
+            }
+    }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -168,16 +186,10 @@ fun FormDropdownField(
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
     ) {
         OutlinedTextField(
-            value = value,
-            onValueChange = {
-                if (editable) {
-                    onValueChange(it)
-                    if (!expanded) expanded = true
-                }
-            },
+            state = state,
             readOnly = !editable,
             enabled = enabled,
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             isError = isError,
             label = { Text(label) },
             placeholder = placeholder?.let { { Text(it) } },
@@ -203,7 +215,10 @@ fun FormDropdownField(
                 DropdownMenuItem(
                     text = { Text(option) },
                     onClick = {
-                        onValueChange(option)
+                        lastObservedText = option
+                        if (state.text.toString() != option) {
+                            state.setTextAndPlaceCursorAtEnd(option)
+                        }
                         expanded = false
                         focusManager.clearFocus()
                     }
@@ -220,20 +235,18 @@ fun FormDropdownField(
 @Composable
 private fun FormTextFieldPreview() = AppTheme {
     Column {
-        FormTextField(label = "Address", value = "example.com", onValueChange = {})
+        FormTextField(label = "Address", state = rememberTextFieldState("example.com"))
         FormTextField(
             label = "Remarks",
-            value = "A remark long enough to wrap across more than one visual line in the field",
-            onValueChange = {}
+            state = rememberTextFieldState("A remark long enough to wrap across more than one visual line in the field")
         )
         FormTextField(
             label = "Address",
-            value = "",
+            state = rememberTextFieldState(),
             isError = true,
-            supportingText = "Address is required",
-            onValueChange = {}
+            supportingText = "Address is required"
         )
-        FormTextField(label = "Disabled", value = "", enabled = false, onValueChange = {})
+        FormTextField(label = "Disabled", state = rememberTextFieldState(), enabled = false)
     }
 }
 
@@ -242,9 +255,8 @@ private fun FormTextFieldPreview() = AppTheme {
 private fun FormDropdownFieldPreview() = AppTheme {
     FormDropdownField(
         label = "Entry proxy",
-        value = "tcp",
+        state = rememberTextFieldState("tcp"),
         options = listOf("tcp", "ws", "grpc").toStringOptions(),
-        supportingText = "Added before every profile in this subscription",
-        onValueChange = {}
+        supportingText = "Added before every profile in this subscription"
     )
 }

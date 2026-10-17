@@ -9,7 +9,6 @@ import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
-import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseUiState
 import com.v2ray.ang.ui.components.DropdownOption
 import kotlinx.coroutines.flow.Flow
@@ -25,17 +24,21 @@ data class RoutingForm(
     val protocol: String = "",
     val network: String = "",
     val port: String = "",
-    val outboundTag: String = "",
+    val outboundTag: String = ""
 )
 
 enum class RoutingField { REMARKS, DOMAIN, IP, PROCESS, PROTOCOL, NETWORK, PORT, OUTBOUND }
 
 @Immutable
+data class RoutingFieldError(val message: Int, val submittedValue: String)
+
+@Immutable
 data class RoutingEditUiState(
     val ruleId: String = "",
-    val form: RoutingForm = RoutingForm(),
+    val initialForm: RoutingForm? = null,
+    val isReady: Boolean = false,
     val canUseProcess: Boolean = false,
-    val fieldErrors: Map<RoutingField, Int> = emptyMap()
+    val fieldErrors: Map<RoutingField, RoutingFieldError> = emptyMap()
 ) : BaseUiState {
     val isEdit: Boolean get() = ruleId.isNotEmpty()
 }
@@ -44,22 +47,12 @@ data class RoutingEditUiState(
 class RoutingEditSlices(
     val outboundTags: Flow<PagingData<DropdownOption>>,
     val query: StateFlow<String>,
-    val onQueryChange: (String) -> Unit,
+    val onQueryChange: (String) -> Unit
 )
 
 sealed interface RoutingEditAction : BaseAction {
-    data class UpdateRemarks(val value: String) : RoutingEditAction
-    data class UpdateDomain(val value: String) : RoutingEditAction
-    data class UpdateIp(val value: String) : RoutingEditAction
-    data class UpdateProcess(val value: String) : RoutingEditAction
-    data class UpdateProtocol(val value: String) : RoutingEditAction
-    data class UpdateNetwork(val value: String) : RoutingEditAction
-    data class UpdatePort(val value: String) : RoutingEditAction
-    data class UpdateOutbound(val value: String) : RoutingEditAction
-    data class ToggleLocked(val value: Boolean) : RoutingEditAction
-    data object SelectProcess : RoutingEditAction
-    data class ResultReceived(val result: BaseResult) : RoutingEditAction
-    data object Save : RoutingEditAction
+    data class SelectProcess(val process: String) : RoutingEditAction
+    data class Save(val form: RoutingForm) : RoutingEditAction
     data object Back : RoutingEditAction
     data object Delete : RoutingEditAction
     data object ConfirmDelete : RoutingEditAction
@@ -69,18 +62,16 @@ sealed interface RoutingEditEvent : BaseEvent.Platform {
     data object ShowDeleteDialog : RoutingEditEvent
 }
 
-val RoutingForm.networkOrDefault: String get() = network.ifBlank { ROUTING_NETWORK_DEFAULT }
-
-fun RoutingField.set(form: RoutingForm, value: String): RoutingForm = when (this) {
-    RoutingField.REMARKS -> form.copy(remarks = value)
-    RoutingField.DOMAIN -> form.copy(domain = value)
-    RoutingField.IP -> form.copy(ip = value)
-    RoutingField.PROCESS -> form.copy(process = value)
-    RoutingField.PROTOCOL -> form.copy(protocol = value)
-    RoutingField.NETWORK -> form.copy(network = value)
-    RoutingField.PORT -> form.copy(port = value)
-    RoutingField.OUTBOUND -> form.copy(outboundTag = value)
-}
+internal fun RoutingForm.textValues(): Map<String, String> = mapOf(
+    RoutingField.REMARKS.name to remarks,
+    RoutingField.DOMAIN.name to domain,
+    RoutingField.IP.name to ip,
+    RoutingField.PROCESS.name to process,
+    RoutingField.PROTOCOL.name to protocol,
+    RoutingField.NETWORK.name to network.ifBlank { ROUTING_NETWORK_DEFAULT },
+    RoutingField.PORT.name to port,
+    RoutingField.OUTBOUND.name to outboundTag
+)
 
 fun RulesetItem?.toRoutingForm(): RoutingForm = RoutingForm(
     remarks = this?.remarks.orEmpty(),
@@ -91,7 +82,7 @@ fun RulesetItem?.toRoutingForm(): RoutingForm = RoutingForm(
     protocol = this?.protocol?.joinToString(",").orEmpty(),
     network = this?.network.orEmpty(),
     port = this?.port.orEmpty(),
-    outboundTag = this?.outboundTag ?: BUILTIN_OUTBOUND_TAGS.first(),
+    outboundTag = this?.outboundTag ?: BUILTIN_OUTBOUND_TAGS.first()
 )
 
 fun RulesetItem.applyRoutingForm(form: RoutingForm): RulesetItem = copy(
@@ -103,7 +94,7 @@ fun RulesetItem.applyRoutingForm(form: RoutingForm): RulesetItem = copy(
     protocol = form.protocol.toCsvList(),
     port = form.port.nullIfBlank(),
     network = form.network.nullIfBlank(),
-    outboundTag = form.outboundTag.trim().ifEmpty { TAG_PROXY },
+    outboundTag = form.outboundTag.trim().ifEmpty { TAG_PROXY }
 ).also { it.id = this.id }
 
 private fun String.toCsvList(): List<String>? = nullIfBlank()

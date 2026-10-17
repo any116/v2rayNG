@@ -563,6 +563,7 @@
     <string name="acc_cancel_connection_test">Отменить проверку соединения</string>
     <string name="acc_back">Назад</string>
     <string name="acc_search">Поиск</string>
+    <string name="acc_clear_search">Очистить поиск</string>
     <string name="acc_add">Добавить профиль</string>
     <string name="acc_more">Дополнительные параметры</string>
     <string name="acc_selected_server">Selected</string>

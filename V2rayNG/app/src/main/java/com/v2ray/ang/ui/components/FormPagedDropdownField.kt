@@ -1,6 +1,7 @@
 package com.v2ray.ang.ui.components
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -13,8 +14,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,10 +33,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -84,13 +92,136 @@ data class DropdownOption(val value: String, val source: Source) {
     val key: String get() = "${source.name}:$value"
 }
 
+/** Recheck live metadata after the delay, including a same-text pick with no text emission. */
+internal suspend fun debounceDropdownQuery(
+    text: String,
+    debounceMillis: Long,
+    currentQuery: () -> String?,
+    lastPushedQuery: () -> String,
+    onQueryChange: (String) -> Unit
+) {
+    fun shouldPush() = text == currentQuery() && text != lastPushedQuery()
+
+    if (!shouldPush()) return
+    delay(debounceMillis)
+    if (shouldPush()) onQueryChange(text)
+}
+
+/** Query/visibility metadata only; the caller's [TextFieldState] is the sole editing source. */
+@Stable
+internal class DropdownQueryState(initialText: String, initialQuery: String) {
+    var expanded by mutableStateOf(false)
+    private var lastObservedText by mutableStateOf(initialText)
+    internal var lastPushedQuery by mutableStateOf(initialQuery)
+        private set
+    private var suppressedText by mutableStateOf<String?>(initialText)
+    internal var resetAtText by mutableStateOf<String?>(null)
+        private set
+    // An explicit pick invalidates an old search even when text edits conflate back to that query.
+    internal var pickGeneration by mutableLongStateOf(0L)
+        private set
+
+    internal fun observeText(text: String) {
+        if (text == lastObservedText) return
+        lastObservedText = text
+        if (text != suppressedText) {
+            suppressedText = null
+            resetAtText = null
+        }
+    }
+
+    internal fun queryFor(text: String): String? = when {
+        text == resetAtText -> ""
+        text == suppressedText -> null
+        else -> text
+    }
+
+    internal fun queryPushed(query: String) {
+        lastPushedQuery = query
+    }
+
+    fun pick(state: TextFieldState, text: String) {
+        // Install suppression before editing, even when the pick equals the pending typed text.
+        suppressedText = text
+        lastObservedText = text
+        resetAtText = null
+        expanded = false
+        if (state.text.toString() != text) state.setTextAndPlaceCursorAtEnd(text)
+        pickGeneration++
+    }
+
+    fun dismiss(state: TextFieldState, resetQuery: Boolean) {
+        expanded = false
+        lastObservedText = state.text.toString()
+        if (resetQuery) {
+            suppressedText = lastObservedText
+            resetAtText = lastObservedText
+        }
+    }
+
+    companion object {
+        val Saver: Saver<DropdownQueryState, Any> = Saver(
+            save = {
+                listOf(it.expanded, it.lastObservedText, it.lastPushedQuery, it.suppressedText, it.resetAtText)
+            },
+            restore = { saved -> restoreState(saved) }
+        )
+
+        private fun restoreState(saved: Any): DropdownQueryState? {
+            val values = saved as? List<*> ?: return null
+            val expanded = values.getOrNull(0) as? Boolean ?: return null
+            val lastObservedText = values.getOrNull(1) as? String ?: return null
+            val suppressedText = values.getOrNull(3) as? String
+            val resetAtText = values.getOrNull(4) as? String
+            return DropdownQueryState(lastObservedText, "").apply {
+                this.expanded = expanded
+                this.suppressedText = suppressedText
+                this.resetAtText = resetAtText
+            }
+        }
+    }
+}
+
+/** Observes only for searching; confirmation never needs to wait for this collector. */
+internal suspend fun observeDropdownQueries(
+    state: TextFieldState,
+    queries: DropdownQueryState,
+    debounceMillis: Long,
+    onQueryChange: (String) -> Unit
+) {
+    // Suppression is observable too: pick -> edit back can leave the text equal to the previous
+    // emission, but it is now a real query rather than the initial/picked business value.
+    snapshotFlow {
+        val text = state.text.toString()
+        Triple(text, queries.queryFor(text), queries.pickGeneration)
+    }
+        .distinctUntilChanged()
+        .collectLatest { (text, _, _) ->
+            if (text != state.text.toString()) return@collectLatest
+            queries.observeText(text)
+            val query = queries.queryFor(text) ?: return@collectLatest
+            debounceDropdownQuery(
+                text = query,
+                debounceMillis = debounceMillis,
+                currentQuery = { queries.queryFor(state.text.toString()) },
+                lastPushedQuery = { queries.lastPushedQuery },
+                onQueryChange = {
+                    queries.queryPushed(it)
+                    onQueryChange(it)
+                }
+            )
+        }
+}
+
 /**
  * Paging-backed searchable dropdown.
  *
  * The field itself is always editable and doubles as the search box: typing
- * commits the value through [onValueChange] immediately and pushes a debounced
- * filter to [onQueryChange]. Picking an option writes it to both.
+ * edits the caller-owned [state] and pushes a debounced filter to [onQueryChange].
+ * Picking an option edits that same state and suppresses a search for the pick;
+ * the already submitted filter is intentionally not reloaded.
  * The label includes a localized search hint so this behavior is discoverable.
+ * Only query submission/suppression metadata is saved here; the owner saves the text state.
  *
  * ## Why not [ExposedDropdownMenu]
  *
@@ -113,86 +244,78 @@ data class DropdownOption(val value: String, val source: Source) {
  * everything except what is intrinsic to paging (loading / empty / append states
  * and the debounced filter).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun FormPagedDropdownField(
     label: String,
-    value: String,
+    state: TextFieldState,
     items: LazyPagingItems<DropdownOption>,
     query: String,
     onQueryChange: (String) -> Unit,
-    onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isError: Boolean = false,
     placeholder: String? = null,
     supportingText: String? = null,
-    /** Keep the filter when the menu is dismissed; set true to restore the old behaviour. */
-    resetQueryOnDismiss: Boolean = false,
+    /** Search filters are transient interaction state and reset when the menu is dismissed. */
+    resetQueryOnDismiss: Boolean = true,
     debounceMillis: Long = QueryDebounceMillis
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    // Draft is owned here so it survives popup re-creation and pager reloads.
-    var draftQuery by rememberSaveable { mutableStateOf(query) }
-    var lastPushedQuery by remember { mutableStateOf(query) }
+    val queries = rememberSaveable(state, saver = DropdownQueryState.Saver) {
+        DropdownQueryState(state.text.toString(), query)
+    }
     var anchorRect by remember { mutableStateOf<IntRect?>(null) }
 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val currentOnQueryChange by rememberUpdatedState(onQueryChange)
-
-    // Debounce: draft -> upstream pager. collectLatest cancels the pending delay
-    // on each keystroke, so only the last value within debounceMillis is pushed.
-    LaunchedEffect(debounceMillis) {
-        snapshotFlow { draftQuery }
-            .distinctUntilChanged()
-            .collectLatest { text ->
-                if (text == lastPushedQuery) return@collectLatest
-                delay(debounceMillis)
-                lastPushedQuery = text
-                currentOnQueryChange(text)
-            }
+    val expandOnUserEdit = remember(queries) {
+        InputTransformation {
+            if (changes.changeCount > 0) queries.expanded = true
+        }
     }
 
-    // Reset scroll only when the committed query actually changes.
+    val dismissDropdown: () -> Unit = {
+        queries.dismiss(state, resetQueryOnDismiss)
+    }
+
+    LaunchedEffect(state, queries, debounceMillis) {
+        observeDropdownQueries(state, queries, debounceMillis) { currentOnQueryChange(it) }
+    }
+
+    // Each row owns this list state, so a new query must always start at the first result.
     LaunchedEffect(query) {
-        if (expanded) runCatching { listState.scrollToItem(0) }
+        runCatching { listState.scrollToItem(0) }
     }
 
-    // Back press while the popup is showing is handled by PopupProperties below,
-    // which forwards to onDismissRequest. Keep this as a safety net for the IME
-    // path where the popup never sees the key event first.
-    BackHandler(enabled = expanded) {
-        expanded = false
-        if (resetQueryOnDismiss) draftQuery = ""
+    // Route every close path through the same handler so resetQueryOnDismiss also applies to the
+    // ExposedDropdownMenuBox BackHandler used by this non-focusable popup.
+    BackHandler(enabled = queries.expanded) {
+        dismissDropdown()
     }
 
     ExposedDropdownMenuBox(
-        expanded = expanded,
+        expanded = queries.expanded,
         onExpandedChange = { newExpanded ->
             if (!enabled) return@ExposedDropdownMenuBox
-            expanded = newExpanded
+            if (newExpanded) queries.expanded = true else dismissDropdown()
         },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
     ) {
         OutlinedTextField(
-            value = value,
-            onValueChange = { text ->
-                onValueChange(text)   // commit immediately
-                draftQuery = text     // filter, debounced
-                if (!expanded) expanded = true
-            },
+            state = state,
             enabled = enabled,
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             isError = isError,
             label = { Text(stringResource(R.string.form_searchable_label, label)) },
             placeholder = placeholder?.let { { Text(it) } },
             supportingText = supportingText?.let { { Text(it) } },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            onKeyboardAction = { focusManager.clearFocus() },
+            inputTransformation = expandOnUserEdit,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = queries.expanded) },
             colors = appFieldColors(isError = isError),
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
@@ -208,22 +331,14 @@ fun FormPagedDropdownField(
         )
 
         val rect = anchorRect
-        if (expanded && enabled && rect != null) {
+        if (queries.expanded && enabled && rect != null) {
             PagedDropdownPopup(
                 anchor = rect,
                 items = items,
                 listState = listState,
-                onDismiss = {
-                    expanded = false
-                    if (resetQueryOnDismiss) draftQuery = ""
-                },
+                onDismiss = dismissDropdown,
                 onPick = { picked ->
-                    onValueChange(picked)
-                    draftQuery = picked
-                    // Don't re-trigger the debounced filter with the value we
-                    // just picked - the list is already up to date for it.
-                    lastPushedQuery = picked
-                    expanded = false
+                    queries.pick(state, picked)
                     focusManager.clearFocus()
                 }
             )
@@ -417,10 +532,9 @@ fun rememberPreviewDropdownItems(values: List<String>): LazyPagingItems<Dropdown
 private fun FormPagedDropdownFieldPreview() = AppTheme {
     FormPagedDropdownField(
         label = "Entry proxy",
-        value = "node-01",
+        state = rememberTextFieldState("node-01"),
         items = rememberPreviewDropdownItems(listOf("node-01", "node-02")),
         query = "",
-        onQueryChange = {},
-        onValueChange = {}
+        onQueryChange = {}
     )
 }

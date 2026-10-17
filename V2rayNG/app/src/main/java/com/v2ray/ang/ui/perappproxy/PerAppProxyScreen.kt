@@ -15,6 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,6 +26,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,7 +54,11 @@ import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.ItemDivider
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.ObserveQuery
+import com.v2ray.ang.ui.components.rememberSearchFieldController
 import com.v2ray.ang.ui.components.verticalScrollbar
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 private val HeaderHorizontalPad = 16.dp
 private val HeaderVerticalPad = 8.dp
@@ -71,22 +78,53 @@ private const val HeaderSwitchMaxLines = 2
 
 @Composable
 fun PerAppProxyScreen(viewModel: PerAppProxyViewModel) {
-    val stateHolder = viewModel.uiState.collectAsStateWithLifecycle()
     val loadingHolder = viewModel.isLoading.collectAsStateWithLifecycle()
+    val enabledHolder = remember(viewModel) {
+        viewModel.uiState.map { it.perAppProxyEnabled }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.perAppProxyEnabled)
+    val bypassHolder = remember(viewModel) {
+        viewModel.uiState.map { it.bypassMode }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.bypassMode)
+    val appsHolder = remember(viewModel) {
+        viewModel.uiState.map { it.apps }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.apps)
+    val selectedHolder = remember(viewModel) {
+        viewModel.uiState.map { it.selected }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.selected)
+    val emptyResultHolder = remember(viewModel) {
+        viewModel.uiState.map { it.isEmptyResult }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.isEmptyResult)
 
     val onAction = remember(viewModel) { viewModel::onAction }
-    val onBack = remember(onAction) { { onAction(PerAppProxyAction.Back) } }
+    val initialQuery = ""
+    val initialSearchActive = false
+    val search = rememberSearchFieldController(
+        initialQuery = initialQuery,
+        initialActive = initialSearchActive
+    )
+    val openSearch = remember(search, onAction) {
+        { search.open { onAction(PerAppProxyAction.SearchOpen) } }
+    }
+    val closeSearch = remember(search, onAction) {
+        { search.close { onAction(PerAppProxyAction.SearchClose) } }
+    }
+    val onBack = remember(search, closeSearch, onAction) {
+        { if (search.isActive) closeSearch() else onAction(PerAppProxyAction.Back) }
+    }
+    LaunchedEffect(search, onAction) {
+        onAction(if (search.isActive) PerAppProxyAction.SearchOpen else PerAppProxyAction.SearchClose)
+    }
+    search.ObserveQuery { onAction(PerAppProxyAction.QueryChanged(it)) }
     val dialogs = remember { PerAppProxyDialogHost() }
 
     // every consumer reads exactly one field, through derivedStateOf on its own side.
     val loadingProvider = remember(loadingHolder) { { loadingHolder.value } }
-    val searchActiveProvider = remember(stateHolder) { { stateHolder.value.searchActive } }
-    val queryProvider = remember(stateHolder) { { stateHolder.value.query } }
-    val enabledProvider = remember(stateHolder) { { stateHolder.value.perAppProxyEnabled } }
-    val bypassProvider = remember(stateHolder) { { stateHolder.value.bypassMode } }
-    val appsProvider = remember(stateHolder) { { stateHolder.value.apps } }
-    val selectedProvider = remember(stateHolder) { { stateHolder.value.selected } }
-    val emptyResultProvider = remember(stateHolder) { { stateHolder.value.isEmptyResult } }
+    val searchActiveProvider = remember(search) { { search.isActive } }
+    val enabledProvider = remember(enabledHolder) { { enabledHolder.value } }
+    val bypassProvider = remember(bypassHolder) { { bypassHolder.value } }
+    val appsProvider = remember(appsHolder) { { appsHolder.value } }
+    val selectedProvider = remember(selectedHolder) { { selectedHolder.value } }
+    val emptyResultProvider = remember(emptyResultHolder) { { emptyResultHolder.value } }
 
     AppBackHandler(onBack = onBack)
 
@@ -96,7 +134,9 @@ fun PerAppProxyScreen(viewModel: PerAppProxyViewModel) {
             PerAppProxyTopBar(
                 isLoadingProvider = loadingProvider,
                 searchActiveProvider = searchActiveProvider,
-                queryProvider = queryProvider,
+                searchInput = search.input,
+                onSearchOpen = openSearch,
+                onSearchClose = closeSearch,
                 onAction = onAction
             )
         }
@@ -124,7 +164,9 @@ fun PerAppProxyScreen(viewModel: PerAppProxyViewModel) {
 private fun PerAppProxyTopBar(
     isLoadingProvider: () -> Boolean,
     searchActiveProvider: () -> Boolean,
-    queryProvider: () -> String,
+    searchInput: TextFieldState,
+    onSearchOpen: () -> Unit,
+    onSearchClose: () -> Unit,
     onAction: (PerAppProxyAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -132,7 +174,6 @@ private fun PerAppProxyTopBar(
 
     val isLoading by remember(isLoadingProvider) { derivedStateOf(isLoadingProvider) }
     val searchActive by remember(searchActiveProvider) { derivedStateOf(searchActiveProvider) }
-    val query by remember(queryProvider) { derivedStateOf(queryProvider) }
 
     AppTopBar(
         title = stringResource(R.string.per_app_proxy_settings),
@@ -142,17 +183,16 @@ private fun PerAppProxyTopBar(
         searchState = if (searchActive) {
             AppSearchState(
                 isActive = true,
-                query = query,
+                state = searchInput,
                 placeholder = stringResource(R.string.menu_item_search)
             )
         } else {
             null
         },
-        onSearchQueryChange = { onAction(PerAppProxyAction.QueryChanged(it)) },
-        onSearchClose = { onAction(PerAppProxyAction.SearchClose) },
+        onSearchClose = onSearchClose,
         actions = {
             if (!searchActive) {
-                IconButton(onClick = { onAction(PerAppProxyAction.SearchOpen) }) {
+                IconButton(onClick = onSearchOpen) {
                     Icon(
                         painter = painterResource(R.drawable.ic_search_24dp),
                         contentDescription = stringResource(R.string.acc_search)
@@ -354,6 +394,20 @@ private fun PerAppProxyRow(
 }
 
 // ===== previews =====
+
+@Preview(showBackground = true)
+@Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PerAppProxyTopBarSearchPreview() = AppTheme {
+    PerAppProxyTopBar(
+        isLoadingProvider = { false },
+        searchActiveProvider = { true },
+        searchInput = rememberTextFieldState(initialText = "v2ray"),
+        onSearchOpen = {},
+        onSearchClose = {},
+        onAction = {}
+    )
+}
 
 @Preview(showBackground = true)
 @Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)

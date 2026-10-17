@@ -42,7 +42,7 @@ fun BackupScreen(
     onPlatformEvent: (BackupEvent) -> Boolean
 ) {
     val dispatch = remember(viewModel) { viewModel::onAction }
-    val dialogs = remember { BackupDialogHost() }
+    val dialogs = rememberBackupDialogHost()
     val callbacks = remember(dispatch) { BackupMenuCallbacks(dispatch) }
     val onBack = remember(dispatch) { { dispatch(BackupAction.Back) } }
 
@@ -58,7 +58,12 @@ fun BackupScreen(
                 }
 
                 BackupEvent.ShowWebDavEditor -> {
-                    dialogs.show(BackupDialog.WebDav)
+                    dialogs.openWebDav()
+                    true
+                }
+
+                BackupEvent.WebDavSaved -> {
+                    dialogs.dismiss()
                     true
                 }
 
@@ -80,13 +85,19 @@ fun BackupScreen(
             )
         }
     ) { state, _ ->
-        BackupContent(webDavSummary = state.webDav.summary, callbacks = callbacks)
-        BackupDialogs(
-            dialog = dialogs.current,
-            draft = state.draft,
-            onDismiss = dialogs.dismiss,
-            onAction = dispatch
+        BackupContent(
+            webDavSummary = state.webDav.summary,
+            callbacks = callbacks
         )
+        // A restored dialog may be visible before the new ViewModel has loaded its opening seed.
+        if (dialogs.current !is BackupDialog.WebDav || state.isWebDavLoadFinished) {
+            BackupDialogs(
+                dialog = dialogs.current,
+                initialForm = state.webDav,
+                onDismiss = dialogs.dismiss,
+                onAction = dispatch
+            )
+        }
     }
 }
 

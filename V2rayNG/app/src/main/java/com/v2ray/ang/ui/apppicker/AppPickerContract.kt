@@ -21,6 +21,7 @@ data class AppPickerUiState(
     @StringRes val titleRes: Int = DEFAULT_TITLE_RES,
     val apps: List<AppRow> = emptyList(),
     val selected: Set<String> = emptySet(),
+    /** Filter requested by the UI; never used to resynchronize its editing buffer. */
     val query: String = "",
     val searchActive: Boolean = false
 ) : BaseUiState {
@@ -65,7 +66,7 @@ sealed interface AppPickerAction : BaseAction {
     /** Close search and clear the filter. */
     data object SearchClose : AppPickerAction
 
-    /** Every keystroke in the search field; debounced by the ViewModel. */
+    /** One-way text snapshots from the UI; nonempty queries are debounced by the ViewModel. */
     data class QueryChanged(val value: String) : AppPickerAction
 
     /** Overflow menu: check every currently visible app. */

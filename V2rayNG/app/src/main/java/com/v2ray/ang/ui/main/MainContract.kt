@@ -38,6 +38,7 @@ data class MainUiState(
     val confirmRemove: Boolean = false,
     val doubleColumnDisplay: Boolean = false,
     val isSearchActive: Boolean = false,
+    /** Requested SQL filter; the root UI owns the input buffer and selection. */
     val searchQuery: String = ""
 ) : BaseUiState {
     val isFiltering: Boolean get() = searchQuery.isNotBlank()

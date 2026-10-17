@@ -70,10 +70,10 @@ private const val GutterCacheLimit = 512
 
 @Composable
 internal fun ServerJsonEditor(
-    remarks: String,
+    remarks: TextFieldState,
+    remarksError: Int?,
     rawContent: TextFieldState,
-    onAction: (ServerAction) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val verticalScroll = rememberScrollState()
     val horizontalScroll = rememberScrollState()
@@ -113,7 +113,7 @@ internal fun ServerJsonEditor(
             Triple(
                 rawContent.selection,
                 verticalScroll.viewportSize,
-                horizontalScroll.viewportSize,
+                horizontalScroll.viewportSize
             )
         }.collectLatest { (selection, vViewport, hViewport) ->
             val layout = layoutRef.value ?: return@collectLatest
@@ -164,8 +164,9 @@ internal fun ServerJsonEditor(
     ) {
         FormTextField(
             label = stringResource(R.string.server_lab_remarks),
-            value = remarks,
-            onValueChange = { onAction(ServerAction.TextChanged(ServerField.REMARKS, it)) },
+            state = remarks,
+            isError = remarksError != null,
+            supportingText = remarksError?.let { stringResource(it) }
         )
 
         Box(
@@ -220,7 +221,7 @@ internal fun ServerJsonEditor(
                     CompositionLocalProvider(
                         LocalTextSelectionColors provides TextSelectionColors(
                             handleColor = MaterialTheme.colorScheme.secondary,
-                            backgroundColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f),
+                            backgroundColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)
                         )
                     ) {
                         BasicTextField(
@@ -246,7 +247,7 @@ internal fun ServerJsonEditor(
                                     if (isEmpty) Text(text = "{ }", style = placeholderStyle)
                                     innerTextField()
                                 }
-                            },
+                            }
                         )
                     }
                 }

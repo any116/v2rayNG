@@ -563,6 +563,7 @@
     <string name="acc_cancel_connection_test">সংযোগ পরীক্ষা বাতিল করুন</string>
     <string name="acc_back">ফিরে যান</string>
     <string name="acc_search">অনুসন্ধান করুন</string>
+    <string name="acc_clear_search">অনুসন্ধান পরিষ্কার করুন</string>
     <string name="acc_add">কনফিগারেশন যোগ করুন</string>
     <string name="acc_more">আরও বিকল্প</string>
     <string name="acc_selected_server">Selected</string>

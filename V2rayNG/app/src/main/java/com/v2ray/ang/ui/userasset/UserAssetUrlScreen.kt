@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -24,6 +25,8 @@ import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
 import com.v2ray.ang.ui.components.FormTextField
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 private val FormVerticalPad = 8.dp
 
@@ -32,8 +35,12 @@ private val FormVerticalPad = 8.dp
  */
 @Composable
 fun UserAssetUrlScreen(viewModel: UserAssetUrlViewModel) {
+    val editor = rememberAssetEditorState(documentKey = viewModel.uiState.value.assetId)
     val onAction = remember(viewModel) { viewModel::onAction }
     val onBack = remember(onAction) { { onAction(UserAssetUrlAction.Back) } }
+    val isReadyFlow = remember(viewModel) {
+        viewModel.uiState.map { it.isReady }.distinctUntilChanged()
+    }
 
     AppBackHandler(onBack = onBack)
 
@@ -41,15 +48,25 @@ fun UserAssetUrlScreen(viewModel: UserAssetUrlViewModel) {
         viewModel = viewModel,
         topBar = {
             val isEdit by viewModel.isEdit.collectAsStateWithLifecycle()
-            UserAssetUrlTopBar(isEdit = isEdit, onBack = onBack, onAction = onAction)
+            val isReady by isReadyFlow
+                .collectAsStateWithLifecycle(initialValue = viewModel.uiState.value.isReady)
+            val isMutating by viewModel.isMutating.collectAsStateWithLifecycle()
+            UserAssetUrlTopBar(
+                isEdit = isEdit,
+                canSave = isReady && editor.text.isInitialized && !isMutating,
+                isMutating = isMutating,
+                onSave = { onAction(UserAssetUrlAction.Save(editor.snapshot())) },
+                onBack = onBack,
+                onAction = onAction
+            )
         }
     ) { state, _ ->
-        UserAssetUrlForm(
-            remarks = state.remarks,
-            remarksError = state.remarksError,
-            url = state.url,
-            urlError = state.urlError,
-            onAction = onAction,
+        LaunchedEffect(state.isReady, state.assetId) {
+            if (state.isReady) state.initialForm?.let(editor::initialize)
+        }
+        if (state.isReady && editor.text.isInitialized) UserAssetUrlForm(
+            editor = editor,
+            fieldErrors = state.fieldErrors
         )
 
         if (state.showDeleteDialog) {
@@ -65,6 +82,9 @@ fun UserAssetUrlScreen(viewModel: UserAssetUrlViewModel) {
 @Composable
 private fun UserAssetUrlTopBar(
     isEdit: Boolean,
+    canSave: Boolean,
+    isMutating: Boolean,
+    onSave: () -> Unit,
     onBack: () -> Unit,
     onAction: (UserAssetUrlAction) -> Unit,
     modifier: Modifier = Modifier
@@ -73,16 +93,20 @@ private fun UserAssetUrlTopBar(
         title = stringResource(R.string.title_user_asset_add_url),
         onBackClick = onBack,
         modifier = modifier,
+        isLoading = isMutating,
         actions = {
             if (isEdit) {
-                IconButton(onClick = { onAction(UserAssetUrlAction.DeleteClicked) }) {
+                IconButton(
+                    onClick = { onAction(UserAssetUrlAction.DeleteClicked) },
+                    enabled = !isMutating
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_delete_24dp),
                         contentDescription = stringResource(R.string.acc_delete)
                     )
                 }
             }
-            IconButton(onClick = { onAction(UserAssetUrlAction.Save) }) {
+            IconButton(onClick = onSave, enabled = canSave) {
                 Icon(
                     painter = painterResource(R.drawable.ic_fab_check),
                     contentDescription = stringResource(R.string.acc_save)
@@ -94,19 +118,12 @@ private fun UserAssetUrlTopBar(
 
 @Composable
 private fun UserAssetUrlForm(
-    remarks: String,
-    remarksError: Int?,
-    url: String,
-    urlError: Int?,
-    onAction: (UserAssetUrlAction) -> Unit,
+    editor: AssetEditorState,
+    fieldErrors: Map<AssetField, AssetFieldError>,
     modifier: Modifier = Modifier
 ) {
-    val onRemarksChange = remember(onAction) {
-        { value: String -> onAction(UserAssetUrlAction.RemarksChanged(value)) }
-    }
-    val onUrlChange = remember(onAction) {
-        { value: String -> onAction(UserAssetUrlAction.UrlChanged(value)) }
-    }
+    val remarksError = editor.error(AssetField.REMARKS, fieldErrors[AssetField.REMARKS])
+    val urlError = editor.error(AssetField.URL, fieldErrors[AssetField.URL])
 
     Column(
         modifier = modifier
@@ -117,17 +134,15 @@ private fun UserAssetUrlForm(
     ) {
         FormTextField(
             label = stringResource(R.string.sub_setting_remarks),
-            value = remarks,
-            onValueChange = onRemarksChange,
+            state = editor[AssetField.REMARKS],
             isError = remarksError != null,
-            supportingText = remarksError?.let { stringResource(it) },
+            supportingText = remarksError?.let { stringResource(it) }
         )
         FormTextField(
             label = stringResource(R.string.title_url),
-            value = url,
-            onValueChange = onUrlChange,
+            state = editor[AssetField.URL],
             isError = urlError != null,
-            supportingText = urlError?.let { stringResource(it) },
+            supportingText = urlError?.let { stringResource(it) }
         )
     }
 }
@@ -139,10 +154,11 @@ private fun UserAssetUrlForm(
 @Composable
 private fun UserAssetUrlFormPreview() = AppTheme {
     UserAssetUrlForm(
-        remarks = "geosite-cn.dat",
-        remarksError = null,
-        url = "https://example.com/geosite-cn.dat",
-        urlError = null,
-        onAction = {}
+        editor = remember {
+            AssetEditorState().apply {
+                initialize(AssetForm("geosite-cn.dat", "https://example.com/geosite-cn.dat"))
+            }
+        },
+        fieldErrors = emptyMap()
     )
 }

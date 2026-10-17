@@ -21,6 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,8 +39,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -68,10 +72,11 @@ private val ItemHorizontalPad = 16.dp
 private val ItemVerticalPad = 12.dp
 private val DragElevation = 4.dp
 
-@Immutable
+/** Search presentation; each screen owns the text state and any live-search collector. */
+@Stable
 data class AppSearchState(
     val isActive: Boolean = false,
-    val query: String = "",
+    val state: TextFieldState,
     val placeholder: String? = null
 )
 
@@ -84,7 +89,6 @@ fun AppTopBar(
     isLoading: Boolean = false,
     progress: Float? = null,
     searchState: AppSearchState? = null,
-    onSearchQueryChange: (String) -> Unit = {},
     onSearchClose: () -> Unit = {},
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {}
@@ -96,8 +100,7 @@ fun AppTopBar(
             title = {
                 if (isSearchActive) {
                     SearchInputField(
-                        query = searchState.query,
-                        onQueryChange = onSearchQueryChange,
+                        state = searchState.state,
                         placeholder = searchState.placeholder
                     )
                 } else {
@@ -145,19 +148,19 @@ fun AppTopBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchInputField(
-    query: String,
-    onQueryChange: (String) -> Unit,
+    state: TextFieldState,
     placeholder: String?
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+    val clearSearch: () -> Unit = { state.clearText() }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
+            state = state,
+            lineLimits = TextFieldLineLimits.SingleLine,
             textStyle = MaterialTheme.typography.bodyLarge,
             placeholder = placeholder?.let {
                 {
@@ -174,11 +177,11 @@ private fun SearchInputField(
                 .weight(1f)
                 .focusRequester(focusRequester)
         )
-        if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) {
+        if (state.text.isNotEmpty()) {
+            IconButton(onClick = clearSearch) {
                 Icon(
                     painter = painterResource(R.drawable.ic_clear_24dp),
-                    contentDescription = stringResource(R.string.action_close)
+                    contentDescription = stringResource(R.string.acc_clear_search)
                 )
             }
         }
@@ -192,7 +195,7 @@ fun AppListItem(
     icon: Any?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val model = remember(icon, packageName, context) {
@@ -263,7 +266,7 @@ fun AppDivider(modifier: Modifier = Modifier) {
 fun VersionInfoBlock(
     versionText: String,
     appIdText: String? = null,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
@@ -361,8 +364,7 @@ private fun AppTopBarPreview() = AppTheme {
         AppTopBar(
             title = "Searchable",
             onBackClick = {},
-            searchState = AppSearchState(isActive = true, query = "v2ray"),
-            onSearchQueryChange = {},
+            searchState = AppSearchState(isActive = true, state = rememberTextFieldState("v2ray")),
             onSearchClose = {}
         )
     }

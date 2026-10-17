@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.backup
 
 import android.net.Uri
 import com.v2ray.ang.R
+import com.v2ray.ang.data.entities.WebDavConfig
 import com.v2ray.ang.data.repository.BackupRepository
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
@@ -31,10 +32,12 @@ class BackupViewModel @Inject constructor(
     private val busy: Boolean get() = transferJob?.isActive == true
 
     init {
-        launch(onError = {}) {
+        launch(onError = {
+            setState { copy(isWebDavLoadFinished = true) }
+        }) {
             repo.cleanWorkDir()
             val form = repo.loadWebDav().toForm()
-            setState { copy(webDav = form, draft = form) }
+            setState { acceptInitialWebDav(form) }
         }
     }
 
@@ -47,16 +50,14 @@ class BackupViewModel @Inject constructor(
             BackupAction.ShareClicked -> share()
 
             BackupAction.WebDavClicked -> openWebDavEditor()
-            BackupAction.WebDavSaved -> saveWebDav()
+            is BackupAction.SaveWebDav -> if (state.isWebDavLoadFinished) {
+                if (busy) toastInfo(R.string.msg_dialog_progress) else saveWebDav(action.snapshot)
+            }
 
             BackupAction.CleanupClicked -> openCleanupConfirmation()
             BackupAction.CleanupConfirmed -> cleanProfiles()
 
-            is BackupAction.ChannelSelected -> onChannelSelected(action.channel)
-
-            is BackupAction.WebDavFieldChanged -> setState {
-                copy(draft = draft.updated(action.field, action.value))
-            }
+            is BackupAction.ChannelSelected -> onChannelSelected(action.channel, action.restoring)
 
             is BackupAction.ExportUriSelected -> action.uri?.let(::exportTo)
             is BackupAction.ImportUriSelected -> action.uri?.let(::restoreFrom)
@@ -85,11 +86,14 @@ class BackupViewModel @Inject constructor(
 
     private fun openChannelPicker(restoring: Boolean) {
         if (busy) return toastInfo(R.string.msg_dialog_progress)
+        if (saveJob?.isActive == true) return toastInfo(R.string.msg_dialog_progress)
         platform(BackupEvent.ShowChannelPicker(restoring))
     }
 
     private fun openWebDavEditor() {
-        setState { copy(draft = webDav) }
+        if (busy) return toastInfo(R.string.msg_dialog_progress)
+        if (!state.isWebDavLoadFinished) return toastInfo(R.string.msg_dialog_progress)
+        if (saveJob?.isActive == true) return toastInfo(R.string.msg_dialog_progress)
         platform(BackupEvent.ShowWebDavEditor)
     }
 
@@ -100,33 +104,36 @@ class BackupViewModel @Inject constructor(
 
     // ===== channel dispatch =====
 
-    private fun onChannelSelected(channel: BackupChannel) = when (channel) {
-        BackupChannel.LOCAL -> if (pendingRestore) {
+    private fun onChannelSelected(channel: BackupChannel, restoring: Boolean) = when (channel) {
+        BackupChannel.LOCAL -> if (restoring) {
             platform(BackupEvent.PickFile)
         } else {
             transfer { platform(BackupEvent.CreateDocument(repo.defaultFileName())) }
         }
 
-        BackupChannel.WEBDAV -> if (pendingRestore) restoreViaWebDav() else backupViaWebDav()
+        BackupChannel.WEBDAV -> if (restoring) restoreViaWebDav() else backupViaWebDav()
     }
-
-    /** Set by [openChannelPicker] through the event payload the screen echoes back. */
-    private var pendingRestore = false
 
     // ===== WebDAV settings =====
 
-    private fun saveWebDav() {
-        val form = state.draft
+    private fun saveWebDav(snapshot: WebDavConfig) {
         val previous = saveJob
         saveJob = launch {
-            previous?.join()
-            withContext(NonCancellable) { repo.saveWebDav(form.toConfig()) }
-            setState { copy(webDav = form) }
+            withContext(NonCancellable) {
+                previous?.join()
+                repo.saveWebDav(snapshot)
+                setState { copy(webDav = snapshot.toForm()) }
+            }
+            platform(BackupEvent.WebDavSaved)
             toastSuccess()
         }
     }
 
     private fun requireWebDav(): WebDavForm? {
+        if (saveJob?.isActive == true) {
+            toastInfo(R.string.msg_dialog_progress)
+            return null
+        }
         val form = state.webDav
         if (!form.configured) {
             toastError(R.string.title_webdav_config_setting_unknown)
@@ -192,7 +199,7 @@ class BackupViewModel @Inject constructor(
         if (!ok) return toastError()
         restored = true
         val form = repo.loadWebDav().toForm()
-        setState { copy(webDav = form, draft = form) }
+        setState { copy(webDav = form, isWebDavLoaded = true, isWebDavLoadFinished = true) }
         toastSuccess()
     }
 
@@ -212,6 +219,8 @@ class BackupViewModel @Inject constructor(
     }
 
     override fun onCleared() {
+        transferJob?.cancel()
+        saveJob?.cancel()
         transferJob = null
         saveJob = null
         super.onCleared()

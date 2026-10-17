@@ -7,11 +7,17 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 @Stable
+class ChainMemberSlice internal constructor(
+    val candidates: Flow<PagingData<DropdownOption>>,
+    val query: StateFlow<String>,
+    val onQueryChange: (String) -> Unit
+)
+
+@Stable
 class ServerSlices(
-    val chainCandidates: Flow<PagingData<DropdownOption>>,
     val fallbackTags: Flow<PagingData<DropdownOption>>,
-    val chainQuery: StateFlow<String>,
     val tagQuery: StateFlow<String>,
-    val onChainQueryChange: (String) -> Unit,
     val onTagQueryChange: (String) -> Unit,
+    val chainSlice: (String) -> ChainMemberSlice,
+    val retainChainSlices: (Set<String>) -> Unit
 )

@@ -11,6 +11,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -28,7 +30,7 @@ import com.v2ray.ang.ui.components.StringOptions
 
 private data class ProtocolSpec(
     val showNetwork: Boolean = false,
-    val showStreamSecurity: Boolean = false,
+    val showStreamSecurity: Boolean = false
 )
 
 private fun EConfigType.spec(): ProtocolSpec = when (this) {
@@ -41,39 +43,39 @@ private fun EConfigType.spec(): ProtocolSpec = when (this) {
 @Composable
 internal fun ProtocolForm(
     configType: EConfigType,
-    form: ServerForm,
+    editor: ServerEditorState,
     fieldErrors: Map<ServerField, Int>,
     isFetchingCert: Boolean,
-    onAction: (ServerAction) -> Unit,
-    modifier: Modifier = Modifier,
+    onFetchCertificate: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val options = rememberFieldOptions()
     val spec = remember(configType) { configType.spec() }
 
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing),
+        verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)
     ) {
         ServerTextField(
-            R.string.server_lab_remarks, ServerField.REMARKS, form.remarks, onAction, fieldErrors
+            R.string.server_lab_remarks, ServerField.REMARKS, editor, fieldErrors
         )
         ServerTextField(
-            R.string.server_lab_address, ServerField.ADDRESS, form.address, onAction, fieldErrors
+            R.string.server_lab_address, ServerField.ADDRESS, editor, fieldErrors
         )
         ServerTextField(
-            R.string.server_lab_port, ServerField.PORT, form.port, onAction, fieldErrors,
+            R.string.server_lab_port, ServerField.PORT, editor, fieldErrors,
             KeyboardType.Number
         )
 
-        ProtocolFields(configType, form, fieldErrors, isFetchingCert, options, onAction)
+        ProtocolFields(configType, editor, fieldErrors, isFetchingCert, options, onFetchCertificate)
 
         if (configType == EConfigType.MASQUE) {
-            MasqueFields(form, fieldErrors, onAction)
+            MasqueFields(editor, fieldErrors)
         }
 
-        if (spec.showNetwork) NetworkFields(configType, form, fieldErrors, options, onAction)
+        if (spec.showNetwork) NetworkFields(configType, editor, fieldErrors, options)
         if (spec.showStreamSecurity) {
-            StreamSecurityFields(configType, form, fieldErrors, isFetchingCert, options, onAction)
+            StreamSecurityFields(configType, editor, fieldErrors, isFetchingCert, options, onFetchCertificate)
         }
     }
 }
@@ -81,147 +83,131 @@ internal fun ProtocolForm(
 @Composable
 private fun ProtocolFields(
     configType: EConfigType,
-    form: ServerForm,
+    editor: ServerEditorState,
     fieldErrors: Map<ServerField, Int>,
     isFetchingCert: Boolean,
     options: FieldOptions,
-    onAction: (ServerAction) -> Unit,
+    onFetchCertificate: () -> Unit
 ) {
+    val network by remember(editor) {
+        derivedStateOf { editor[ServerField.NETWORK].text.toString() }
+    }
     when (configType) {
         EConfigType.VMESS -> {
             ServerTextField(
-                R.string.server_lab_id, ServerField.PASSWORD, form.password, onAction, fieldErrors
+                R.string.server_lab_id, ServerField.PASSWORD, editor, fieldErrors
             )
             ServerDropdownField(
-                R.string.server_lab_security, ServerField.METHOD, form.method,
-                options.vmessSecurities, onAction, fieldErrors,
+                R.string.server_lab_security, ServerField.METHOD, editor, options.vmessSecurities, fieldErrors
             )
         }
         EConfigType.VLESS -> {
             ServerTextField(
-                R.string.server_lab_id, ServerField.PASSWORD, form.password, onAction, fieldErrors
+                R.string.server_lab_id, ServerField.PASSWORD, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_encryption, ServerField.ENCRYPTION, form.encryption,
-                onAction, fieldErrors,
+                R.string.server_lab_encryption, ServerField.ENCRYPTION, editor, fieldErrors
             )
-            if (form.network != NetworkType.XDRIVE.type) {
+            if (network != NetworkType.XDRIVE.type) {
                 ServerDropdownField(
-                    R.string.server_lab_flow, ServerField.FLOW, form.flow, options.flows,
-                    onAction, fieldErrors,
+                    R.string.server_lab_flow, ServerField.FLOW, editor, options.flows, fieldErrors
                 )
             }
         }
         EConfigType.TROJAN ->
             ServerTextField(
-                R.string.server_lab_id3, ServerField.PASSWORD, form.password, onAction, fieldErrors
+                R.string.server_lab_id3, ServerField.PASSWORD, editor, fieldErrors
             )
         EConfigType.MASQUE -> {
             ServerTextField(
-                R.string.server_lab_masque_user, ServerField.USERNAME, form.username,
-                onAction, fieldErrors,
+                R.string.server_lab_masque_user, ServerField.USERNAME, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_masque_password, ServerField.PASSWORD, form.password,
-                onAction, fieldErrors,
+                R.string.server_lab_masque_password, ServerField.PASSWORD, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_remote_dns, ServerField.REMOTE_DNS, form.remoteDNS,
-                onAction, fieldErrors,
+                R.string.server_lab_remote_dns, ServerField.REMOTE_DNS, editor, fieldErrors
             )
         }
         EConfigType.SHADOWSOCKS -> {
             ServerTextField(
-                R.string.server_lab_id3, ServerField.PASSWORD, form.password, onAction, fieldErrors
+                R.string.server_lab_id3, ServerField.PASSWORD, editor, fieldErrors
             )
             ServerDropdownField(
-                R.string.server_lab_security, ServerField.METHOD, form.method,
-                options.ssSecurities, onAction, fieldErrors,
+                R.string.server_lab_security, ServerField.METHOD, editor, options.ssSecurities, fieldErrors
             )
         }
         EConfigType.WIREGUARD -> {
             ServerTextField(
-                R.string.server_lab_secret_key, ServerField.SECRET_KEY, form.secretKey,
-                onAction, fieldErrors,
+                R.string.server_lab_secret_key, ServerField.SECRET_KEY, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_public_key, ServerField.PUBLIC_KEY, form.publicKey,
-                onAction, fieldErrors,
+                R.string.server_lab_public_key, ServerField.PUBLIC_KEY, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_preshared_key, ServerField.PRE_SHARED_KEY, form.preSharedKey,
-                onAction, fieldErrors,
+                R.string.server_lab_preshared_key, ServerField.PRE_SHARED_KEY, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_reserved, ServerField.RESERVED, form.reserved,
-                onAction, fieldErrors,
+                R.string.server_lab_reserved, ServerField.RESERVED, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_local_address, ServerField.LOCAL_ADDRESS, form.localAddress,
-                onAction, fieldErrors,
+                R.string.server_lab_local_address, ServerField.LOCAL_ADDRESS, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_local_mtu, ServerField.MTU, form.mtu, onAction, fieldErrors,
-                KeyboardType.Number,
+                R.string.server_lab_local_mtu, ServerField.MTU, editor, fieldErrors, KeyboardType.Number
             )
             ServerTextField(
-                R.string.server_lab_remote_dns, ServerField.REMOTE_DNS, form.remoteDNS,
-                onAction, fieldErrors,
+                R.string.server_lab_remote_dns, ServerField.REMOTE_DNS, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_final_mask, ServerField.FINAL_MASK, form.finalMask,
-                onAction, fieldErrors,
+                R.string.server_lab_final_mask, ServerField.FINAL_MASK, editor, fieldErrors
             )
         }
         EConfigType.HYSTERIA2 -> {
             ServerTextField(
-                R.string.server_lab_id3, ServerField.PASSWORD, form.password, onAction, fieldErrors
+                R.string.server_lab_id3, ServerField.PASSWORD, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_obfs_password, ServerField.OBFS_PASSWORD, form.obfsPassword,
-                onAction, fieldErrors,
+                R.string.server_obfs_password, ServerField.OBFS_PASSWORD, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_port_hop, ServerField.PORT_HOPPING, form.portHopping,
-                onAction, fieldErrors,
+                R.string.server_lab_port_hop, ServerField.PORT_HOPPING, editor, fieldErrors
             )
             ServerTextField(
                 R.string.server_lab_port_hop_interval, ServerField.PORT_HOPPING_INTERVAL,
-                form.portHoppingInterval, onAction, fieldErrors,
+                editor, fieldErrors
             )
             ServerTextField(
                 R.string.server_lab_bandwidth_down, ServerField.BANDWIDTH_DOWN,
-                form.bandwidthDown, onAction, fieldErrors,
+                editor, fieldErrors
             )
             ServerTextField(
                 R.string.server_lab_bandwidth_up, ServerField.BANDWIDTH_UP,
-                form.bandwidthUp, onAction, fieldErrors,
+                editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_final_mask, ServerField.FINAL_MASK, form.finalMask,
-                onAction, fieldErrors,
+                R.string.server_lab_final_mask, ServerField.FINAL_MASK, editor, fieldErrors
             )
             SettingsSwitchItem(
                 title = stringResource(R.string.server_lab_allow_insecure),
-                checked = form.allowInsecure,
-                onCheckedChange = { onAction(ServerAction.FlagChanged(ServerFlag.ALLOW_INSECURE, it)) },
+                checked = editor.allowInsecure,
+                onCheckedChange = { editor.allowInsecure = it }
             )
             ServerTextField(
-                R.string.server_lab_sni, ServerField.SNI, form.sni, onAction, fieldErrors
+                R.string.server_lab_sni, ServerField.SNI, editor, fieldErrors
             )
             ServerTextField(
                 R.string.server_lab_ech_config_list, ServerField.ECH_CONFIG_LIST,
-                form.echConfigList, onAction, fieldErrors,
+                editor, fieldErrors
             )
-            PinnedCertFields(form.pinnedCA256, isFetchingCert, onAction)
+            PinnedCertFields(editor, isFetchingCert, onFetchCertificate)
         }
         else -> {
             ServerTextField(
-                R.string.server_lab_security4, ServerField.USERNAME, form.username,
-                onAction, fieldErrors,
+                R.string.server_lab_security4, ServerField.USERNAME, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_id4, ServerField.PASSWORD, form.password, onAction, fieldErrors
+                R.string.server_lab_id4, ServerField.PASSWORD, editor, fieldErrors
             )
         }
     }
@@ -229,45 +215,43 @@ private fun ProtocolFields(
 
 @Composable
 private fun MasqueFields(
-    form: ServerForm,
-    fieldErrors: Map<ServerField, Int>,
-    onAction: (ServerAction) -> Unit,
+    editor: ServerEditorState,
+    fieldErrors: Map<ServerField, Int>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
         ServerTextField(
-            R.string.server_lab_masque_host, ServerField.HOST, form.host, onAction, fieldErrors,
+            R.string.server_lab_masque_host, ServerField.HOST, editor, fieldErrors
         )
         ServerTextField(
-            R.string.server_lab_masque_path, ServerField.PATH, form.path, onAction, fieldErrors,
+            R.string.server_lab_masque_path, ServerField.PATH, editor, fieldErrors
         )
         ServerTextField(
             R.string.server_lab_masque_headers, ServerField.MASQUE_HEADERS,
-            form.masqueHeaders, onAction, fieldErrors,
+            editor, fieldErrors
         )
     }
 }
 
 @Composable
-private fun PinnedCertFields(
-    pinnedCa256: String,
+internal fun PinnedCertFields(
+    editor: ServerEditorState,
     isFetchingCert: Boolean,
-    onAction: (ServerAction) -> Unit,
+    onFetchCertificate: () -> Unit
 ) {
     FormTextField(
         label = stringResource(R.string.server_lab_pinned_ca256),
-        value = pinnedCa256,
-        onValueChange = { onAction(ServerAction.TextChanged(ServerField.PINNED_CA256, it)) },
+        state = editor[ServerField.PINNED_CA256]
     )
     Button(
-        onClick = { onAction(ServerAction.FetchCertificate) },
+        onClick = onFetchCertificate,
         enabled = !isFetchingCert,
-        modifier = Modifier.padding(horizontal = ServerDimens.ContentHorizontal),
+        modifier = Modifier.padding(horizontal = ServerDimens.ContentHorizontal)
     ) {
         if (isFetchingCert) {
             CircularProgressIndicator(
                 modifier = Modifier.size(ServerDimens.InlineProgress),
                 strokeWidth = ServerDimens.InlineProgressStroke,
-                color = MaterialTheme.colorScheme.onPrimary,
+                color = MaterialTheme.colorScheme.onPrimary
             )
             Spacer(Modifier.width(ServerDimens.InlineSpacing))
         }
@@ -278,11 +262,16 @@ private fun PinnedCertFields(
 @Composable
 private fun NetworkFields(
     configType: EConfigType,
-    form: ServerForm,
+    editor: ServerEditorState,
     fieldErrors: Map<ServerField, Int>,
-    options: FieldOptions,
-    onAction: (ServerAction) -> Unit,
+    options: FieldOptions
 ) {
+    val network by remember(editor) {
+        derivedStateOf { editor[ServerField.NETWORK].text.toString() }
+    }
+    val service by remember(editor) {
+        derivedStateOf { editor[ServerField.SERVICE].text.toString() }
+    }
     val networkOptions = if (configType == EConfigType.VLESS) {
         options.networks
     } else {
@@ -290,35 +279,32 @@ private fun NetworkFields(
     }
     Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
         ServerDropdownField(
-            R.string.server_lab_network, ServerField.NETWORK, form.network, networkOptions,
-            onAction, fieldErrors,
+            R.string.server_lab_network, ServerField.NETWORK, editor, networkOptions, fieldErrors
         )
 
-        if (form.network == NetworkType.XDRIVE.type) {
+        if (network == NetworkType.XDRIVE.type) {
             ServerDropdownField(
-                R.string.server_lab_xdrive_service, ServerField.SERVICE, form.service,
-                options.xdriveServices, onAction, fieldErrors,
+                R.string.server_lab_xdrive_service, ServerField.SERVICE, editor, options.xdriveServices, fieldErrors
             )
             ServerTextField(
                 R.string.server_lab_xdrive_remote_folder, ServerField.REMOTE_FOLDER,
-                form.remoteFolder, onAction, fieldErrors,
+                editor, fieldErrors
             )
-            if (form.service == XDRIVE_SERVICE_GOOGLE_DRIVE || form.service == XDRIVE_SERVICE_TEMPLATE) {
+            if (service == XDRIVE_SERVICE_GOOGLE_DRIVE || service == XDRIVE_SERVICE_TEMPLATE) {
                 ServerTextField(
-                    R.string.server_lab_xdrive_secrets, ServerField.SECRETS, form.secrets,
-                    onAction, fieldErrors,
+                    R.string.server_lab_xdrive_secrets, ServerField.SECRETS, editor, fieldErrors
                 )
             }
-            if (form.service == XDRIVE_SERVICE_TEMPLATE) {
+            if (service == XDRIVE_SERVICE_TEMPLATE) {
                 ServerTextField(
                     R.string.server_lab_xdrive_template, ServerField.TEMPLATE,
-                    form.template, onAction, fieldErrors,
+                    editor, fieldErrors
                 )
             }
             return@Column
         }
 
-        val headerOptions = when (form.network) {
+        val headerOptions = when (network) {
             NetworkType.TCP.type -> options.tcpHeaders
             NetworkType.KCP.type -> options.kcpHeaders
             NetworkType.GRPC.type -> options.grpcModes
@@ -326,29 +312,28 @@ private fun NetworkFields(
             else -> null
         }
         if (headerOptions != null && headerOptions.size > 1) {
-            val headerField = when (form.network) {
+            val headerField = when (network) {
                 NetworkType.GRPC.type -> ServerField.MODE
                 NetworkType.XHTTP.type -> ServerField.XHTTP_MODE
                 else -> ServerField.HEADER_TYPE
             }
             ServerDropdownField(
-                labelRes = when (form.network) {
+                labelRes = when (network) {
                     NetworkType.GRPC.type -> R.string.server_lab_mode_type
                     NetworkType.XHTTP.type -> R.string.server_lab_xhttp_mode
                     else -> R.string.server_lab_head_type
                 },
                 field = headerField,
-                value = headerField.get(form),
+                editor = editor,
                 options = headerOptions,
-                onAction = onAction,
-                fieldErrors = fieldErrors,
+                fieldErrors = fieldErrors
             )
         }
 
         val hostField =
-            if (form.network == NetworkType.GRPC.type) ServerField.AUTHORITY else ServerField.HOST
+            if (network == NetworkType.GRPC.type) ServerField.AUTHORITY else ServerField.HOST
         ServerTextField(
-            labelRes = when (form.network) {
+            labelRes = when (network) {
                 NetworkType.TCP.type,
                 NetworkType.HTTP_UPGRADE.type,
                 NetworkType.XHTTP.type,
@@ -358,16 +343,15 @@ private fun NetworkFields(
                 else -> R.string.server_lab_request_host6
             },
             field = hostField,
-            value = hostField.get(form),
-            onAction = onAction,
-            fieldErrors = fieldErrors,
+            editor = editor,
+            fieldErrors = fieldErrors
         )
 
-        if (form.network != NetworkType.KCP.type) {
+        if (network != NetworkType.KCP.type) {
             val pathField =
-                if (form.network == NetworkType.GRPC.type) ServerField.SERVICE_NAME else ServerField.PATH
+                if (network == NetworkType.GRPC.type) ServerField.SERVICE_NAME else ServerField.PATH
             ServerTextField(
-                labelRes = when (form.network) {
+                labelRes = when (network) {
                     NetworkType.WS.type -> R.string.server_lab_path_ws
                     NetworkType.HTTP_UPGRADE.type -> R.string.server_lab_path_httpupgrade
                     NetworkType.XHTTP.type -> R.string.server_lab_path_xhttp
@@ -376,39 +360,34 @@ private fun NetworkFields(
                     else -> R.string.server_lab_path
                 },
                 field = pathField,
-                value = pathField.get(form),
-                onAction = onAction,
-                fieldErrors = fieldErrors,
+                editor = editor,
+                fieldErrors = fieldErrors
             )
         }
 
-        if (form.network == NetworkType.XHTTP.type) {
+        if (network == NetworkType.XHTTP.type) {
             ServerTextField(
-                R.string.server_lab_xhttp_extra, ServerField.XHTTP_EXTRA, form.xhttpExtra,
-                onAction, fieldErrors,
+                R.string.server_lab_xhttp_extra, ServerField.XHTTP_EXTRA, editor, fieldErrors
             )
         }
-        if (form.network == NetworkType.KCP.type) {
+        if (network == NetworkType.KCP.type) {
             ServerTextField(
-                R.string.server_lab_path_kcp, ServerField.SEED, form.seed, onAction, fieldErrors
+                R.string.server_lab_path_kcp, ServerField.SEED, editor, fieldErrors
             )
             ServerTextField(
-                R.string.server_lab_kcp_mtu, ServerField.KCP_MTU, form.kcpMtu,
-                onAction, fieldErrors, KeyboardType.Number,
+                R.string.server_lab_kcp_mtu, ServerField.KCP_MTU, editor, fieldErrors, KeyboardType.Number
             )
             ServerTextField(
-                R.string.server_lab_kcp_tti, ServerField.KCP_TTI, form.kcpTti,
-                onAction, fieldErrors, KeyboardType.Number,
+                R.string.server_lab_kcp_tti, ServerField.KCP_TTI, editor, fieldErrors, KeyboardType.Number
             )
         }
         ServerTextField(
-            R.string.server_lab_final_mask, ServerField.FINAL_MASK, form.finalMask,
-            onAction, fieldErrors,
+            R.string.server_lab_final_mask, ServerField.FINAL_MASK, editor, fieldErrors
         )
-        if (form.network == NetworkType.WS.type || form.network == NetworkType.XHTTP.type) {
+        if (network == NetworkType.WS.type || network == NetworkType.XHTTP.type) {
             ServerDropdownField(
                 R.string.server_lab_browser_dialer, ServerField.BROWSER_DIALER,
-                form.browserDialerMode, options.browserDialer, onAction, fieldErrors,
+                editor, options.browserDialer, fieldErrors
             )
         }
     }
@@ -417,12 +396,15 @@ private fun NetworkFields(
 @Composable
 private fun StreamSecurityFields(
     configType: EConfigType,
-    form: ServerForm,
+    editor: ServerEditorState,
     fieldErrors: Map<ServerField, Int>,
     isFetchingCert: Boolean,
     options: FieldOptions,
-    onAction: (ServerAction) -> Unit,
+    onFetchCertificate: () -> Unit
 ) {
+    val streamSecurity by remember(editor) {
+        derivedStateOf { editor[ServerField.STREAM_SECURITY].text.toString() }
+    }
     val streamSecurityOptions = if (configType == EConfigType.MASQUE) {
         StringOptions(listOf(TLS))
     } else {
@@ -431,59 +413,54 @@ private fun StreamSecurityFields(
     Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
         ServerDropdownField(
             R.string.server_lab_stream_security, ServerField.STREAM_SECURITY,
-            form.streamSecurity, streamSecurityOptions, onAction, fieldErrors,
+            editor, streamSecurityOptions, fieldErrors
         )
-        if (form.streamSecurity.isBlank()) return@Column
+        if (streamSecurity.isBlank()) return@Column
 
         ServerTextField(
-            R.string.server_lab_sni, ServerField.SNI, form.sni, onAction, fieldErrors
+            R.string.server_lab_sni, ServerField.SNI, editor, fieldErrors
         )
         ServerDropdownField(
             R.string.server_lab_stream_fingerprint, ServerField.FINGERPRINT,
-            form.fingerPrint, options.uTls, onAction, fieldErrors,
+            editor, options.uTls, fieldErrors
         )
 
-        when (form.streamSecurity) {
+        when (streamSecurity) {
             TLS -> {
                 if (configType != EConfigType.MASQUE) {
                     SettingsSwitchItem(
                         title = stringResource(R.string.server_lab_allow_insecure),
-                        checked = form.allowInsecure,
-                        onCheckedChange = {
-                            onAction(ServerAction.FlagChanged(ServerFlag.ALLOW_INSECURE, it))
-                        },
+                        checked = editor.allowInsecure,
+                        onCheckedChange = { editor.allowInsecure = it }
                     )
                 }
                 ServerDropdownField(
-                    R.string.server_lab_stream_alpn, ServerField.ALPN, form.alpn, options.alpn,
-                    onAction, fieldErrors,
+                    R.string.server_lab_stream_alpn, ServerField.ALPN, editor, options.alpn, fieldErrors
                 )
                 ServerTextField(
                     R.string.server_lab_ech_config_list, ServerField.ECH_CONFIG_LIST,
-                    form.echConfigList, onAction, fieldErrors,
+                    editor, fieldErrors
                 )
                 ServerTextField(
                     R.string.server_lab_verify_peer_cert_by_name, ServerField.VERIFY_PEER_CERT,
-                    form.verifyPeerCertByName, onAction, fieldErrors,
+                    editor, fieldErrors
                 )
-                PinnedCertFields(form.pinnedCA256, isFetchingCert, onAction)
+                PinnedCertFields(editor, isFetchingCert, onFetchCertificate)
             }
             REALITY -> {
                 ServerTextField(
                     R.string.server_lab_public_key, ServerField.PUBLIC_KEY_REALITY,
-                    form.publicKeyReality, onAction, fieldErrors,
+                    editor, fieldErrors
                 )
                 ServerTextField(
-                    R.string.server_lab_short_id, ServerField.SHORT_ID, form.shortId,
-                    onAction, fieldErrors,
+                    R.string.server_lab_short_id, ServerField.SHORT_ID, editor, fieldErrors
                 )
                 ServerTextField(
-                    R.string.server_lab_spider_x, ServerField.SPIDER_X, form.spiderX,
-                    onAction, fieldErrors,
+                    R.string.server_lab_spider_x, ServerField.SPIDER_X, editor, fieldErrors
                 )
                 ServerTextField(
                     R.string.server_lab_mldsa65_verify, ServerField.MLDSA65_VERIFY,
-                    form.mldsa65Verify, onAction, fieldErrors,
+                    editor, fieldErrors
                 )
             }
         }

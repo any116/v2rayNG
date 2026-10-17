@@ -37,18 +37,21 @@ enum class SubField {
     NEXT_PROFILE
 }
 
-enum class SubFlag {
-    ENABLED,
-    AUTO_UPDATE,
-    ALLOW_INSECURE_URL
-}
+/** Validation metadata belongs to the submitted value, never to a later edit. */
+@Immutable
+data class SubEditFieldError(
+    val message: Int,
+    val submittedValue: String,
+    val submittedFlag: Boolean? = null
+)
 
 @Immutable
 data class SubEditUiState(
     val subId: String = "",
-    val form: SubEditForm = SubEditForm(),
+    val initialForm: SubEditForm? = null,
+    val isReady: Boolean = false,
     val confirmRemove: Boolean = false,
-    val fieldErrors: Map<SubField, Int> = emptyMap()
+    val fieldErrors: Map<SubField, SubEditFieldError> = emptyMap()
 ) : BaseUiState {
     val isEdit: Boolean get() = subId.isNotEmpty()
 }
@@ -60,33 +63,25 @@ class SubEditSlices(
     val onPrevQueryChange: (String) -> Unit,
     val nextProfiles: Flow<PagingData<DropdownOption>>,
     val nextQuery: StateFlow<String>,
-    val onNextQueryChange: (String) -> Unit,
+    val onNextQueryChange: (String) -> Unit
 )
 
 sealed interface SubEditAction : BaseAction {
-    data class TextChanged(val field: SubField, val value: String) : SubEditAction
-    data class FlagChanged(val flag: SubFlag, val value: Boolean) : SubEditAction
-    data object Save : SubEditAction
+    data class Save(val form: SubEditForm) : SubEditAction
     data object Back : SubEditAction
     data object DeleteConfirmed : SubEditAction
 }
 
-fun SubField.set(form: SubEditForm, value: String): SubEditForm = when (this) {
-    SubField.REMARKS -> form.copy(remarks = value)
-    SubField.URL -> form.copy(url = value)
-    SubField.USER_AGENT -> form.copy(userAgent = value)
-    SubField.REQUEST_HEADERS -> form.copy(requestHeaders = value)
-    SubField.FILTER -> form.copy(filter = value)
-    SubField.UPDATE_INTERVAL -> form.copy(updateInterval = value)
-    SubField.PREV_PROFILE -> form.copy(prevProfile = value)
-    SubField.NEXT_PROFILE -> form.copy(nextProfile = value)
-}
-
-fun SubFlag.set(form: SubEditForm, value: Boolean): SubEditForm = when (this) {
-    SubFlag.ENABLED -> form.copy(enabled = value)
-    SubFlag.AUTO_UPDATE -> form.copy(autoUpdate = value)
-    SubFlag.ALLOW_INSECURE_URL -> form.copy(allowInsecureUrl = value)
-}
+internal fun SubEditForm.textValues(): Map<String, String> = mapOf(
+    SubField.REMARKS.name to remarks,
+    SubField.URL.name to url,
+    SubField.USER_AGENT.name to userAgent,
+    SubField.REQUEST_HEADERS.name to requestHeaders,
+    SubField.FILTER.name to filter,
+    SubField.UPDATE_INTERVAL.name to updateInterval,
+    SubField.PREV_PROFILE.name to prevProfile,
+    SubField.NEXT_PROFILE.name to nextProfile
+)
 
 fun SubscriptionItem?.toSubEditForm(): SubEditForm {
     val item = this ?: SubscriptionItem()
@@ -105,7 +100,7 @@ fun SubscriptionItem?.toSubEditForm(): SubEditForm {
     )
 }
 
-fun SubscriptionItem.applySubEditForm(form: SubEditForm): SubscriptionItem = apply {
+fun SubscriptionItem.applySubEditForm(form: SubEditForm): SubscriptionItem = copy().apply {
     remarks = form.remarks
     url = form.url
     userAgent = form.userAgent

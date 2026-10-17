@@ -35,6 +35,8 @@ import com.v2ray.ang.R
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.ObserveQuery
+import com.v2ray.ang.ui.components.rememberSearchFieldController
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -55,6 +57,20 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val dispatch = remember(viewModel) { viewModel::onAction }
+    val search = rememberSearchFieldController(
+        initialQuery = "",
+        initialActive = false
+    )
+    val openSearch = remember(search, dispatch) {
+        { search.open { dispatch(MainAction.SetSearchActive(true)) } }
+    }
+    val closeSearch = remember(search, dispatch) {
+        { search.close { dispatch(MainAction.SetSearchActive(false)) } }
+    }
+    LaunchedEffect(search, dispatch) {
+        dispatch(MainAction.SetSearchActive(search.isActive))
+    }
+    search.ObserveQuery { dispatch(MainAction.Search(it)) }
     val dialogs = remember(dispatch) { MainDialogHost(dispatch) }
     val handles = remember(viewModel, dialogs) {
         MainScreenHandles(
@@ -101,12 +117,13 @@ fun MainScreen(
             onResult = { result -> dispatch(MainAction.ResultReceived(result)) },
             topBar = {
                 val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-                val search by rememberSearchState(viewModel)
                 MainTopBar(
                     isLoading = isLoading,
                     isSearchActive = search.isActive,
-                    query = search.query,
+                    searchInput = search.input,
                     onMenuClick = { scope.launch { drawerState.open() } },
+                    onSearchOpen = openSearch,
+                    onSearchClose = closeSearch,
                     onAction = dispatch,
                     onShowDialog = dialogs.show
                 )
@@ -183,25 +200,6 @@ private fun rememberBottomState(viewModel: MainViewModel): State<MainBottomState
     }
     val initial = remember(viewModel) {
         viewModel.uiState.value.let { MainBottomState(it.status, it.isRunning, it.isTesting) }
-    }
-    return flow.collectAsStateWithLifecycle(initialValue = initial)
-}
-
-@Immutable
-private data class MainSearchState(
-    val isActive: Boolean = false,
-    val query: String = ""
-)
-
-@Composable
-private fun rememberSearchState(viewModel: MainViewModel): State<MainSearchState> {
-    val flow = remember(viewModel) {
-        viewModel.uiState
-            .map { MainSearchState(it.isSearchActive, it.searchQuery) }
-            .distinctUntilChanged()
-    }
-    val initial = remember(viewModel) {
-        viewModel.uiState.value.let { MainSearchState(it.isSearchActive, it.searchQuery) }
     }
     return flow.collectAsStateWithLifecycle(initialValue = initial)
 }

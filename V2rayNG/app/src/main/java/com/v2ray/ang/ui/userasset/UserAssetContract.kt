@@ -68,22 +68,33 @@ sealed interface UserAssetEvent : BaseEvent.Platform {
 
 // ===== Asset URL editor =====
 
+/** Immutable input captured synchronously from the UI when Save is clicked. */
+@Immutable
+data class AssetForm(val remarks: String = "", val url: String = "")
+
+enum class AssetField { REMARKS, URL }
+
+@Immutable
+data class AssetFieldError(val message: Int, val submittedValue: String)
+
+internal fun AssetForm.textValues(): Map<String, String> = mapOf(
+    AssetField.REMARKS.name to remarks,
+    AssetField.URL.name to url
+)
+
 @Immutable
 data class UserAssetUrlUiState(
     val assetId: String = "",
-    val remarks: String = "",
-    val url: String = "",
+    val initialForm: AssetForm? = null,
+    val isReady: Boolean = false,
     val showDeleteDialog: Boolean = false,
-    val remarksError: Int? = null,
-    val urlError: Int? = null
+    val fieldErrors: Map<AssetField, AssetFieldError> = emptyMap()
 ) : BaseUiState {
     val isEdit: Boolean get() = assetId.isNotEmpty()
 }
 
 sealed interface UserAssetUrlAction : BaseAction {
-    data class RemarksChanged(val value: String) : UserAssetUrlAction
-    data class UrlChanged(val value: String) : UserAssetUrlAction
-    data object Save : UserAssetUrlAction
+    data class Save(val form: AssetForm) : UserAssetUrlAction
     data object Back : UserAssetUrlAction
     data object DeleteClicked : UserAssetUrlAction
     data object DialogConfirm : UserAssetUrlAction

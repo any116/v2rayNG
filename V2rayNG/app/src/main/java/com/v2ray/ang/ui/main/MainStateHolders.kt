@@ -35,7 +35,7 @@ class GroupScrollStates {
 class MainDialogHost(private val onAction: (MainAction) -> Unit) {
     var current by mutableStateOf<MainDialog?>(null)
         private set
-    var confirmRemove: Boolean = false
+    var confirmRemove by mutableStateOf(false)
 
     val show: (MainDialog) -> Unit = { current = it }
     val dismiss: () -> Unit = { current = null }

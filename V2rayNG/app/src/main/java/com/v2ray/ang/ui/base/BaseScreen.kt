@@ -53,7 +53,7 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
     autoToastResult: Boolean = true,
     onEvent: (BaseEvent) -> Boolean = { false },
     onResult: (BaseResult) -> Unit = {},
-    content: @Composable (state: S, onAction: (A) -> Unit) -> Unit,
+    content: @Composable (state: S, onAction: (A) -> Unit) -> Unit
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -91,7 +91,7 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
         topBar = topBar,
         bottomBar = bottomBar,
         floatingActionButton = floatingActionButton,
-        contentWindowInsets = contentWindowInsets,
+        contentWindowInsets = contentWindowInsets
     ) { innerPadding ->
         Box(
             Modifier

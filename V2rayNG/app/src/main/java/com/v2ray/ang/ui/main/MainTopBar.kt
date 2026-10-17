@@ -1,5 +1,6 @@
 package com.v2ray.ang.ui.main
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -8,24 +9,27 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.components.AppSearchState
+import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.verticalScrollbar
 
@@ -33,11 +37,13 @@ import com.v2ray.ang.ui.components.verticalScrollbar
 fun MainTopBar(
     isLoading: Boolean,
     isSearchActive: Boolean,
-    query: String,
+    searchInput: TextFieldState,
     onMenuClick: () -> Unit,
+    onSearchOpen: () -> Unit,
+    onSearchClose: () -> Unit,
     onAction: (MainAction) -> Unit,
     onShowDialog: (MainDialog) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     var showImportMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -49,8 +55,6 @@ fun MainTopBar(
     val maxMenuHeight =
         LocalConfiguration.current.screenHeightDp.dp - statusBarHeight - navBarHeight - 20.dp
 
-    val closeSearch: () -> Unit = { onAction(MainAction.SetSearchActive(false)) }
-
     AppTopBar(
         modifier = modifier,
         title = stringResource(R.string.title_server),
@@ -58,14 +62,13 @@ fun MainTopBar(
         isLoading = isLoading,
         searchState = if (isSearchActive) AppSearchState(
             isActive = true,
-            query = query,
+            state = searchInput,
             placeholder = stringResource(R.string.menu_item_search)
         ) else null,
-        onSearchQueryChange = { newQuery -> onAction(MainAction.Search(newQuery)) },
-        onSearchClose = closeSearch,
+        onSearchClose = onSearchClose,
         navigationIcon = {
             if (isSearchActive) {
-                IconButton(onClick = closeSearch) {
+                IconButton(onClick = onSearchClose) {
                     Icon(
                         painterResource(R.drawable.ic_arrow_back_24dp),
                         contentDescription = stringResource(R.string.acc_back)
@@ -82,10 +85,10 @@ fun MainTopBar(
         },
         actions = {
             if (!isSearchActive) {
-                IconButton(onClick = { onAction(MainAction.SetSearchActive(true)) }) {
+                IconButton(onClick = onSearchOpen) {
                     Icon(
                         painterResource(R.drawable.ic_search_24dp),
-                        contentDescription = stringResource(R.string.acc_search),
+                        contentDescription = stringResource(R.string.acc_search)
                     )
                 }
             }
@@ -93,7 +96,7 @@ fun MainTopBar(
                 IconButton(onClick = { showImportMenu = true }) {
                     Icon(
                         painterResource(R.drawable.ic_add_24dp),
-                        contentDescription = stringResource(R.string.acc_add),
+                        contentDescription = stringResource(R.string.acc_add)
                     )
                 }
                 DropdownMenu(
@@ -103,7 +106,7 @@ fun MainTopBar(
                     containerColor = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .heightIn(max = maxMenuHeight)
-                        .verticalScrollbar(importScrollState),
+                        .verticalScrollbar(importScrollState)
                 ) {
                     ImportMenuContent { action ->
                         showImportMenu = false
@@ -115,7 +118,7 @@ fun MainTopBar(
                 IconButton(onClick = { showMoreMenu = true }) {
                     Icon(
                         painterResource(R.drawable.ic_more_vert_24dp),
-                        contentDescription = stringResource(R.string.acc_more),
+                        contentDescription = stringResource(R.string.acc_more)
                     )
                 }
                 DropdownMenu(
@@ -125,7 +128,7 @@ fun MainTopBar(
                     containerColor = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .heightIn(max = maxMenuHeight)
-                        .verticalScrollbar(moreScrollState),
+                        .verticalScrollbar(moreScrollState)
                 ) {
                     MoreMenuContent(
                         onAction = { action ->
@@ -135,10 +138,26 @@ fun MainTopBar(
                         onShowDialog = { dialog ->
                             showMoreMenu = false
                             onShowDialog(dialog)
-                        },
+                        }
                     )
                 }
             }
         }
+    )
+}
+
+@Preview(showBackground = true)
+@Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun MainTopBarSearchPreview() = AppTheme {
+    MainTopBar(
+        isLoading = false,
+        isSearchActive = true,
+        searchInput = rememberTextFieldState(initialText = "v2ray"),
+        onMenuClick = {},
+        onSearchOpen = {},
+        onSearchClose = {},
+        onAction = {},
+        onShowDialog = {}
     )
 }

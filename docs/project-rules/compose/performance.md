@@ -31,8 +31,11 @@ BaseScreen(
     viewModel = viewModel,
     topBar = {
         val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()  // 只影响顶栏
-        val search by rememberSearchState(viewModel)
-        MainTopBar(isLoading = isLoading, isSearchActive = search.isActive, query = search.query, …)
+        val search = rememberSearchFieldController(
+            initialQuery = viewModel.uiState.value.searchQuery,
+            initialActive = viewModel.uiState.value.isSearchActive,
+        )
+        MainTopBar(isLoading = isLoading, isSearchActive = search.isActive, searchInput = search.input, …)
     },
 ) { state, _ ->
     Box {

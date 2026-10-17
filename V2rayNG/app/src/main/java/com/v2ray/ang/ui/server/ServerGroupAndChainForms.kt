@@ -15,38 +15,41 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.PagingData
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.ui.components.DropdownOption
-import com.v2ray.ang.ui.components.FormDropdownField
 import com.v2ray.ang.ui.components.FormPagedDropdownField
 import com.v2ray.ang.ui.components.FormTextField
 import com.v2ray.ang.ui.components.ReorderableListItem
 import com.v2ray.ang.ui.components.SettingsSwitchItem
-import com.v2ray.ang.ui.components.StringOptions
 import com.v2ray.ang.ui.components.verticalScrollbar
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import kotlinx.coroutines.flow.Flow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 // ===== Policy group =====
 
 @Composable
 internal fun PolicyGroupForm(
-    form: ServerForm,
+    editor: ServerEditorState,
     remarksError: Int?,
     options: ServerOptions,
-    fallbackTags: LazyPagingItems<DropdownOption>,
+    fallbackTags: Flow<PagingData<DropdownOption>>,
     tagQuery: String,
     onTagQueryChange: (String) -> Unit,
-    onAction: (ServerAction) -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier
 ) {
     val fieldOptions = rememberFieldOptions()
     val allLabel = stringResource(R.string.filter_config_all)
@@ -57,74 +60,56 @@ internal fun PolicyGroupForm(
     val typePairs = remember(typeLabels) {
         typeLabels.values.mapIndexed { position, label -> position.toString() to label }
     }
-    val typeLabel = typePairs.firstOrNull { it.first == form.groupType }?.second
-        ?: typePairs.firstOrNull()?.second.orEmpty()
-
     val subPairs = remember(subs, allLabel) {
         subs.map { it.id to it.name.ifBlank { allLabel } }
     }
-    val subLabels = remember(subPairs) { StringOptions(subPairs.map { it.second }) }
-    val subLabel = subPairs.firstOrNull { it.first == form.groupSubId }?.second
-        ?: subLabels.firstOrNull().orEmpty()
-
-    val supportsObservatory = BalancerStrategyType.from(form.groupType).supportsObservatory
-
+    val supportsObservatory by remember(editor) {
+        derivedStateOf {
+            BalancerStrategyType.from(editor.text(ServerField.GROUP_TYPE)).supportsObservatory
+        }
+    }
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing),
+        verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)
     ) {
         FormTextField(
             label = stringResource(R.string.server_lab_remarks),
-            value = form.remarks,
-            onValueChange = { onAction(ServerAction.TextChanged(ServerField.REMARKS, it)) },
+            state = editor[ServerField.REMARKS],
             isError = remarksError != null,
-            supportingText = remarksError?.let { stringResource(it) },
+            supportingText = remarksError?.let { stringResource(it) }
         )
 
-        FormDropdownField(
+        ServerIdDropdownField(
             label = stringResource(R.string.title_policy_group_type),
-            value = typeLabel,
-            options = typeLabels,
-            onValueChange = { label ->
-                val value = typePairs.firstOrNull { it.second == label }?.first
-                    ?: return@FormDropdownField
-                onAction(ServerAction.TextChanged(ServerField.GROUP_TYPE, value))
-            },
+            state = editor[ServerField.GROUP_TYPE],
+            options = typePairs
         )
 
-        FormDropdownField(
+        ServerIdDropdownField(
             label = stringResource(R.string.title_policy_group_subscription_id),
-            value = subLabel,
-            options = subLabels,
-            onValueChange = { label ->
-                val id = subPairs.firstOrNull { it.second == label }?.first.orEmpty()
-                onAction(ServerAction.TextChanged(ServerField.GROUP_SUB_ID, id))
-            },
+            state = editor[ServerField.GROUP_SUB_ID],
+            options = subPairs
         )
 
         ServerTextField(
             R.string.title_policy_group_subscription_filter, ServerField.GROUP_FILTER,
-            form.groupFilter, onAction, noErrors,
+            editor, noErrors
         )
 
         if (supportsObservatory) {
             SettingsSwitchItem(
                 title = stringResource(R.string.title_policy_group_test_outbounds),
-                checked = form.groupTestOutbounds,
-                onCheckedChange = {
-                    onAction(ServerAction.FlagChanged(ServerFlag.GROUP_TEST_OUTBOUNDS, it))
-                },
+                checked = editor.groupTestOutbounds,
+                onCheckedChange = { editor.groupTestOutbounds = it }
             )
-            if (form.groupTestOutbounds) {
+            if (editor.groupTestOutbounds) {
+                val fallbackItems = fallbackTags.collectAsLazyPagingItems()
                 FormPagedDropdownField(
                     label = stringResource(R.string.title_policy_group_fallback),
-                    value = form.groupFallbackTag,
-                    items = fallbackTags,
+                    state = editor[ServerField.GROUP_FALLBACK_TAG],
+                    items = fallbackItems,
                     query = tagQuery,
-                    onQueryChange = onTagQueryChange,
-                    onValueChange = {
-                        onAction(ServerAction.TextChanged(ServerField.GROUP_FALLBACK_TAG, it))
-                    }
+                    onQueryChange = onTagQueryChange
                 )
             }
         }
@@ -135,33 +120,34 @@ internal fun PolicyGroupForm(
 
 @Composable
 internal fun ProxyChainForm(
-    remarks: String,
+    editor: ServerEditorState,
     remarksError: Int?,
-    members: List<ChainMember>,
-    candidates: LazyPagingItems<DropdownOption>,
-    chainQuery: String,
-    onChainQueryChange: (String) -> Unit,
-    onAction: (ServerAction) -> Unit,
+    chainSlice: (String) -> ChainMemberSlice,
+    onRetainMembers: (Set<String>) -> Unit,
+    onRemoveChainMember: (String) -> Unit,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
+    contentPadding: PaddingValues = PaddingValues(0.dp)
 ) {
+    val memberIds = editor.chainMembers.map { it.id }
+    LaunchedEffect(memberIds) {
+        onRetainMembers(memberIds.toSet())
+    }
     val listState = rememberLazyListState()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
         val fromId = from.key as? String ?: return@rememberReorderableLazyListState
         val toId = to.key as? String ?: return@rememberReorderableLazyListState
-        onAction(ServerAction.ChainMemberMoved(fromId, toId))
+        editor.moveChainMember(fromId, toId)
     }
 
     LazyColumn(
         state = listState,
         modifier = modifier.verticalScrollbar(listState),
-        contentPadding = contentPadding,
+        contentPadding = contentPadding
     ) {
         item(key = "remarks") {
             FormTextField(
                 label = stringResource(R.string.server_lab_remarks),
-                value = remarks,
-                onValueChange = { onAction(ServerAction.TextChanged(ServerField.REMARKS, it)) },
+                state = editor[ServerField.REMARKS],
                 isError = remarksError != null,
                 supportingText = remarksError?.let { stringResource(it) },
                 modifier = Modifier.padding(horizontal = ServerDimens.ContentHorizontal)
@@ -174,11 +160,11 @@ internal fun ProxyChainForm(
                 modifier = Modifier.padding(
                     start = ServerDimens.ContentHorizontal,
                     top = ServerDimens.FieldSpacing,
-                    bottom = ServerDimens.FieldSpacing,
-                ),
+                    bottom = ServerDimens.FieldSpacing
+                )
             )
         }
-        itemsIndexed(items = members, key = { _, member -> member.id }) { index, member ->
+        itemsIndexed(items = editor.chainMembers, key = { _, member -> member.id }) { index, member ->
             ReorderableItem(reorderState, key = member.id) { isDragging ->
                 ReorderableListItem(
                     scope = this,
@@ -188,11 +174,8 @@ internal fun ProxyChainForm(
                     ChainMemberRow(
                         ordinal = index + 1,
                         member = member,
-                        candidates = candidates,
-                        chainQuery = chainQuery,
-                        onChainQueryChange = onChainQueryChange,
-                        isDragging = isDragging,
-                        onAction = onAction,
+                        slice = chainSlice(member.id),
+                        onRemove = { onRemoveChainMember(member.id) }
                     )
                 }
             }
@@ -203,41 +186,39 @@ internal fun ProxyChainForm(
 @Composable
 private fun ChainMemberRow(
     ordinal: Int,
-    member: ChainMember,
-    candidates: LazyPagingItems<DropdownOption>,
-    chainQuery: String,
-    onChainQueryChange: (String) -> Unit,
-    isDragging: Boolean,
-    onAction: (ServerAction) -> Unit,
-    modifier: Modifier = Modifier,
+    member: ServerChainMemberState,
+    slice: ChainMemberSlice,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
+    val candidates = slice.candidates.collectAsLazyPagingItems()
+    val query by slice.query.collectAsStateWithLifecycle()
     Row(
         modifier = modifier
             .fillMaxWidth()
             .padding(ServerDimens.ChainRowPadding),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = "$ordinal",
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier
                 .padding(start = ServerDimens.ContentHorizontal)
-                .width(ServerDimens.ChainIndexWidth),
+                .width(ServerDimens.ChainIndexWidth)
         )
         FormPagedDropdownField(
             label = stringResource(R.string.server_lab_remarks),
             placeholder = stringResource(R.string.server_proxy_chain_member_unselected),
-            value = member.remarks,
+            state = member.remarks,
             items = candidates,
-            query = chainQuery,
-            onQueryChange = onChainQueryChange,
-            onValueChange = { onAction(ServerAction.ChainMemberChanged(member.id, it)) },
-            modifier = Modifier.weight(1f),
+            query = query,
+            onQueryChange = slice.onQueryChange,
+            modifier = Modifier.weight(1f)
         )
-        IconButton(onClick = { onAction(ServerAction.ChainMemberRemoveClicked(member.id)) }) {
+        IconButton(onClick = onRemove) {
             Icon(
                 painterResource(R.drawable.ic_delete_24dp),
-                contentDescription = stringResource(R.string.action_delete),
+                contentDescription = stringResource(R.string.action_delete)
             )
         }
     }

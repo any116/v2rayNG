@@ -28,12 +28,10 @@ import javax.inject.Inject
 @HiltViewModel
 class SubEditViewModel @Inject constructor(
     handle: SavedStateHandle,
-    private val repo: SubRepository,
+    private val repo: SubRepository
 ) : BaseEditViewModel<SubEditUiState, SubEditAction>(
     SubEditUiState(subId = handle.get<String>(AppRoute.EXTRA_SUB_GUID).orEmpty())
 ) {
-
-    private val saver = EditFormSaver(handle, KEY_SAVED)
 
     private val prevQuery = MutableStateFlow("")
     private val nextQuery = MutableStateFlow("")
@@ -41,10 +39,10 @@ class SubEditViewModel @Inject constructor(
     val slices = SubEditSlices(
         prevProfiles = prevQuery.toProfilePager(),
         prevQuery = prevQuery.asStateFlow(),
-        onPrevQueryChange = { prevQuery.value = it },
+        onPrevQueryChange = { query -> prevQuery.value = query },
         nextProfiles = nextQuery.toProfilePager(),
         nextQuery = nextQuery.asStateFlow(),
-        onNextQueryChange = { nextQuery.value = it },
+        onNextQueryChange = { query -> nextQuery.value = query }
     )
 
     private var initial: SubscriptionItem? = null
@@ -52,15 +50,10 @@ class SubEditViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
-        saver.restore()
+        val legacyForm = EditFormSaver(handle, KEY_SAVED).consume()
             ?.getString(KEY_FORM)
             ?.let { JsonUtil.fromJsonSafe(it, SubEditForm::class.java) }
-            ?.let { restored ->
-                saver.markDirty()
-                setState { copy(form = restored) }
-            }
-        saver.register { bundle -> bundle.putString(KEY_FORM, JsonUtil.toJson(state.form)) }
-        loadJob = load()
+        loadJob = load(legacyForm)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -68,57 +61,32 @@ class SubEditViewModel @Inject constructor(
         flatMapLatest { repo.profileRemarkPager(it) }
             .cachedIn(viewModelScope)
 
-    private fun load(): Job = launch(onError = { loadFailed = true; toastError() }) {
+    private fun load(legacyForm: SubEditForm?): Job = launch(onError = { loadFailed = true; toastError() }) {
         val data = repo.loadEdit(state.subId)
         initial = data.item
         if (state.isEdit && data.item == null) {
             loadFailed = true
             toastError()
+            return@launch
         }
         setState {
             copy(
-                form = if (saver.dirty) form else data.item.toSubEditForm(),
-                confirmRemove = data.confirmRemove,
+                initialForm = legacyForm ?: data.item.toSubEditForm(),
+                isReady = true,
+                confirmRemove = data.confirmRemove
             )
         }
     }
 
     override fun onAction(action: SubEditAction) {
         when (action) {
-            is SubEditAction.TextChanged -> {
-                saver.markDirty()
-                setState {
-                    val remaining = if (action.field in fieldErrors) fieldErrors - action.field else fieldErrors
-                    copy(
-                        form = action.field.set(form, action.value),
-                        fieldErrors = remaining,
-                    )
-                }
-            }
-
-            is SubEditAction.FlagChanged -> {
-                saver.markDirty()
-                setState {
-                    val remaining = if (action.flag == SubFlag.ALLOW_INSECURE_URL && SubField.URL in fieldErrors)
-                        fieldErrors - SubField.URL
-                    else fieldErrors
-                    copy(
-                        form = action.flag.set(form, action.value),
-                        fieldErrors = remaining,
-                    )
-                }
-            }
-
-            SubEditAction.Save -> save()
+            is SubEditAction.Save -> if (state.isReady) save { saveSnapshot(action.form) }
             SubEditAction.Back -> cancel()
             SubEditAction.DeleteConfirmed -> delete()
         }
     }
 
-    override suspend fun doSave(): BaseResult? {
-        if (!awaitLoad()) return null
-
-        val form = state.form
+    private suspend fun saveSnapshot(form: SubEditForm): BaseResult? {
         val errors = buildMap {
             if (form.remarks.isBlank()) put(SubField.REMARKS, R.string.sub_setting_remarks)
 
@@ -139,7 +107,20 @@ class SubEditViewModel @Inject constructor(
         }
 
         if (errors.isNotEmpty()) {
-            setState { copy(fieldErrors = errors) }
+            val submittedValues = form.textValues()
+            setState {
+                copy(fieldErrors = errors.mapValues { (field, message) ->
+                    SubEditFieldError(
+                        message = message,
+                        submittedValue = submittedValues.getValue(field.name),
+                        submittedFlag = when (field) {
+                            SubField.URL -> form.allowInsecureUrl
+                            SubField.UPDATE_INTERVAL -> form.autoUpdate
+                            else -> null
+                        }
+                    )
+                })
+            }
             return null
         }
         if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }

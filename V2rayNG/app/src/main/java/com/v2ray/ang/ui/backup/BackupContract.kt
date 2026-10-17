@@ -22,12 +22,8 @@ data class WebDavForm(
     val configured: Boolean get() = baseUrl.isNotBlank()
     val summary: String? get() = baseUrl.takeIf { it.isNotBlank() }
 
-    fun updated(field: WebDavField, value: String): WebDavForm = when (field) {
-        WebDavField.URL -> copy(baseUrl = value)
-        WebDavField.USERNAME -> copy(username = value)
-        WebDavField.PASSWORD -> copy(password = value)
-        WebDavField.PATH -> copy(remotePath = value)
-    }
+    override fun toString(): String =
+        "WebDavForm(baseUrl=$baseUrl, username=$username, password=<redacted>, remotePath=$remotePath)"
 }
 
 fun WebDavConfig?.toForm(): WebDavForm = this?.let {
@@ -46,15 +42,21 @@ fun WebDavForm.toConfig(): WebDavConfig = WebDavConfig(
     remoteBasePath = remotePath.trim().ifEmpty { AppConfig.WEBDAV_BACKUP_DIR }
 )
 
-/**
- * [webDav] is the persisted configuration, [draft] the edit buffer of the WebDAV dialog: the form
- * has exactly one source of truth, and the dialog's *visibility* stays out of the state.
- */
+/** Persisted configuration only; the dialog owns its editable text states. */
 @Immutable
 data class BackupUiState(
     val webDav: WebDavForm = WebDavForm(),
-    val draft: WebDavForm = WebDavForm()
+    val isWebDavLoaded: Boolean = false,
+    val isWebDavLoadFinished: Boolean = false
 ) : BaseUiState
+
+/** Keeps a completed restore from being replaced by a slower initial settings load. */
+internal fun BackupUiState.acceptInitialWebDav(form: WebDavForm): BackupUiState =
+    if (isWebDavLoaded) copy(isWebDavLoadFinished = true) else copy(
+        webDav = form,
+        isWebDavLoaded = true,
+        isWebDavLoadFinished = true
+    )
 
 sealed interface BackupAction : BaseAction {
     data object Back : BackupAction
@@ -62,11 +64,10 @@ sealed interface BackupAction : BaseAction {
     data object RestoreClicked : BackupAction
     data object ShareClicked : BackupAction
     data object WebDavClicked : BackupAction
-    data object WebDavSaved : BackupAction
+    data class SaveWebDav(val snapshot: WebDavConfig) : BackupAction
     data object CleanupClicked : BackupAction
     data object CleanupConfirmed : BackupAction
-    data class ChannelSelected(val channel: BackupChannel) : BackupAction
-    data class WebDavFieldChanged(val field: WebDavField, val value: String) : BackupAction
+    data class ChannelSelected(val channel: BackupChannel, val restoring: Boolean) : BackupAction
     data class ExportUriSelected(val uri: Uri?) : BackupAction
     data class ImportUriSelected(val uri: Uri?) : BackupAction
     data class ShareResult(val path: String, val ok: Boolean) : BackupAction
@@ -79,6 +80,7 @@ sealed interface BackupAction : BaseAction {
 sealed interface BackupEvent : BaseEvent.Platform {
     data class ShowChannelPicker(val restoring: Boolean) : BackupEvent
     data object ShowWebDavEditor : BackupEvent
+    data object WebDavSaved : BackupEvent
     data object ShowCleanupConfirmation : BackupEvent
     data class CreateDocument(val fileName: String) : BackupEvent
     data object PickFile : BackupEvent

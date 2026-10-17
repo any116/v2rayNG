@@ -26,6 +26,7 @@ data class LogLine(
 
 @Immutable
 data class LogcatUiState(
+    /** Requested log filter; does not drive the UI-owned input buffer. */
     val query: String = "",
     val searchActive: Boolean = false
 ) : BaseUiState

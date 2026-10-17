@@ -34,7 +34,7 @@ Compose 化不等于删除所有 Android XML。文档要区分"当前实现"与"
 ## 4. Review Checklist
 
 - [ ] 页面沿用 BaseActivity / BaseScreen。
-- [ ] 业务输入通过 BaseAction。
+- [ ] 编辑文本由 UI-owned TextFieldState 持有，业务提交快照通过 BaseAction。
 - [ ] 内容组件不创建 Repository。
 - [ ] ViewModel 不保存 Activity / Context。
 - [ ] Repository 通过 Hilt 构造注入（无手工 new）。
@@ -43,7 +43,7 @@ Compose 化不等于删除所有 Android XML。文档要区分"当前实现"与"
 - [ ] 取消语义正确。
 - [ ] 保存失败保留输入。
 - [ ] 编辑器结果不重复提示。
-- [ ] 状态恢复范围明确（`SavedStateHandle` / `EditFormSaver` 的 dirty 门）。
+- [ ] 状态恢复范围明确（UI 草稿 Saver、定向选区/flags/字段身份、加载初始化门及查询元数据）。
 - [ ] 系统栏和 IME 没有重复避让（`contentWindowInsets = WindowInsets(0)` 前提下的自处理）。
 - [ ] 列表 key 稳定；Paging 列表用 `itemKey` / `itemContentType`。
 - [ ] 稳定性注解符合真实对象图。

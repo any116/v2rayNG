@@ -22,12 +22,10 @@ import javax.inject.Inject
 @HiltViewModel
 class RoutingEditViewModel @Inject constructor(
     handle: SavedStateHandle,
-    private val repo: RoutingRepository,
+    private val repo: RoutingRepository
 ) : BaseEditViewModel<RoutingEditUiState, RoutingEditAction>(
     initialState = RoutingEditUiState(ruleId = handle.get<String>(AppRoute.EXTRA_RULE_ID) ?: "")
 ) {
-
-    private val saver = EditFormSaver(handle, KEY_SAVED)
 
     private val outboundQuery = MutableStateFlow("")
 
@@ -37,7 +35,7 @@ class RoutingEditViewModel @Inject constructor(
             .flatMapLatest { repo.outboundTagPager(it) }
             .cachedIn(viewModelScope),
         query = outboundQuery.asStateFlow(),
-        onQueryChange = { outboundQuery.value = it },
+        onQueryChange = { query -> outboundQuery.value = query }
     )
 
     private var initial: RulesetItem? = null
@@ -45,97 +43,56 @@ class RoutingEditViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
-        saver.restore()
+        val legacyForm = EditFormSaver(handle, KEY_SAVED).consume()
             ?.getString(KEY_FORM)
             ?.let { JsonUtil.fromJsonSafe(it, RoutingForm::class.java) }
-            ?.let { restored ->
-                saver.markDirty()
-                setState { copy(form = restored) }
-            }
-        saver.register { bundle -> bundle.putString(KEY_FORM, JsonUtil.toJson(state.form)) }
-        loadJob = load()
+        loadJob = load(legacyForm)
     }
 
-    private fun load(): Job = launch(onError = { loadFailed = true; toastError() }) {
+    private fun load(legacyForm: RoutingForm?): Job = launch(onError = { loadFailed = true; toastError() }) {
         val data = repo.loadEditData(state.ruleId)
         initial = data.ruleset
         if (state.isEdit && data.ruleset == null) {
             loadFailed = true
             toastError()
+            return@launch
         }
         setState {
             copy(
-                form = if (saver.dirty) form else data.ruleset.toRoutingForm(),
-                canUseProcess = data.canUseProcess,
+                initialForm = legacyForm ?: data.ruleset.toRoutingForm(),
+                isReady = true,
+                canUseProcess = data.canUseProcess
             )
         }
     }
 
     override fun onAction(action: RoutingEditAction) {
         when (action) {
-            is RoutingEditAction.UpdateRemarks -> updateField(RoutingField.REMARKS, action.value)
-            is RoutingEditAction.UpdateDomain -> updateField(RoutingField.DOMAIN, action.value)
-            is RoutingEditAction.UpdateIp -> updateField(RoutingField.IP, action.value)
-            is RoutingEditAction.UpdateProcess -> updateField(RoutingField.PROCESS, action.value)
-            is RoutingEditAction.UpdateProtocol -> updateField(RoutingField.PROTOCOL, action.value)
-            is RoutingEditAction.UpdateNetwork -> updateField(RoutingField.NETWORK, action.value)
-            is RoutingEditAction.UpdatePort -> updateField(RoutingField.PORT, action.value)
-            is RoutingEditAction.UpdateOutbound -> updateField(RoutingField.OUTBOUND, action.value)
-
-            is RoutingEditAction.ToggleLocked -> {
-                saver.markDirty()
-                setState { copy(form = form.copy(locked = action.value)) }
-            }
-
-            RoutingEditAction.SelectProcess -> {
-                val current = state.form.process
-                    .split(",")
-                    .map { it.trim() }
-                    .filter { it.isNotEmpty() }
-                    .distinct()
-                navigate(
-                    AppRoute.AppPicker(
-                        selected = current,
-                        titleRes = R.string.routing_settings_process_select,
-                    )
-                )
-            }
-
-            is RoutingEditAction.ResultReceived -> {
-                if (action.result is BaseResult.Selected) {
-                    saver.markDirty()
-                    setState {
-                        copy(form = form.copy(process = action.result.values.joinToString(",")))
-                    }
-                }
-            }
-
-            RoutingEditAction.Save -> save()
+            is RoutingEditAction.SelectProcess -> selectProcess(action.process)
+            is RoutingEditAction.Save -> if (state.isReady) save { saveSnapshot(action.form) }
             RoutingEditAction.Back -> cancel()
             RoutingEditAction.Delete -> platform(RoutingEditEvent.ShowDeleteDialog)
             RoutingEditAction.ConfirmDelete -> delete()
         }
     }
 
-    private fun updateField(field: RoutingField, value: String) {
-        saver.markDirty()
-        setState {
-            copy(
-                form = field.set(form, value),
-                fieldErrors = if (field in fieldErrors) fieldErrors - field else fieldErrors,
-            )
-        }
+    private fun selectProcess(process: String) {
+        if (!state.isReady || !state.canUseProcess) return
+        val current = process.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        navigate(AppRoute.AppPicker(selected = current, titleRes = R.string.routing_settings_process_select))
     }
 
-    override suspend fun doSave(): BaseResult? {
-        if (!awaitLoad()) return null
-
-        val form = state.form
+    private suspend fun saveSnapshot(form: RoutingForm): BaseResult? {
         val errors = buildMap {
             if (form.remarks.isBlank()) put(RoutingField.REMARKS, R.string.sub_setting_remarks)
         }
         if (errors.isNotEmpty()) {
-            setState { copy(fieldErrors = errors) }
+            val submittedValues = form.textValues()
+            setState {
+                copy(fieldErrors = errors.mapValues { (field, message) ->
+                    RoutingFieldError(message, submittedValues.getValue(field.name))
+                })
+            }
             return null
         }
         if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }

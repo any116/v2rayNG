@@ -36,7 +36,7 @@ class SubDialogHost(private val onAction: (SubAction) -> Unit) {
     var current by mutableStateOf<SubDialog?>(null)
         private set
 
-    var confirmRemove: Boolean = false
+    var confirmRemove by mutableStateOf(false)
 
     val show: (SubDialog) -> Unit = { current = it }
     val dismiss: () -> Unit = { current = null }

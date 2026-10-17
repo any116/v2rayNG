@@ -25,9 +25,10 @@ data class ChainMember(val id: String = UUID.randomUUID().toString(), val remark
 
 @Immutable
 data class ServerOptions(
-    val subscriptions: List<SubscriptionOption> = emptyList(),
+    val subscriptions: List<SubscriptionOption> = emptyList()
 )
 
+/** Immutable input boundary; editing lives exclusively in the UI's ServerEditorState. */
 @Immutable
 data class ServerForm(
     val remarks: String = "",
@@ -86,7 +87,7 @@ data class ServerForm(
     val xhttpMode: String = "",
     val serviceName: String = "",
     val authority: String = "",
-    val seed: String = "",
+    val seed: String = ""
 ) {
 
     fun toProfileItem(initial: ProfileItem, configType: EConfigType): ProfileItem {
@@ -163,7 +164,7 @@ data class ServerForm(
             mldsa65Verify = mldsa65Verify,
             echConfigList = echConfigList,
             verifyPeerCertByName = verifyPeerCertByName,
-            pinnedCA256 = pinnedCA256,
+            pinnedCA256 = pinnedCA256
         )
     }
 
@@ -236,7 +237,7 @@ data class ServerForm(
                 groupTestOutbounds = profile.policyGroupTestOutbounds != false ||
                         !BalancerStrategyType.from(groupType).supportsObservatory,
                 groupFallbackTag = profile.policyGroupFallbackTag.orEmpty(),
-                chainMembers = members,
+                chainMembers = members
             )
         }
     }
@@ -244,7 +245,7 @@ data class ServerForm(
 
 enum class ServerField(
     val get: (ServerForm) -> String,
-    val set: (ServerForm, String) -> ServerForm,
+    val set: (ServerForm, String) -> ServerForm
 ) {
     REMARKS({ it.remarks }, { f, v -> f.copy(remarks = v) }),
     ADDRESS({ it.address }, { f, v -> f.copy(address = v) }),
@@ -299,32 +300,29 @@ enum class ServerField(
     XHTTP_MODE({ it.xhttpMode }, { f, v -> f.copy(xhttpMode = v) }),
     SERVICE_NAME({ it.serviceName }, { f, v -> f.copy(serviceName = v) }),
     AUTHORITY({ it.authority }, { f, v -> f.copy(authority = v) }),
-    SEED({ it.seed }, { f, v -> f.copy(seed = v) }),
-}
-
-enum class ServerFlag(
-    val get: (ServerForm) -> Boolean,
-    val set: (ServerForm, Boolean) -> ServerForm,
-) {
-    ALLOW_INSECURE({ it.allowInsecure }, { f, v -> f.copy(allowInsecure = v) }),
-    GROUP_TEST_OUTBOUNDS({ it.groupTestOutbounds }, { f, v -> f.copy(groupTestOutbounds = v) }),
+    SEED({ it.seed }, { f, v -> f.copy(seed = v) });
 }
 
 @Immutable
-sealed interface ServerDialog {
-    data object DeleteProfile : ServerDialog
-    data class RemoveChainMember(val id: String) : ServerDialog
-}
+data class ServerEditorSnapshot(val form: ServerForm, val rawContent: String)
+
+/** A validation result belongs to the submitted value, not to subsequent edits in the buffer. */
+@Immutable
+data class ServerFieldError(val message: Int, val submittedValue: String)
+
+internal fun ServerForm.validationErrors(errors: Map<ServerField, Int>): Map<ServerField, ServerFieldError> =
+    errors.mapValues { (field, message) -> ServerFieldError(message, field.get(this)) }
 
 sealed interface ServerEvent : BaseEvent.Platform {
     data object ConfirmDeleteProfile : ServerEvent
-    data class ConfirmRemoveChainMember(val id: String) : ServerEvent
+    data class CertificateFetched(val pinnedCA256: String) : ServerEvent
 }
 
 @Immutable
 data class ServerHeader(
     val configType: EConfigType = EConfigType.VMESS,
     val canDelete: Boolean = false,
+    val isLoaded: Boolean = false
 )
 
 @Immutable
@@ -332,41 +330,26 @@ data class ServerUiState(
     val configType: EConfigType = EConfigType.VMESS,
     val guid: String = "",
     val isRunning: Boolean = false,
-    val form: ServerForm = ServerForm(),
+    val initialForm: ServerForm? = null,
+    val isLoaded: Boolean = false,
     val options: ServerOptions = ServerOptions(),
-    val rawContent: String = "",
+    val initialRawContent: String = "",
     val isFetchingCert: Boolean = false,
-    val fieldErrors: Map<ServerField, Int> = emptyMap()
+    val fieldErrors: Map<ServerField, ServerFieldError> = emptyMap()
 ) : BaseUiState {
 
     val isEdit: Boolean get() = guid.isNotEmpty()
 
-    val canDelete: Boolean get() = isEdit && !isRunning
-
-    val supportsObservatory: Boolean
-        get() = BalancerStrategyType.from(form.groupType).supportsObservatory
-
-    val canFetchCert: Boolean
-        get() = configType == EConfigType.HYSTERIA2 || form.streamSecurity == TLS
+    val canDelete: Boolean get() = isLoaded && isEdit && !isRunning
 
     val header: ServerHeader
-        get() = ServerHeader(configType, canDelete)
+        get() = ServerHeader(configType, canDelete, isLoaded)
 }
 
 sealed interface ServerAction : BaseAction {
-    data class TextChanged(val field: ServerField, val value: String) : ServerAction
-    data class FlagChanged(val flag: ServerFlag, val value: Boolean) : ServerAction
-    data class RawContentChanged(val value: String) : ServerAction
-
-    data object Save : ServerAction
+    data class Save(val form: ServerForm, val rawContent: String) : ServerAction
     data object Back : ServerAction
     data object DeleteClicked : ServerAction
     data object ConfirmDeleteProfile : ServerAction
-    data class ConfirmRemoveChainMember(val id: String) : ServerAction
-    data object FetchCertificate : ServerAction
-
-    data object AddChainMember : ServerAction
-    data class ChainMemberChanged(val id: String, val value: String) : ServerAction
-    data class ChainMemberRemoveClicked(val id: String) : ServerAction
-    data class ChainMemberMoved(val fromId: String, val toId: String) : ServerAction
+    data class FetchCertificate(val form: ServerForm) : ServerAction
 }

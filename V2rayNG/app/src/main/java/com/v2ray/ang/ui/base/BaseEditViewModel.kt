@@ -1,11 +1,14 @@
 package com.v2ray.ang.ui.base
 
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Parent of every editor screen (Server*, SubEdit, RoutingEdit, UserAssetUrl…).
  *
- * Subclasses implement [doSave] / [doDelete]:
+ * Subclasses submit a save operation capturing its immutable command snapshot, or implement [doDelete]:
  * `null` means validation failed and the screen stays open (the subclass reports which field via
  * [toastError]); a [BaseResult] means success and the framework closes the screen with it.
  *
@@ -17,20 +20,28 @@ abstract class BaseEditViewModel<S : BaseUiState, A : BaseAction>(
 ) : BaseViewModel<S, A>(initialState) {
 
     private var mutationJob: Job? = null
+    private val _isMutating = MutableStateFlow(false)
 
-    /** Validate and persist. Return `null` to keep the screen open. */
-    protected abstract suspend fun doSave(): BaseResult?
+    /** True while a save or delete command is being validated or written. */
+    val isMutating: StateFlow<Boolean> = _isMutating.asStateFlow()
 
     /** Delete the edited entity. Returns `null` by default (screen has no delete action). */
     protected open suspend fun doDelete(): BaseResult? = null
 
-    protected fun save() = mutate { doSave() }
+    /** Capture the submitted snapshot in [block], never in a mutable pending-form property. */
+    protected fun save(block: suspend () -> BaseResult?) = mutate(block)
     protected fun delete() = mutate { doDelete() }
 
     private fun mutate(block: suspend () -> BaseResult?) {
         if (mutationJob?.isActive == true) return
+        _isMutating.value = true
         mutationJob = launch {
-            block()?.let(::finishWith)
+            try {
+                block()?.let(::finishWith)
+            } finally {
+                _isMutating.value = false
+                mutationJob = null
+            }
         }
     }
 
@@ -39,6 +50,7 @@ abstract class BaseEditViewModel<S : BaseUiState, A : BaseAction>(
     override fun onCleared() {
         mutationJob?.cancel()
         mutationJob = null
+        _isMutating.value = false
         super.onCleared()
     }
 }

@@ -48,7 +48,8 @@ sealed interface XxxAction : BaseAction {
 ```
 
 - 名字表达用户意图，不表达实现。
-- 参数只带 UI 能提供的原始信息（id、index、文本、Uri），不带整个对象。
+- 参数只带 UI 能提供的原始信息（id、index、文本、Uri）或不可变的表单提交快照，
+  不携带 `TextFieldState`、可变实体或 ViewModel。
 - `onAction` 的 `when` 必须穷尽（不写 `else`），加新 Action 时编译器会提醒你补分支。
 - 需要在 `onCreate` 触发的一次性初始化，用显式 `Initialize` Action，
   ViewModel 内用 `initialized` 布尔守卫幂等（`MainViewModel.initialize()`）。
@@ -120,14 +121,30 @@ sealed interface XxxDialog {
 
 ## 6. 表单与编辑页
 
-- 输入值的唯一来源是 UiState，`onValueChange` → `onAction(XxxAction.FieldChanged(...))`
-  → `setState`。不要在 Composable 里 `remember { mutableStateOf(initial) }` 存输入。
+- 编辑中的文本由 UI-owned `TextFieldState` 唯一持有。共享表单、下拉、搜索和 `InputField`
+  直接接收 state，不提供逐字符 String 回调；flags 由同一个 feature 草稿持有者管理。
+- Main、AppPicker、PerAppProxy、Logcat 共用 `SearchFieldController` 管理搜索 state 的保存、
+  open/close/back 生命周期；关闭先清空本地 state，再派发屏幕 Action。查询只单向观察 state，
+  不把 ViewModel 的已应用 query 回写到输入框。
+- UiState 只发布一次性的 `initialForm`、ready 状态、options、业务元数据及校验结果。
+  草稿在 ready 后初始化一次，恢复草稿优先，加载前不可保存或编辑默认空表单。
+- 保存、确认和需要当前输入的动作直接在点击处理器中读快照，例如
+  `onAction(SubEditAction.Save(editor.snapshot()))`。ViewModel 使用
+  `save { saveSnapshot(action.form) }` 捕获本次不可变数据，不存可被第二次点击覆盖的 pendingForm，
+  不再读取 UiState 的旧初值作为提交内容。Back、取消、删除不提交草稿。
+- 不使用 String 双向同步桥、回声队列、registry/flush 或 raw 文本回写 debounce。
+  `snapshotFlow` 只用于搜索/筛选等单向派生，查询结果不能回灌输入框。选中下拉项直接编辑 state，
+  同步抑制选项引发的查询；已应用 query 属于可恢复的筛选元数据，不是第二份输入草稿。
+- 外部结果按明确目标更新字段：证书响应只改 pinnedCA，AppPicker 返回只改 process。
+  不通过整个旧表单覆盖请求期间的其它编辑。
+- `InputDialog` 只渲染 caller-owned 字段并同步读确认快照；拥有者用
+  foundation `TextFieldState.Saver` 保存文本及定向选区。密码使用 `OutlinedSecureTextField`。
 - 校验在 ViewModel。失败时 `toastError` 并保持在当前页
-  （`BaseEditViewModel.doSave()` 返回 `null`）。
-- 保存/删除用 `BaseEditViewModel.save()` / `delete()`：内部有 `mutationJob` 防重入，
+  （`save { ... }` 返回 `null`）；错误携带提交值，UI 只对仍匹配该值的当前字段展示错误。
+- 保存/删除用 `BaseEditViewModel.save { ... }` / `delete()`：内部有 `mutationJob` 防重入，
   成功即 `finishWith(result)`。
-- 需要跨进程死亡保活的输入，接 `SavedStateHandle` + `EditFormSaver`：
-  `restore()` 先于 `register()`，只有用户真的改过（`markDirty()`）才写快照。
+- 需要跨进程死亡保活的草稿使用 `rememberSaveable` + feature Saver，保存初始化状态、flags 和
+  动态字段的身份/顺序；未初始化的恢复值不能阻止真实加载。`EditFormSaver.consume()` 仅一次性兼容并移除旧数据。
 - 快速连续写入用 Job 链串行（`SettingsViewModel.persist()`），离开页面前 `writeJob?.join()`。
 
 ## 7. 结果回传

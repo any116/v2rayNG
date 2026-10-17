@@ -22,6 +22,7 @@ data class PerAppProxyUiState(
     val selected: Set<String> = emptySet(),
     val perAppProxyEnabled: Boolean = false,
     val bypassMode: Boolean = false,
+    /** Requested filter, independent of the UI-owned text and selection. */
     val query: String = "",
     val searchActive: Boolean = false
 ) : BaseUiState {
@@ -64,7 +65,7 @@ sealed interface PerAppProxyAction : BaseAction {
     /** Close search and clear the filter. */
     data object SearchClose : PerAppProxyAction
 
-    /** Every keystroke in the search field; debounced by the ViewModel. */
+    /** One-way text snapshots from the UI; nonempty queries are debounced by the ViewModel. */
     data class QueryChanged(val value: String) : PerAppProxyAction
 
     /** Overflow: check every visible app, or clear them when all are already checked. */

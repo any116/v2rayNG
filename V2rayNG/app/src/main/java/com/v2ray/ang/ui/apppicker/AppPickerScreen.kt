@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
@@ -37,6 +39,8 @@ import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.ItemDivider
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.ObserveQuery
+import com.v2ray.ang.ui.components.rememberSearchFieldController
 import com.v2ray.ang.ui.components.verticalScrollbar
 
 private val EmptyStatePad = 24.dp
@@ -44,40 +48,50 @@ private const val RowContentType = "app_row"
 
 @Composable
 fun AppPickerScreen(viewModel: AppPickerViewModel) {
-    val stateHolder = viewModel.uiState.collectAsStateWithLifecycle()
-    val loadingHolder = viewModel.isLoading.collectAsStateWithLifecycle()
-
     val onAction = remember(viewModel) { viewModel::onAction }
-    val onBack = remember(onAction) { { onAction(AppPickerAction.Back) } }
+    val search = rememberSearchFieldController(
+        initialQuery = "",
+        initialActive = false
+    )
+    val openSearch = remember(search, onAction) {
+        { search.open { onAction(AppPickerAction.SearchOpen) } }
+    }
+    val closeSearch = remember(search, onAction) {
+        { search.close { onAction(AppPickerAction.SearchClose) } }
+    }
+    val onBack = remember(search, closeSearch, onAction) {
+        { if (search.isActive) closeSearch() else onAction(AppPickerAction.Back) }
+    }
+    val searchActiveProvider = remember(search) { { search.isActive } }
+    val holders = rememberAppPickerStateHolders(viewModel, searchActiveProvider)
+    LaunchedEffect(search, onAction) {
+        onAction(if (search.isActive) AppPickerAction.SearchOpen else AppPickerAction.SearchClose)
+    }
+    search.ObserveQuery { onAction(AppPickerAction.QueryChanged(it)) }
 
     // Narrow slices: every consumer reads exactly one field, through derivedStateOf on its own
     // side, so ticking a row cannot invalidate the top bar or the list container.
-    val titleResProvider = remember(stateHolder) { { stateHolder.value.titleRes } }
-    val loadingProvider = remember(loadingHolder) { { loadingHolder.value } }
-    val searchActiveProvider = remember(stateHolder) { { stateHolder.value.searchActive } }
-    val queryProvider = remember(stateHolder) { { stateHolder.value.query } }
-    val appsProvider = remember(stateHolder) { { stateHolder.value.apps } }
-    val selectedProvider = remember(stateHolder) { { stateHolder.value.selected } }
-    val emptyResultProvider = remember(stateHolder) { { stateHolder.value.isEmptyResult } }
-
     AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,
         topBar = {
             AppPickerTopBar(
-                titleResProvider = titleResProvider,
-                isLoadingProvider = loadingProvider,
-                searchActiveProvider = searchActiveProvider,
-                queryProvider = queryProvider,
+                titleResProvider = holders.titleResProvider,
+                isLoadingProvider = holders.loadingProvider,
+                searchActiveProvider = holders.searchActiveProvider,
+                searchInput = search.input,
+                onBack = onBack,
+                onSearchOpen = openSearch,
+                onSearchClose = closeSearch,
                 onAction = onAction
             )
         }
     ) { _, action ->
         AppPickerList(
-            appsProvider = appsProvider,
-            selectedProvider = selectedProvider,
-            emptyResultProvider = emptyResultProvider,
+            appsProvider = holders.appsProvider,
+            selectedProvider = holders.selectedProvider,
+            emptyResultProvider = holders.emptyResultProvider,
             onAction = action
         )
     }
@@ -88,7 +102,10 @@ private fun AppPickerTopBar(
     titleResProvider: () -> Int,
     isLoadingProvider: () -> Boolean,
     searchActiveProvider: () -> Boolean,
-    queryProvider: () -> String,
+    searchInput: TextFieldState,
+    onBack: () -> Unit,
+    onSearchOpen: () -> Unit,
+    onSearchClose: () -> Unit,
     onAction: (AppPickerAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -97,27 +114,25 @@ private fun AppPickerTopBar(
     val titleRes by remember(titleResProvider) { derivedStateOf(titleResProvider) }
     val isLoading by remember(isLoadingProvider) { derivedStateOf(isLoadingProvider) }
     val searchActive by remember(searchActiveProvider) { derivedStateOf(searchActiveProvider) }
-    val query by remember(queryProvider) { derivedStateOf(queryProvider) }
 
     AppTopBar(
         title = stringResource(titleRes),
-        onBackClick = { onAction(AppPickerAction.Back) },
+        onBackClick = onBack,
         modifier = modifier,
         isLoading = isLoading,
         searchState = if (searchActive) {
             AppSearchState(
                 isActive = true,
-                query = query,
+                state = searchInput,
                 placeholder = stringResource(R.string.menu_item_search)
             )
         } else {
             null
         },
-        onSearchQueryChange = { onAction(AppPickerAction.QueryChanged(it)) },
-        onSearchClose = { onAction(AppPickerAction.SearchClose) },
+        onSearchClose = onSearchClose,
         actions = {
             if (!searchActive) {
-                IconButton(onClick = { onAction(AppPickerAction.SearchOpen) }) {
+                IconButton(onClick = onSearchOpen) {
                     Icon(
                         painter = painterResource(R.drawable.ic_search_24dp),
                         contentDescription = stringResource(R.string.acc_search)
@@ -235,6 +250,22 @@ private fun AppPickerRow(
 }
 
 // ===== Preview =====
+
+@Preview(showBackground = true)
+@Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun AppPickerTopBarSearchPreview() = AppTheme {
+    AppPickerTopBar(
+        titleResProvider = { AppPickerUiState.DEFAULT_TITLE_RES },
+        isLoadingProvider = { false },
+        searchActiveProvider = { true },
+        searchInput = rememberTextFieldState(initialText = "v2ray"),
+        onBack = {},
+        onSearchOpen = {},
+        onSearchClose = {},
+        onAction = {}
+    )
+}
 
 @Preview(showBackground = true)
 @Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)

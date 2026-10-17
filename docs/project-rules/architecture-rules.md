@@ -118,7 +118,8 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 ## 3. SSOT：状态的唯一来源
 
 1. 一屏一个 `XxxUiState : BaseUiState`，标 `@Immutable`，全部 `val`。
-2. `BaseViewModel` 内的 `_uiState` 是唯一可变来源；`setState { copy(...) }` 是唯一写法。
+2. `BaseViewModel` 内的 `_uiState` 是业务元数据的唯一可变来源；`setState { copy(...) }`
+   是其唯一写法。编辑中的文本及表单 flags 由 UI-owned 草稿持有者管理，不再在 UiState 中逐字镜像。
 3. **大列表不进 UiState（重要）**：主列表用 Paging 3。
    `MainViewModel.servers(groupId): Flow<PagingData<ServerRowItem>>` 与
    `serverCount(groupId): StateFlow<Int>` 把行数据与计数独立出去，不放进 `MainUiState`。
@@ -127,8 +128,12 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
    这些访问器用 `@Stable class` 打包（样板：`MainSlices` / `MainScreenHandles`）。
    新增大列表页时沿用同一模式。
 4. `isLoading` 不进 UiState，由 `BaseViewModel` 的引用计数提供。
-5. UI 侧不得把 State 里的值 `remember` 成第二份可变副本。表单输入的唯一来源也是 UiState
-   （样板：`BaseEditViewModel` 系列的编辑页）。
+5. 输入草稿的唯一来源是 UI-owned `TextFieldState`，同时保存光标和定向选区。共享组件直接接收
+   state，不提供 String/onValueChange 兼容层。UiState 的 `initialForm` 只是一次加载初值，
+   不是持续编辑镜像；加载成功后初始化一次，已经恢复的草稿优先，加载前不允许保存空表单。
+6. 保存、确认、取证书和进程选择等动作在点击时同步读取不可变快照，再经 Action 进入 ViewModel。
+   不依赖重组或 `snapshotFlow` 赶上输入，不使用 registry、flush、程序化回声队列或双向同步桥。
+   搜索和分页筛选允许单向观察文本形成查询条件，但应用后的 query 不回写编辑缓冲。
 
 ## 4. UDF：单向数据流
 
@@ -160,9 +165,12 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 - `@Inject constructor` 的参数**不得**全部带默认值（见 `hilt-rules.md` §2）。
 - 所有协程走 `launch(loading =, context =, onError =) { }`，不用裸 `viewModelScope.launch`。
 - 需要长期存活的 Job（预取、去抖、轮询）保存成字段，在 `onCleared()` 里取消。
-- 校验失败不抛异常，用 `toastError(...)` + 保持状态；
-  编辑页用 `BaseEditViewModel.doSave()` 返回 `null` 表示"留在本页"。
-- 需要跨进程死亡保活的表单接 `SavedStateHandle` + `EditFormSaver`。
+- 校验失败不抛异常，用 `toastError(...)` + 保持草稿；
+  编辑页的 `save { ... }` 操作返回 `null` 表示"留在本页"。校验错误绑定本次提交值，
+  不把旧提交的失败标记应用到用户随后修改的新值。
+- 草稿通过 UI `rememberSaveable` + feature Saver 保存；文本委托 foundation `TextFieldState.Saver`，
+  flags、初始化状态及动态字段身份一同恢复。`SavedStateHandle` 可保存已应用查询等非编辑元数据；
+  `EditFormSaver.consume()` 仅作为旧版本快照的一次兼容读取并移除，不注册持续 String provider。
 - **不要**在 ViewModel 里持有 `Closeable` Repository 的生命周期：Repository 现为 Hilt
   `@Singleton` 或无 scope 的构造注入，进程级资源由 Hilt 图管理。
 

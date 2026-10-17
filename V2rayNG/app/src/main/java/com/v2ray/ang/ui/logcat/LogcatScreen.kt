@@ -12,14 +12,15 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.State
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -50,10 +51,10 @@ import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.ItemDivider
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
+import com.v2ray.ang.ui.components.ObserveQuery
+import com.v2ray.ang.ui.components.rememberSearchFieldController
 import com.v2ray.ang.ui.components.verticalScrollbar
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 
 private val RowHorizontalPad = 12.dp
 private val RowVerticalPad = 8.dp
@@ -74,8 +75,25 @@ fun LogcatScreen(
     onPlatformEvent: (LogcatEvent) -> Boolean
 ) {
     val dispatch = remember(viewModel) { viewModel::onAction }
+    val search = rememberSearchFieldController(
+        initialQuery = "",
+        initialActive = false
+    )
+    val openSearch = remember(search, dispatch) {
+        { search.open { dispatch(LogcatAction.SearchOpened) } }
+    }
+    val closeSearch = remember(search, dispatch) {
+        { search.close { dispatch(LogcatAction.SearchClosed) } }
+    }
+    val onBack = remember(closeSearch, dispatch) {
+        { if (search.isActive) closeSearch() else dispatch(LogcatAction.Back) }
+    }
+    LaunchedEffect(search, dispatch) {
+        dispatch(if (search.isActive) LogcatAction.SearchOpened else LogcatAction.SearchClosed)
+    }
+    search.ObserveQuery { dispatch(LogcatAction.QueryChanged(it)) }
 
-    AppBackHandler { dispatch(LogcatAction.Back) }
+    AppBackHandler(onBack = onBack)
     LifecycleStartEffect(viewModel) {
         dispatch(LogcatAction.Started)
         onStopOrDispose { dispatch(LogcatAction.Stopped) }
@@ -91,11 +109,13 @@ fun LogcatScreen(
         },
         topBar = {
             val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
-            val search by rememberSearchState(viewModel)
             LogcatTopBar(
                 isLoading = isLoading,
-                isSearchActive = search.active,
-                query = search.query,
+                isSearchActive = search.isActive,
+                searchInput = search.input,
+                onBack = onBack,
+                onSearchOpen = openSearch,
+                onSearchClose = closeSearch,
                 onAction = dispatch
             )
         },
@@ -118,52 +138,35 @@ fun LogcatScreen(
     }
 }
 
-@Immutable
-private data class LogcatSearchState(
-    val active: Boolean = false,
-    val query: String = ""
-)
-
-@Composable
-private fun rememberSearchState(viewModel: LogcatViewModel): State<LogcatSearchState> {
-    val flow = remember(viewModel) {
-        viewModel.uiState
-            .map { LogcatSearchState(it.searchActive, it.query) }
-            .distinctUntilChanged()
-    }
-    val initial = remember(viewModel) {
-        viewModel.uiState.value.let { LogcatSearchState(it.searchActive, it.query) }
-    }
-    return flow.collectAsStateWithLifecycle(initialValue = initial)
-}
-
 @Composable
 private fun LogcatTopBar(
     isLoading: Boolean,
     isSearchActive: Boolean,
-    query: String,
+    searchInput: TextFieldState,
+    onBack: () -> Unit,
+    onSearchOpen: () -> Unit,
+    onSearchClose: () -> Unit,
     onAction: (LogcatAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
     AppTopBar(
         title = stringResource(R.string.title_logcat),
-        onBackClick = { onAction(LogcatAction.Back) },
+        onBackClick = onBack,
         modifier = modifier,
         isLoading = isLoading,
         searchState = if (isSearchActive) {
             AppSearchState(
                 isActive = true,
-                query = query,
+                state = searchInput,
                 placeholder = stringResource(R.string.menu_item_search)
             )
         } else {
             null
         },
-        onSearchQueryChange = { onAction(LogcatAction.QueryChanged(it)) },
-        onSearchClose = { onAction(LogcatAction.SearchClosed) },
+        onSearchClose = onSearchClose,
         actions = {
             if (!isSearchActive) {
-                IconButton(onClick = { onAction(LogcatAction.SearchOpened) }) {
+                IconButton(onClick = onSearchOpen) {
                     Icon(
                         painter = painterResource(R.drawable.ic_search_24dp),
                         contentDescription = stringResource(R.string.acc_search)
@@ -331,7 +334,23 @@ private fun LogcatContentPreview() = AppTheme {
 @Composable
 private fun LogcatTopBarPreview() = AppTheme {
     Column {
-        LogcatTopBar(isLoading = true, isSearchActive = false, query = "", onAction = {})
-        LogcatTopBar(isLoading = false, isSearchActive = true, query = "GoLog", onAction = {})
+        LogcatTopBar(
+            isLoading = true,
+            isSearchActive = false,
+            searchInput = rememberTextFieldState(),
+            onBack = {},
+            onSearchOpen = {},
+            onSearchClose = {},
+            onAction = {}
+        )
+        LogcatTopBar(
+            isLoading = false,
+            isSearchActive = true,
+            searchInput = rememberTextFieldState(initialText = "GoLog"),
+            onBack = {},
+            onSearchOpen = {},
+            onSearchClose = {},
+            onAction = {}
+        )
     }
 }

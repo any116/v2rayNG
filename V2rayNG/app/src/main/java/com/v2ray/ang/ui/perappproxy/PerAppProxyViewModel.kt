@@ -1,7 +1,5 @@
 package com.v2ray.ang.ui.perappproxy
 
-import android.os.Bundle
-import androidx.lifecycle.SavedStateHandle
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.AppInfo
 import com.v2ray.ang.extension.delay
@@ -12,29 +10,23 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 private const val SEARCH_DEBOUNCE_MS = 300L
-private const val KEY_SAVED = "per_app_proxy_saved_state"
-private const val KEY_QUERY = "query"
-
 @HiltViewModel
 class PerAppProxyViewModel @Inject constructor(
-    private val repo: PerAppProxyRepository,
-    private val handle: SavedStateHandle
-) : BaseViewModel<PerAppProxyUiState, PerAppProxyAction>(initialState(repo, handle)) {
+    private val repo: PerAppProxyRepository
+) : BaseViewModel<PerAppProxyUiState, PerAppProxyAction>(initialState(repo)) {
 
     private var allApps: List<AppInfo> = emptyList()
-    private var visiblePackages: List<String> = emptyList()
     private var queryJob: Job? = null
     private var persistJob: Job? = null
     private var changed = false
 
     init {
-        handle.setSavedStateProvider(KEY_SAVED) {
-            Bundle().apply { putString(KEY_QUERY, state.query) }
-        }
         load()
     }
 
@@ -46,8 +38,7 @@ class PerAppProxyViewModel @Inject constructor(
             is PerAppProxyAction.BypassModeChanged -> applyBypassMode(action.enabled)
             PerAppProxyAction.SearchOpen -> setState { copy(searchActive = true) }
             PerAppProxyAction.SearchClose -> applyQuery("", searchActive = false, debounce = false)
-            is PerAppProxyAction.QueryChanged ->
-                applyQuery(action.value, searchActive = true, debounce = true)
+            is PerAppProxyAction.QueryChanged -> changeQuery(action.value)
             PerAppProxyAction.SelectAll -> mutateVisible(repo::toggleAll)
             PerAppProxyAction.InvertSelection -> mutateVisible(repo::invert)
             PerAppProxyAction.SelectRecommended -> selectRecommended()
@@ -63,12 +54,19 @@ class PerAppProxyViewModel @Inject constructor(
         publishRows(filtered(apps, state.query))
     }
 
+    private fun changeQuery(query: String) {
+        if (query == state.query) return
+        applyQuery(query, searchActive = true, debounce = query.isNotEmpty())
+    }
+
     private fun applyQuery(query: String, searchActive: Boolean, debounce: Boolean) {
         setState { copy(query = query, searchActive = searchActive) }
         queryJob?.cancel()
         queryJob = launch {
             if (debounce) delay(SEARCH_DEBOUNCE_MS)
-            publishRows(filtered(allApps, query))
+            val rows = filtered(allApps, query)
+            currentCoroutineContext().ensureActive()
+            publishRows(rows)
         }
     }
 
@@ -88,7 +86,7 @@ class PerAppProxyViewModel @Inject constructor(
 
     private fun mutateVisible(operation: (Set<String>, Collection<String>) -> Set<String>) =
         launch {
-            val visible = visiblePackages
+            val visible = state.apps.map { it.packageName }
             if (visible.isEmpty()) return@launch
             val current = state.selected
             val next = withContext(Dispatchers.Default) { operation(current, visible) }
@@ -165,7 +163,6 @@ class PerAppProxyViewModel @Inject constructor(
 
     private fun publishRows(apps: List<AppInfo>) {
         val rows = apps.map { ProxyAppRow(packageName = it.packageName, appName = it.appName) }
-        visiblePackages = rows.map { it.packageName }
         setState { copy(apps = rows) }
     }
 
@@ -189,22 +186,15 @@ class PerAppProxyViewModel @Inject constructor(
         queryJob = null
         persistJob = null
         allApps = emptyList()
-        visiblePackages = emptyList()
         super.onCleared()
     }
 }
 
-private fun initialState(
-    repo: PerAppProxyRepository,
-    handle: SavedStateHandle
-): PerAppProxyUiState {
+private fun initialState(repo: PerAppProxyRepository): PerAppProxyUiState {
     val prefs = repo.loadPreferences()
-    val query = handle.get<Bundle>(KEY_SAVED)?.getString(KEY_QUERY).orEmpty()
     return PerAppProxyUiState(
         selected = prefs.selected,
         perAppProxyEnabled = prefs.perAppProxyEnabled,
-        bypassMode = prefs.bypassMode,
-        query = query,
-        searchActive = query.isNotEmpty()
+        bypassMode = prefs.bypassMode
     )
 }

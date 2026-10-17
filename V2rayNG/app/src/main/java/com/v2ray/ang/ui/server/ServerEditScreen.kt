@@ -9,216 +9,197 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.paging.compose.LazyPagingItems
-import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
-import com.v2ray.ang.ui.components.DropdownOption
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
 import com.v2ray.ang.ui.components.NavigationBarsSpacer
 import com.v2ray.ang.ui.components.verticalScrollbar
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.collectLatest
 
-private const val RawContentSyncDebounceMs = 250L
 private val ChainMemberFabOffsetY = (-28).dp
 
 @Composable
 fun ServerEditScreen(viewModel: ServerEditViewModel) {
     val header by viewModel.header.collectAsStateWithLifecycle()
-    var pendingDialog by rememberSaveable { mutableStateOf<ServerDialog?>(null) }
+    val editor = rememberServerEditorState(viewModel.documentKey)
+    var confirmDelete by key(viewModel.documentKey) {
+        rememberSaveable { mutableStateOf(false) }
+    }
+    var pendingRemovalId by key(viewModel.documentKey) {
+        rememberSaveable { mutableStateOf<String?>(null) }
+    }
 
     val slices = viewModel.slices
-    val chainCandidates = slices.chainCandidates.collectAsLazyPagingItems()
-    val fallbackTags = slices.fallbackTags.collectAsLazyPagingItems()
-    val chainQuery by slices.chainQuery.collectAsStateWithLifecycle()
     val tagQuery by slices.tagQuery.collectAsStateWithLifecycle()
 
-    val editorState = remember { mutableStateOf<TextFieldState?>(null) }
-    val onAction: (ServerAction) -> Unit = remember(viewModel) {
-        { action ->
-            if (action is ServerAction.Save) {
-                editorState.value?.let {
-                    viewModel.onAction(ServerAction.RawContentChanged(it.text.toString()))
-                }
+    val onAction = remember(viewModel) { viewModel::onAction }
+    val onFetchCertificate: () -> Unit = remember(viewModel, editor) {
+        {
+            if (editor.isInitialized) {
+                onAction(ServerAction.FetchCertificate(editor.snapshot().form))
             }
-            viewModel.onAction(action)
+        }
+    }
+    val onRemoveChainMember: (String) -> Unit = remember(editor) {
+        { id ->
+            if (editor.chainMemberNeedsConfirmation(id)) pendingRemovalId = id
+            else editor.removeChainMember(id)
         }
     }
 
     BaseScreen(
         viewModel = viewModel,
-        topBar = { ServerEditTopBar(header = header, onAction = onAction) },
-        floatingActionButton = { ChainMemberFab(configType = header.configType, onAction = onAction) },
+        topBar = {
+            val isMutating by viewModel.isMutating.collectAsStateWithLifecycle()
+            ServerEditTopBar(
+                header = header,
+                editor = editor,
+                isMutating = isMutating,
+                onAction = onAction
+            )
+        },
+        floatingActionButton = {
+            if (header.isLoaded) ChainMemberFab(configType = header.configType, editor = editor)
+        },
         onEvent = { event ->
             when (event) {
                 ServerEvent.ConfirmDeleteProfile -> {
-                    pendingDialog = ServerDialog.DeleteProfile
+                    confirmDelete = true
                     true
                 }
-                is ServerEvent.ConfirmRemoveChainMember -> {
-                    pendingDialog = ServerDialog.RemoveChainMember(event.id)
+                is ServerEvent.CertificateFetched -> {
+                    editor.applyCertificate(event.pinnedCA256)
                     true
                 }
                 else -> false
             }
-        },
+        }
     ) { state, _ ->
-        val rawContent = rememberSyncedRawContent(
-            guid = state.guid,
-            externalValue = state.rawContent,
-            onAction = onAction,
-            editorSlot = editorState,
-        )
+        LaunchedEffect(editor, state.isLoaded) {
+            if (state.isLoaded) state.initialForm?.let { editor.initialize(it, state.initialRawContent) }
+        }
 
-        ServerEditContent(
+        val visibleErrors by remember(editor, state.fieldErrors) {
+            derivedStateOf { editor.visibleErrors(state.fieldErrors) }
+        }
+        if (state.isLoaded && editor.isInitialized) ServerEditContent(
             configType = state.configType,
-            form = state.form,
-            fieldErrors = state.fieldErrors,
+            editor = editor,
+            fieldErrors = visibleErrors,
             options = state.options,
             isFetchingCert = state.isFetchingCert,
-            rawContent = rawContent,
-            chainCandidates = chainCandidates,
-            fallbackTags = fallbackTags,
-            chainQuery = chainQuery,
             tagQuery = tagQuery,
-            onChainQueryChange = slices.onChainQueryChange,
             onTagQueryChange = slices.onTagQueryChange,
-            onAction = onAction,
+            slices = slices,
+            onFetchCertificate = onFetchCertificate,
+            onRemoveChainMember = onRemoveChainMember,
             modifier = Modifier
                 .fillMaxSize()
-                .imePadding(),
+                .imePadding()
         )
 
         ServerEditDialogs(
-            dialog = pendingDialog,
+            confirmDelete = confirmDelete,
+            pendingRemovalId = pendingRemovalId,
             configType = state.configType,
             onAction = onAction,
-            onDismiss = { pendingDialog = null },
+            onRemoveChainMember = editor::removeChainMember,
+            onDismiss = {
+                confirmDelete = false
+                pendingRemovalId = null
+            }
         )
     }
 }
 
-@OptIn(FlowPreview::class)
 @Composable
-private fun rememberSyncedRawContent(
-    guid: String,
-    externalValue: String,
-    onAction: (ServerAction) -> Unit,
-    editorSlot: MutableState<TextFieldState?>,
-): TextFieldState {
-    val textFieldState = rememberTextFieldState()
-
-    var synced by remember(guid) { mutableStateOf<String?>(null) }
-
-    DisposableEffect(textFieldState, editorSlot) {
-        editorSlot.value = textFieldState
-        onDispose { editorSlot.value = null }
-    }
-
-    LaunchedEffect(guid, externalValue) {
-        if (externalValue == synced) return@LaunchedEffect
-        val current = textFieldState.text.toString()
-        if (externalValue == current) {
-            synced = externalValue
-            return@LaunchedEffect
-        }
-        synced = externalValue
-        textFieldState.edit {
-            replace(0, length, externalValue)
-            selection = TextRange(0, 0)
-        }
-    }
-
-    // editor -> ViewModel, debounced so a large config is not re-serialised on every keystroke.
-    LaunchedEffect(textFieldState) {
-        snapshotFlow { textFieldState.text.toString() }
-            .debounce(RawContentSyncDebounceMs)
-            .collectLatest { text ->
-                if (text == synced) return@collectLatest
-                synced = text
-                onAction(ServerAction.RawContentChanged(text))
-            }
-    }
-
-    return textFieldState
-}
-
-@Composable
-private fun ServerEditTopBar(header: ServerHeader, onAction: (ServerAction) -> Unit) {
+private fun ServerEditTopBar(
+    header: ServerHeader,
+    editor: ServerEditorState,
+    isMutating: Boolean,
+    onAction: (ServerAction) -> Unit
+) {
     AppTopBar(
         title = header.configType.toString(),
         onBackClick = { onAction(ServerAction.Back) },
+        isLoading = isMutating,
         actions = {
             if (header.canDelete) {
-                IconButton(onClick = { onAction(ServerAction.DeleteClicked) }) {
+                IconButton(
+                    onClick = { onAction(ServerAction.DeleteClicked) },
+                    enabled = !isMutating
+                ) {
                     Icon(
                         painterResource(R.drawable.ic_delete_24dp),
-                        contentDescription = stringResource(R.string.menu_item_del_config),
+                        contentDescription = stringResource(R.string.menu_item_del_config)
                     )
                 }
             }
-            IconButton(onClick = { onAction(ServerAction.Save) }) {
+            IconButton(
+                enabled = header.isLoaded && editor.isInitialized && !isMutating,
+                onClick = {
+                    if (header.isLoaded && editor.isInitialized) {
+                        val snapshot = editor.snapshot()
+                        onAction(ServerAction.Save(snapshot.form, snapshot.rawContent))
+                    }
+                }
+            ) {
                 Icon(
                     painterResource(R.drawable.ic_fab_check),
-                    contentDescription = stringResource(R.string.menu_item_save_config),
+                    contentDescription = stringResource(R.string.menu_item_save_config)
                 )
             }
-        },
+        }
     )
 }
 
 @Composable
-private fun ChainMemberFab(configType: EConfigType, onAction: (ServerAction) -> Unit) {
-    if (configType != EConfigType.PROXYCHAIN) return
+private fun ChainMemberFab(configType: EConfigType, editor: ServerEditorState) {
+    if (configType != EConfigType.PROXYCHAIN || !editor.isInitialized) return
     FloatingActionButton(
-        onClick = { onAction(ServerAction.AddChainMember) },
+        onClick = editor::addChainMember,
         modifier = Modifier
             .offset(y = ChainMemberFabOffsetY)
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
     ) {
         Icon(
             painterResource(R.drawable.ic_add_24dp),
-            contentDescription = stringResource(R.string.server_proxy_chain_members),
+            contentDescription = stringResource(R.string.server_proxy_chain_members)
         )
     }
 }
 
 @Composable
 private fun ServerEditDialogs(
-    dialog: ServerDialog?,
+    confirmDelete: Boolean,
+    pendingRemovalId: String?,
     configType: EConfigType,
     onAction: (ServerAction) -> Unit,
-    onDismiss: () -> Unit,
+    onRemoveChainMember: (String) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    when (dialog) {
-        ServerDialog.DeleteProfile -> DeleteConfirmDialog(
+    when {
+        confirmDelete -> DeleteConfirmDialog(
             message = stringResource(
                 if (configType == EConfigType.POLICYGROUP) R.string.confirm_delete_policy_group
                 else R.string.confirm_delete_profile
@@ -227,59 +208,54 @@ private fun ServerEditDialogs(
                 onAction(ServerAction.ConfirmDeleteProfile)
                 onDismiss()
             },
-            onDismiss = onDismiss,
+            onDismiss = onDismiss
         )
 
-        is ServerDialog.RemoveChainMember -> DeleteConfirmDialog(
+        pendingRemovalId != null -> DeleteConfirmDialog(
             message = stringResource(R.string.confirm_delete_proxy_chain_member),
             onConfirm = {
-                onAction(ServerAction.ConfirmRemoveChainMember(dialog.id))
+                onRemoveChainMember(pendingRemovalId)
                 onDismiss()
             },
-            onDismiss = onDismiss,
+            onDismiss = onDismiss
         )
 
-        null -> Unit
+        else -> Unit
     }
 }
 
 @Composable
 private fun ServerEditContent(
     configType: EConfigType,
-    form: ServerForm,
+    editor: ServerEditorState,
     fieldErrors: Map<ServerField, Int>,
     options: ServerOptions,
     isFetchingCert: Boolean,
-    rawContent: TextFieldState,
-    chainCandidates: LazyPagingItems<DropdownOption>,
-    fallbackTags: LazyPagingItems<DropdownOption>,
-    chainQuery: String,
     tagQuery: String,
-    onChainQueryChange: (String) -> Unit,
     onTagQueryChange: (String) -> Unit,
-    onAction: (ServerAction) -> Unit,
-    modifier: Modifier = Modifier,
+    slices: ServerSlices,
+    onFetchCertificate: () -> Unit,
+    onRemoveChainMember: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
         when (configType) {
             EConfigType.CUSTOM -> {
                 ServerJsonEditor(
-                    remarks = form.remarks,
-                    rawContent = rawContent,
-                    onAction = onAction,
-                    modifier = Modifier.weight(1f),
+                    remarks = editor[ServerField.REMARKS],
+                    remarksError = fieldErrors[ServerField.REMARKS],
+                    rawContent = editor.rawContent,
+                    modifier = Modifier.weight(1f)
                 )
             }
 
             EConfigType.PROXYCHAIN -> {
                 ProxyChainForm(
-                    remarks = form.remarks,
+                    editor = editor,
                     remarksError = fieldErrors[ServerField.REMARKS],
-                    members = form.chainMembers,
-                    candidates = chainCandidates,
-                    chainQuery = chainQuery,
-                    onChainQueryChange = onChainQueryChange,
-                    onAction = onAction,
+                    chainSlice = slices.chainSlice,
+                    onRetainMembers = slices.retainChainSlices,
+                    onRemoveChainMember = onRemoveChainMember,
                     modifier = Modifier.weight(1f),
                     contentPadding = NavigationBarsBottomPadding(extra = 64.dp)
                 )
@@ -292,16 +268,15 @@ private fun ServerEditContent(
                         .weight(1f)
                         .verticalScrollbar(scrollState)
                         .verticalScroll(scrollState)
-                        .padding(top = 8.dp),
+                        .padding(top = 8.dp)
                 ) {
                     PolicyGroupForm(
-                        form = form,
+                        editor = editor,
                         remarksError = fieldErrors[ServerField.REMARKS],
                         options = options,
-                        fallbackTags = fallbackTags,
+                        fallbackTags = slices.fallbackTags,
                         tagQuery = tagQuery,
-                        onTagQueryChange = onTagQueryChange,
-                        onAction = onAction,
+                        onTagQueryChange = onTagQueryChange
                     )
                     NavigationBarsSpacer()
                 }
@@ -314,14 +289,14 @@ private fun ServerEditContent(
                         .weight(1f)
                         .verticalScrollbar(scrollState)
                         .verticalScroll(scrollState)
-                        .padding(top = 8.dp),
+                        .padding(top = 8.dp)
                 ) {
                     ProtocolForm(
                         configType = configType,
-                        form = form,
+                        editor = editor,
                         fieldErrors = fieldErrors,
                         isFetchingCert = isFetchingCert,
-                        onAction = onAction,
+                        onFetchCertificate = onFetchCertificate
                     )
                     Spacer(modifier = Modifier.height(36.dp))
                     NavigationBarsSpacer()
