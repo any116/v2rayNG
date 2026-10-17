@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -145,6 +147,7 @@ fun AppTopBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchInputField(
     query: String,
@@ -152,12 +155,18 @@ private fun SearchInputField(
     placeholder: String?
 ) {
     val focusRequester = remember { FocusRequester() }
+    val textFieldState = rememberSynchronizedTextFieldState(
+        value = query,
+        onValueChange = onQueryChange,
+        registerForFlush = false,
+    )
+
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+    val clearSearch: () -> Unit = { textFieldState.clearText() }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            singleLine = true,
+            state = textFieldState,
+            lineLimits = TextFieldLineLimits.SingleLine,
             textStyle = MaterialTheme.typography.bodyLarge,
             placeholder = placeholder?.let {
                 {
@@ -174,11 +183,11 @@ private fun SearchInputField(
                 .weight(1f)
                 .focusRequester(focusRequester)
         )
-        if (query.isNotEmpty()) {
-            IconButton(onClick = { onQueryChange("") }) {
+        if (textFieldState.text.isNotEmpty()) {
+            IconButton(onClick = clearSearch) {
                 Icon(
                     painter = painterResource(R.drawable.ic_clear_24dp),
-                    contentDescription = stringResource(R.string.action_close)
+                    contentDescription = stringResource(R.string.acc_clear_search)
                 )
             }
         }

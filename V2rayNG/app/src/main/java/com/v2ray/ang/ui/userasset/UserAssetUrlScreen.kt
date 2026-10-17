@@ -24,6 +24,7 @@ import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
 import com.v2ray.ang.ui.components.FormTextField
+import com.v2ray.ang.ui.components.rememberTextFieldStateRegistry
 
 private val FormVerticalPad = 8.dp
 
@@ -32,13 +33,20 @@ private val FormVerticalPad = 8.dp
  */
 @Composable
 fun UserAssetUrlScreen(viewModel: UserAssetUrlViewModel) {
-    val onAction = remember(viewModel) { viewModel::onAction }
+    val textFieldStateRegistry = rememberTextFieldStateRegistry()
+    val onAction = remember(viewModel, textFieldStateRegistry) {
+        { action: UserAssetUrlAction ->
+            if (action == UserAssetUrlAction.Save) textFieldStateRegistry.flush()
+            viewModel.onAction(action)
+        }
+    }
     val onBack = remember(onAction) { { onAction(UserAssetUrlAction.Back) } }
 
     AppBackHandler(onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,
+        textFieldStateRegistry = textFieldStateRegistry,
         topBar = {
             val isEdit by viewModel.isEdit.collectAsStateWithLifecycle()
             UserAssetUrlTopBar(isEdit = isEdit, onBack = onBack, onAction = onAction)

@@ -10,7 +10,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.components.AppTheme
@@ -25,6 +24,13 @@ sealed interface BackupDialog {
     data object WebDav : BackupDialog
     data object CleanupConfirmation : BackupDialog
 }
+
+private val WebDavFieldOrder = listOf(
+    WebDavField.URL,
+    WebDavField.USERNAME,
+    WebDavField.PASSWORD,
+    WebDavField.PATH,
+)
 
 /** Dialog visibility is UI-local state; exposing `show`/`dismiss` as fields keeps them stable. */
 @Stable
@@ -105,41 +111,45 @@ private fun WebDavDialog(
     onAction: (BackupAction) -> Unit
 ) {
     val callbacks = remember(onAction) { WebDavCallbacks(onAction) }
-    val masked = remember { PasswordVisualTransformation() }
     val urlLabel = stringResource(R.string.title_webdav_url)
     val userLabel = stringResource(R.string.title_webdav_user)
     val passLabel = stringResource(R.string.title_webdav_pass)
     val pathLabel = stringResource(R.string.title_webdav_remote_path)
 
     val fields = remember(form, callbacks, urlLabel, userLabel, passLabel, pathLabel) {
-        listOf(
-            InputField(
-                label = urlLabel,
-                value = form.baseUrl,
-                keyboardType = KeyboardType.Uri,
-                onValueChange = callbacks.onUrlChange
-            ),
-            InputField(
-                label = userLabel,
-                value = form.username,
-                onValueChange = callbacks.onUsernameChange
-            ),
-            InputField(
-                label = passLabel,
-                value = form.password,
-                keyboardType = KeyboardType.Password,
-                visualTransformation = masked,
-                onValueChange = callbacks.onPasswordChange
-            ),
-            InputField(
-                label = pathLabel,
-                value = form.remotePath,
-                onValueChange = callbacks.onPathChange
-            )
-        )
+        WebDavFieldOrder.map { field ->
+            when (field) {
+                WebDavField.URL -> InputField(
+                    label = urlLabel,
+                    value = form.baseUrl,
+                    keyboardType = KeyboardType.Uri,
+                    onValueChange = callbacks.onUrlChange,
+                )
+                WebDavField.USERNAME -> InputField(
+                    label = userLabel,
+                    value = form.username,
+                    onValueChange = callbacks.onUsernameChange,
+                )
+                WebDavField.PASSWORD -> InputField(
+                    label = passLabel,
+                    value = form.password,
+                    keyboardType = KeyboardType.Password,
+                    isPassword = true,
+                    onValueChange = callbacks.onPasswordChange,
+                )
+                WebDavField.PATH -> InputField(
+                    label = pathLabel,
+                    value = form.remotePath,
+                    onValueChange = callbacks.onPathChange,
+                )
+            }
+        }
     }
     val onConfirm = remember(onDismiss, onAction) {
-        {
+        { values: List<String> ->
+            WebDavFieldOrder.zip(values).forEach { (field, value) ->
+                onAction(BackupAction.WebDavFieldChanged(field, value))
+            }
             onAction(BackupAction.WebDavSaved)
             onDismiss()
         }

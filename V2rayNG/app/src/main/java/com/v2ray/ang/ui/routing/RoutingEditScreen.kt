@@ -40,6 +40,7 @@ import com.v2ray.ang.ui.components.FormTextField
 import com.v2ray.ang.ui.components.NavigationBarsSpacer
 import com.v2ray.ang.ui.components.SettingsSwitchItem
 import com.v2ray.ang.ui.components.StringOptions
+import com.v2ray.ang.ui.components.rememberTextFieldStateRegistry
 import com.v2ray.ang.ui.components.rememberPreviewDropdownItems
 import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -70,7 +71,15 @@ fun RoutingEditScreen(
     viewModel: RoutingEditViewModel,
     modifier: Modifier = Modifier
 ) {
-    val onAction = remember(viewModel) { viewModel::onAction }
+    val textFieldStateRegistry = rememberTextFieldStateRegistry()
+    val onAction = remember(viewModel, textFieldStateRegistry) {
+        { action: RoutingEditAction ->
+            if (action == RoutingEditAction.Save || action == RoutingEditAction.SelectProcess) {
+                textFieldStateRegistry.flush()
+            }
+            viewModel.onAction(action)
+        }
+    }
     val callbacks = remember(onAction) { RoutingFieldCallbacks(onAction) }
 
     val outboundItems = viewModel.slices.outboundTags.collectAsLazyPagingItems()
@@ -90,6 +99,7 @@ fun RoutingEditScreen(
     BaseScreen(
         viewModel = viewModel,
         modifier = modifier,
+        textFieldStateRegistry = textFieldStateRegistry,
         topBar = { RoutingEditTopBar(isEdit = isEdit, onAction = onAction) },
         onResult = { result -> onAction(RoutingEditAction.ResultReceived(result)) },
         onEvent = { event ->

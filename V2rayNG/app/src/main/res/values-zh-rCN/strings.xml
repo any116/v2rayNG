@@ -561,6 +561,7 @@
     <string name="acc_cancel_connection_test">取消连接测试</string>
     <string name="acc_back">返回</string>
     <string name="acc_search">搜索</string>
+    <string name="acc_clear_search">清除搜索</string>
     <string name="acc_add">添加配置</string>
     <string name="acc_more">更多选项</string>
     <string name="acc_selected_server">Selected</string>

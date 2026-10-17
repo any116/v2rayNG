@@ -32,8 +32,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
@@ -184,12 +182,12 @@ fun SettingsEditItem(
                 InputField(
                     label = title,
                     value = text,
-                    keyboardType = if (keyboardNumber) KeyboardType.Number else KeyboardType.Text,
-                    visualTransformation = if (isPassword) {
-                        PasswordVisualTransformation()
-                    } else {
-                        VisualTransformation.None
+                    keyboardType = when {
+                        isPassword -> KeyboardType.Password
+                        keyboardNumber -> KeyboardType.Number
+                        else -> KeyboardType.Text
                     },
+                    isPassword = isPassword,
                     onValueChange = { text = it }
                 )
             )
@@ -199,7 +197,10 @@ fun SettingsEditItem(
             fields = fields,
             confirmText = stringResource(R.string.action_ok),
             dismissText = stringResource(R.string.action_cancel),
-            onConfirm = { showDialog = false; onValueChanged(text) },
+            onConfirm = { values ->
+                showDialog = false
+                onValueChanged(values.firstOrNull() ?: text)
+            },
             onDismiss = { showDialog = false }
         )
     }

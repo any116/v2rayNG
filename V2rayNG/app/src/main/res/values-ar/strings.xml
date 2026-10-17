@@ -561,6 +561,7 @@
     <string name="acc_cancel_connection_test">إلغاء اختبار الاتصال</string>
     <string name="acc_back">رجوع</string>
     <string name="acc_search">بحث</string>
+    <string name="acc_clear_search">مسح البحث</string>
     <string name="acc_add">إضافة تكوين</string>
     <string name="acc_more">المزيد من الخيارات</string>
     <string name="acc_selected_server">Selected</string>

@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -89,7 +90,8 @@ data class DropdownOption(val value: String, val source: Source) {
  *
  * The field itself is always editable and doubles as the search box: typing
  * commits the value through [onValueChange] immediately and pushes a debounced
- * filter to [onQueryChange]. Picking an option writes it to both.
+ * filter to [onQueryChange]. Picking an option writes it to the value and local
+ * draft; the already submitted filter is intentionally not reloaded.
  * The label includes a localized search hint so this behavior is discoverable.
  *
  * ## Why not [ExposedDropdownMenu]
@@ -136,10 +138,33 @@ fun FormPagedDropdownField(
     var draftQuery by rememberSaveable { mutableStateOf(query) }
     var lastPushedQuery by remember { mutableStateOf(query) }
     var anchorRect by remember { mutableStateOf<IntRect?>(null) }
+    var programmaticSelection by remember { mutableStateOf<String?>(null) }
 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val currentOnQueryChange by rememberUpdatedState(onQueryChange)
+
+    val dismissDropdown: () -> Unit = {
+        expanded = false
+        if (resetQueryOnDismiss) draftQuery = ""
+    }
+
+    val textFieldState = rememberSynchronizedTextFieldState(
+        value = value,
+        onValueChange = { text ->
+            if (programmaticSelection == text) {
+                programmaticSelection = null
+            } else {
+                onValueChange(text)
+                draftQuery = text
+                if (!expanded) expanded = true
+            }
+        },
+        onFlush = { text ->
+            onValueChange(text)
+            draftQuery = text
+        },
+    )
 
     // Debounce: draft -> upstream pager. collectLatest cancels the pending delay
     // on each keystroke, so only the last value within debounceMillis is pushed.
@@ -159,39 +184,32 @@ fun FormPagedDropdownField(
         if (expanded) runCatching { listState.scrollToItem(0) }
     }
 
-    // Back press while the popup is showing is handled by PopupProperties below,
-    // which forwards to onDismissRequest. Keep this as a safety net for the IME
-    // path where the popup never sees the key event first.
+    // Route every close path through the same handler so resetQueryOnDismiss also applies to the
+    // ExposedDropdownMenuBox BackHandler used by this non-focusable popup.
     BackHandler(enabled = expanded) {
-        expanded = false
-        if (resetQueryOnDismiss) draftQuery = ""
+        dismissDropdown()
     }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { newExpanded ->
             if (!enabled) return@ExposedDropdownMenuBox
-            expanded = newExpanded
+            if (newExpanded) expanded = true else dismissDropdown()
         },
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
     ) {
         OutlinedTextField(
-            value = value,
-            onValueChange = { text ->
-                onValueChange(text)   // commit immediately
-                draftQuery = text     // filter, debounced
-                if (!expanded) expanded = true
-            },
+            state = textFieldState,
             enabled = enabled,
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             isError = isError,
             label = { Text(stringResource(R.string.form_searchable_label, label)) },
             placeholder = placeholder?.let { { Text(it) } },
             supportingText = supportingText?.let { { Text(it) } },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            onKeyboardAction = { focusManager.clearFocus() },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             colors = appFieldColors(isError = isError),
             modifier = Modifier
@@ -213,11 +231,12 @@ fun FormPagedDropdownField(
                 anchor = rect,
                 items = items,
                 listState = listState,
-                onDismiss = {
-                    expanded = false
-                    if (resetQueryOnDismiss) draftQuery = ""
-                },
+                onDismiss = dismissDropdown,
                 onPick = { picked ->
+                    if (textFieldState.text.toString() != picked) {
+                        programmaticSelection = picked
+                        textFieldState.setTextAndPlaceCursorAtEnd(picked)
+                    }
                     onValueChange(picked)
                     draftQuery = picked
                     // Don't re-trigger the debounced filter with the value we

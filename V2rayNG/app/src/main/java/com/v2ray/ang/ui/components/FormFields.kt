@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -107,6 +109,7 @@ internal fun appFieldColors(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormTextField(
     label: String,
@@ -120,14 +123,13 @@ fun FormTextField(
     supportingText: String? = null,
     maxLines: Int = 15
 ) {
+    val textFieldState = rememberSynchronizedTextFieldState(value, onValueChange)
     OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+        state = textFieldState,
         label = { Text(label) },
         placeholder = placeholder?.let { { Text(it) } },
         supportingText = supportingText?.let { { Text(it) } },
-        singleLine = false,
-        maxLines = maxLines,
+        lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = maxLines),
         enabled = enabled,
         isError = isError,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
@@ -156,6 +158,19 @@ fun FormDropdownField(
     var expanded by rememberSaveable { mutableStateOf(false) }
     val menuScrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
+    var programmaticSelection by remember { mutableStateOf<String?>(null) }
+    val textFieldState = rememberSynchronizedTextFieldState(
+        value = value,
+        onValueChange = { text ->
+            if (programmaticSelection == text) {
+                programmaticSelection = null
+            } else if (editable) {
+                onValueChange(text)
+                if (!expanded) expanded = true
+            }
+        },
+        onFlush = { text -> if (editable) onValueChange(text) },
+    )
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -168,16 +183,10 @@ fun FormDropdownField(
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
     ) {
         OutlinedTextField(
-            value = value,
-            onValueChange = {
-                if (editable) {
-                    onValueChange(it)
-                    if (!expanded) expanded = true
-                }
-            },
+            state = textFieldState,
             readOnly = !editable,
             enabled = enabled,
-            singleLine = true,
+            lineLimits = TextFieldLineLimits.SingleLine,
             isError = isError,
             label = { Text(label) },
             placeholder = placeholder?.let { { Text(it) } },
@@ -203,6 +212,10 @@ fun FormDropdownField(
                 DropdownMenuItem(
                     text = { Text(option) },
                     onClick = {
+                        if (textFieldState.text.toString() != option) {
+                            programmaticSelection = option
+                            textFieldState.setTextAndPlaceCursorAtEnd(option)
+                        }
                         onValueChange(option)
                         expanded = false
                         focusManager.clearFocus()

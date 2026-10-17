@@ -10,21 +10,18 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -39,12 +36,14 @@ import com.v2ray.ang.ui.base.BaseScreen
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
 import com.v2ray.ang.ui.components.DropdownOption
+import com.v2ray.ang.ui.components.rememberSynchronizedTextFieldState
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
 import com.v2ray.ang.ui.components.NavigationBarsSpacer
+import com.v2ray.ang.ui.components.rememberTextFieldStateRegistry
 import com.v2ray.ang.ui.components.verticalScrollbar
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val RawContentSyncDebounceMs = 250L
 private val ChainMemberFabOffsetY = (-28).dp
@@ -60,13 +59,11 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
     val chainQuery by slices.chainQuery.collectAsStateWithLifecycle()
     val tagQuery by slices.tagQuery.collectAsStateWithLifecycle()
 
-    val editorState = remember { mutableStateOf<TextFieldState?>(null) }
-    val onAction: (ServerAction) -> Unit = remember(viewModel) {
+    val textFieldStateRegistry = rememberTextFieldStateRegistry()
+    val onAction: (ServerAction) -> Unit = remember(viewModel, textFieldStateRegistry) {
         { action ->
-            if (action is ServerAction.Save) {
-                editorState.value?.let {
-                    viewModel.onAction(ServerAction.RawContentChanged(it.text.toString()))
-                }
+            if (action is ServerAction.Save || action is ServerAction.FetchCertificate) {
+                textFieldStateRegistry.flush()
             }
             viewModel.onAction(action)
         }
@@ -74,6 +71,7 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
 
     BaseScreen(
         viewModel = viewModel,
+        textFieldStateRegistry = textFieldStateRegistry,
         topBar = { ServerEditTopBar(header = header, onAction = onAction) },
         floatingActionButton = { ChainMemberFab(configType = header.configType, onAction = onAction) },
         onEvent = { event ->
@@ -94,7 +92,6 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
             guid = state.guid,
             externalValue = state.rawContent,
             onAction = onAction,
-            editorSlot = editorState,
         )
 
         ServerEditContent(
@@ -125,49 +122,43 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
     }
 }
 
-@OptIn(FlowPreview::class)
 @Composable
 private fun rememberSyncedRawContent(
     guid: String,
     externalValue: String,
     onAction: (ServerAction) -> Unit,
-    editorSlot: MutableState<TextFieldState?>,
 ): TextFieldState {
-    val textFieldState = rememberTextFieldState()
+    val scope = rememberCoroutineScope()
+    var rawJob by remember(guid) { mutableStateOf<Job?>(null) }
+    val currentOnAction by rememberUpdatedState(onAction)
+    var loadedGuid by remember { mutableStateOf<String?>(null) }
 
-    var synced by remember(guid) { mutableStateOf<String?>(null) }
-
-    DisposableEffect(textFieldState, editorSlot) {
-        editorSlot.value = textFieldState
-        onDispose { editorSlot.value = null }
-    }
-
-    LaunchedEffect(guid, externalValue) {
-        if (externalValue == synced) return@LaunchedEffect
-        val current = textFieldState.text.toString()
-        if (externalValue == current) {
-            synced = externalValue
-            return@LaunchedEffect
-        }
-        synced = externalValue
-        textFieldState.edit {
-            replace(0, length, externalValue)
-            selection = TextRange(0, 0)
+    val scheduleRawChange: (String) -> Unit = { text ->
+        rawJob?.cancel()
+        rawJob = scope.launch {
+            delay(RawContentSyncDebounceMs)
+            currentOnAction(ServerAction.RawContentChanged(text))
         }
     }
+    val flushRawChange: (String) -> Unit = { text ->
+        rawJob?.cancel()
+        currentOnAction(ServerAction.RawContentChanged(text))
+    }
 
-    // editor -> ViewModel, debounced so a large config is not re-serialised on every keystroke.
-    LaunchedEffect(textFieldState) {
-        snapshotFlow { textFieldState.text.toString() }
-            .debounce(RawContentSyncDebounceMs)
-            .collectLatest { text ->
-                if (text == synced) return@collectLatest
-                synced = text
-                onAction(ServerAction.RawContentChanged(text))
+    return rememberSynchronizedTextFieldState(
+        value = externalValue,
+        onValueChange = scheduleRawChange,
+        onFlush = flushRawChange,
+        setExternalValue = { state, text ->
+            val isNewDocument = loadedGuid != guid
+            val caret = state.selection.start.coerceAtMost(text.length)
+            state.edit {
+                replace(0, length, text)
+                selection = if (isNewDocument) TextRange(0) else TextRange(caret)
             }
-    }
-
-    return textFieldState
+            loadedGuid = guid
+        }
+    )
 }
 
 @Composable

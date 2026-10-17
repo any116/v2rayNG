@@ -38,6 +38,7 @@ import com.v2ray.ang.ui.components.FormPagedDropdownField
 import com.v2ray.ang.ui.components.FormTextField
 import com.v2ray.ang.ui.components.NavigationBarsSpacer
 import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.rememberTextFieldStateRegistry
 import com.v2ray.ang.ui.components.rememberPreviewDropdownItems
 import com.v2ray.ang.ui.components.verticalScrollbar
 
@@ -79,7 +80,13 @@ private class SubEditHost(private val onAction: (SubEditAction) -> Unit) {
 
 @Composable
 fun SubEditScreen(viewModel: SubEditViewModel) {
-    val onAction = remember(viewModel) { viewModel::onAction }
+    val textFieldStateRegistry = rememberTextFieldStateRegistry()
+    val onAction = remember(viewModel, textFieldStateRegistry) {
+        { action: SubEditAction ->
+            if (action == SubEditAction.Save) textFieldStateRegistry.flush()
+            viewModel.onAction(action)
+        }
+    }
     val callbacks = remember(onAction) { SubFieldCallbacks(onAction) }
     val host = remember(onAction) { SubEditHost(onAction) }
 
@@ -92,6 +99,7 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
 
     BaseScreen(
         viewModel = viewModel,
+        textFieldStateRegistry = textFieldStateRegistry,
         topBar = { SubEditTopBar(host = host, onAction = onAction) }
     ) { state, _ ->
         SideEffect {

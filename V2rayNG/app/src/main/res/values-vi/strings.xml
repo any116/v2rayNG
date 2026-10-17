@@ -561,6 +561,7 @@
     <string name="acc_cancel_connection_test">Hủy kiểm tra kết nối</string>
     <string name="acc_back">Quay lại</string>
     <string name="acc_search">Tìm kiếm</string>
+    <string name="acc_clear_search">Xóa tìm kiếm</string>
     <string name="acc_add">Thêm cấu hình</string>
     <string name="acc_more">Tùy chọn khác</string>
     <string name="acc_selected_server">Selected</string>

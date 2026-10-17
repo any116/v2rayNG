@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -24,7 +25,10 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.components.LocalAppSnackbar
+import com.v2ray.ang.ui.components.LocalTextFieldStateRegistry
+import com.v2ray.ang.ui.components.TextFieldStateRegistry
 import com.v2ray.ang.ui.components.ToastType
+import com.v2ray.ang.ui.components.rememberTextFieldStateRegistry
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.flow.Flow
 
@@ -41,6 +45,10 @@ fun Context.findActivity(): Activity? =
  *
  * @param onEvent Optional interceptor for events; return `true` to consume.
  * @param onResult Callback for [BaseResult] from child screens.
+ * @param textFieldStateRegistry Optional registry exposed to state-based form fields. Editing
+ * screens flush it explicitly immediately before their Save action.
+ * @param flushBeforeAction Predicate for actions that need the latest local field text before
+ * reading the ViewModel state. It is false by default so cancel/delete actions do not commit edits.
  */
 @Composable
 fun <S : BaseUiState, A : BaseAction> BaseScreen(
@@ -53,6 +61,8 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
     autoToastResult: Boolean = true,
     onEvent: (BaseEvent) -> Boolean = { false },
     onResult: (BaseResult) -> Unit = {},
+    textFieldStateRegistry: TextFieldStateRegistry? = null,
+    flushBeforeAction: (A) -> Boolean = { false },
     content: @Composable (state: S, onAction: (A) -> Unit) -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -84,21 +94,30 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
         },
     )
 
-    val dispatch = remember(viewModel) { viewModel::onAction }
+    val registry = textFieldStateRegistry ?: rememberTextFieldStateRegistry()
+    val shouldFlushBeforeAction = rememberUpdatedState(flushBeforeAction)
+    val dispatch = remember(viewModel, registry) {
+        { action: A ->
+            if (shouldFlushBeforeAction.value(action)) registry.flush()
+            viewModel.onAction(action)
+        }
+    }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = topBar,
-        bottomBar = bottomBar,
-        floatingActionButton = floatingActionButton,
-        contentWindowInsets = contentWindowInsets,
-    ) { innerPadding ->
-        Box(
-            Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            content(state, dispatch)
+    CompositionLocalProvider(LocalTextFieldStateRegistry provides registry) {
+        Scaffold(
+            modifier = modifier.fillMaxSize(),
+            topBar = topBar,
+            bottomBar = bottomBar,
+            floatingActionButton = floatingActionButton,
+            contentWindowInsets = contentWindowInsets,
+        ) { innerPadding ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                content(state, dispatch)
+            }
         }
     }
 }

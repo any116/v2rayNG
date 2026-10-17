@@ -154,8 +154,8 @@ ui/                    # 全部 Compose UI
                        # BaseViewModel / BaseEditViewModel / BaseResult / EditFormSaver
                        # （BaseViewModelFactory 为遗留死代码，生产路径禁止使用）
   components/          # 跨屏共享组件：Theme / Common / Dialog / FormFields /
-                       # FormPagedDropdownField / PrefsState / SettingsItem / Menu /
-                       # Scrollbar / SnackBar
+                        # FormPagedDropdownField / TextFieldStateSync / PrefsState /
+                        # SettingsItem / Menu / Scrollbar / SnackBar
   main/ settings/ server/ subscription/ routing/ perappproxy/ apppicker/
   userasset/ backup/ logcat/ scanner/ about/ checkupdate/ shortcut/ urlscheme/
   widght/              # Glance 桌面组件 SwitchWidget（包名 com.v2ray.ang.ui.widget，目录名为历史拼写）

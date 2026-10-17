@@ -16,8 +16,9 @@ ui/components/ 跨屏共享组件与主题
   Dialog.kt                   ConfirmDialog、DeleteConfirmDialog、InputDialog、QRCodeDialog、SelectListDialog
   FormFields.kt               FormTextField、FormDropdownField、appFieldColors、StringOptions、
                               rememberStringOptions
-  FormPagedDropdownField.kt   Paging 3 支撑的可搜索下拉（DropdownOption / FormPagedDropdownField），
-                              Popup + LazyColumn + 去抖，替代 ExposedDropdownMenu
+  FormPagedDropdownField.kt    Paging 3 支撑的可搜索下拉（DropdownOption / FormPagedDropdownField），
+                               Popup + LazyColumn + 去抖，替代 ExposedDropdownMenu
+  TextFieldStateSync.kt        state-based TextFieldState 与 UiState/UDF String 边界的同步桥
   PrefsState.kt               rememberSettingBool / rememberSettingString（无 ViewModel 的小开关两向绑定）
   SettingsItem.kt             PreferenceGroupHeader、SettingsSwitchItem/ListItem/EditItem/MenuItem
   Menu.kt                     AppDropdownMenuItems
