@@ -147,7 +147,7 @@
 - [ ] ViewModel 用 `@HiltViewModel` + `@Inject constructor`；Activity 用 `@AndroidEntryPoint`
 - [ ] `@Inject constructor` 参数没有全带默认值（否则 Dagger 报
       `may only contain one injected constructor`）
-- [ ] 没有新增自定义 `ViewModelProvider.Factory` / `baseViewModels` 调用
+- [ ] 没有新增自定义 `ViewModelProvider.Factory`
 - [ ] 没有把现有 object 又包一层 `@Singleton` 影子
 - [ ] 不在 `attachBaseContext` / 属性初始化器里访问注入字段
 - [ ] 新模块只放接缝，不放业务

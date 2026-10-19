@@ -160,8 +160,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 
 - `@HiltViewModel` + `@Inject constructor(repo, savedStateHandle)`；
   Activity 侧标准 `private val viewModel: XxxViewModel by viewModels()`。
-  **不得**手工 new ViewModel，也不得新增自定义 `ViewModelProvider.Factory`
-  （`ui/base/BaseViewModelFactory.kt` 仅为历史兼容保留，生产路径禁止使用）。
+  **不得**手工 new ViewModel，也不得新增自定义 `ViewModelProvider.Factory`。
 - `@Inject constructor` 的参数**不得**全部带默认值（见 `hilt-rules.md` §2）。
 - 所有协程走 `launch(loading =, context =, onError =) { }`，不用裸 `viewModelScope.launch`。
 - 需要长期存活的 Job（预取、去抖、轮询）保存成字段，在 `onCleared()` 里取消。

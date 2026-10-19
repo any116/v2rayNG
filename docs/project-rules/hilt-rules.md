@@ -7,10 +7,6 @@
 ViewModel 标 `@HiltViewModel` + `@Inject constructor`，Activity 侧用标准
 `private val viewModel: XxxViewModel by viewModels()`。
 
-`ui/base/BaseViewModelFactory.kt`（`BaseViewModelFactory` / `baseViewModels {}`）已从生产路径移除，
-仅为历史兼容保留。**不得新增自定义 `ViewModelProvider.Factory`，不得手工 new ViewModel。**
-`baseViewModels` 在源码里应当始终只出现在它自身的定义处。
-
 ## 2. @Inject 构造函数禁止全参数默认值
 
 **Kotlin 在一个构造函数的全部参数都带默认值时会合成一个无参构造函数重载，并把

@@ -85,8 +85,6 @@ Application 带 `@HiltAndroidApp`，Activity / Service 带 `@AndroidEntryPoint`�
 Worker 用 `@HiltWorker` + `@AssistedInject`，`HiltWorkerFactory` 挂在
 `AngApplication` 手动构建的 WorkManager `Configuration` 上。
 
-`BaseViewModelFactory` / `baseViewModels {}` 已从生产代码移除（`BaseViewModelFactory.kt`
-仅作为死代码保留），不要新增自定义 Factory，也不要手工 new ViewModel。
 `@Inject constructor` 的参数**不得**全部带默认值，否则 Kotlin 合成的无参构造函数会
 让 Dagger 报 `may only contain one injected constructor`。细则见
 `docs/project-rules/hilt-rules.md`。
@@ -152,7 +150,6 @@ ui/                    # 全部 Compose UI
   AppRoute.kt          # 所有导航目标，自己构造 Intent
   base/                # BaseActivity / BaseHelperActivity / BaseContract / BaseScreen /
                        # BaseViewModel / BaseEditViewModel / BaseResult / EditFormSaver
-                       # （BaseViewModelFactory 为遗留死代码，生产路径禁止使用）
   components/          # 跨屏共享组件：Theme / Common / Dialog / FormFields /
                        # FormPagedDropdownField / TextEditorState / SearchFieldController / PrefsState /
                        # SettingsItem / Menu / Scrollbar / SnackBar
@@ -161,7 +158,7 @@ ui/                    # 全部 Compose UI
   widght/              # Glance 桌面组件 SwitchWidget（包名 com.v2ray.ang.ui.widget，目录名为历史拼写）
 ```
 
-### Base 层契约（`ui/base/`，共 9 个文件）
+### Base 层契约（`ui/base/`，共 8 个文件）
 
 - `BaseUiState` / `BaseAction` / `BaseEvent` / `BaseRoute` / `BaseText` / `BaseMessage`
   —— 在 `BaseContract.kt`，是 SSOT/UDF 的类型基座。
@@ -229,7 +226,6 @@ UI 侧的接收点只有一个：`MainRepository` 内部的 `BroadcastReceiver` 
 | 加图标按钮、可点击行 | `compose/accessibility.md` |
 | 写测试 | `compose/testing.md` |
 | 提交前自查 / Review 别人 | `compose/review-checklist.md` |
-| 查阅历史迁移计划 | `archive/README.md` |
 
 ## Coding Conventions
 
