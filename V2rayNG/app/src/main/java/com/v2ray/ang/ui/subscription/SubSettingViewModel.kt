@@ -190,9 +190,12 @@ class SubSettingViewModel @Inject constructor(
         }
 
         if (options.autoTestAfterUpdate) {
-            repo.updateInBackground()
-            changed = true
-            toast(R.string.subscription_updater_job_tips)
+            if (repo.updateInBackground()) {
+                changed = true
+                toast(R.string.subscription_updater_job_tips)
+            } else {
+                toastError()
+            }
             return
         }
 

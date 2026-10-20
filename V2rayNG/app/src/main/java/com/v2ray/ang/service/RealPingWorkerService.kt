@@ -2,6 +2,7 @@ package com.v2ray.ang.service
 
 import android.content.Context
 import android.os.SystemClock
+import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.core.CoreConfigManager
 import com.v2ray.ang.core.CoreNativeManager
@@ -18,15 +19,21 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
+import java.io.RandomAccessFile
 import java.util.concurrent.Executors
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
@@ -35,14 +42,43 @@ import kotlin.math.min
 internal object RealPingExecutionLimiter {
     private val customConfigMutex = Mutex()
 
+    /**
+     * CUSTOM measurements can run from both :tasks and :bg. A Kotlin Mutex only protects one
+     * process, so the native probe also needs a process-level lock. The in-process Mutex remains
+    * necessary because FileChannel rejects overlapping locks from the same JVM.
+     */
+    private val customConfigLockFile: File by lazy {
+        val applicationFilesDir = runCatching { AngApplication.application.filesDir }.getOrNull()
+        val parent = applicationFilesDir ?: File(
+            System.getProperty("java.io.tmpdir").orEmpty().ifEmpty { "." },
+            "v2rayng",
+        ).apply {
+            runCatching { mkdirs() }
+        }
+        File(parent, "realping_custom.lock").apply {
+            runCatching { createNewFile() }
+        }
+    }
+
     suspend fun <T> run(configType: EConfigType, block: () -> T): T {
         // Custom profiles bypass speed-test trimming and start complete Xray configs. Parallel
         // teardown can abort the native probe process, so serialize their JNI measurements
         // globally across batches.
         return if (configType == EConfigType.CUSTOM) {
-            customConfigMutex.withLock { block() }
+            customConfigMutex.withLock {
+                runInterruptible(Dispatchers.IO) {
+                    RandomAccessFile(customConfigLockFile, "rw").use { randomAccessFile ->
+                        val fileLock = randomAccessFile.channel.lock()
+                        try {
+                            block()
+                        } finally {
+                            fileLock.release()
+                        }
+                    }
+                }
+            }
         } else {
-            block()
+            runInterruptible(Dispatchers.IO) { block() }
         }
     }
 }
@@ -81,8 +117,8 @@ class RealPingWorkerService(
     private val testUrl = SettingsManager.getDelayTestUrl()
 
     private val job = SupervisorJob()
-    private val dispatcher = Executors.newFixedThreadPool(workerCount, RealPingThreadFactory)
-        .asCoroutineDispatcher()
+    private val executor: ExecutorService = Executors.newFixedThreadPool(workerCount, RealPingThreadFactory)
+    private val dispatcher = executor.asCoroutineDispatcher()
     private val scope = CoroutineScope(job + dispatcher + CoroutineName("RealPingBatchWorker"))
 
     private val nextIndex = AtomicInteger(0)
@@ -127,6 +163,18 @@ class RealPingWorkerService(
         job.cancel()
     }
 
+    /** Cancels the batch and waits briefly for interruptible probe calls to leave the pool. */
+    suspend fun cancelAndJoin(timeoutMillis: Long = CANCEL_JOIN_TIMEOUT_MS): Boolean {
+        job.cancel()
+        return withTimeoutOrNull(timeoutMillis) {
+            job.join()
+            true
+        } ?: run {
+            close(force = true)
+            false
+        }
+    }
+
     private suspend fun runWorker() {
         while (currentCoroutineContext().isActive) {
             val index = nextIndex.getAndIncrement()
@@ -168,8 +216,9 @@ class RealPingWorkerService(
         onEvent(RealPingEvent.Progress("$running / $remaining"))
     }
 
-    private fun close() {
+    private fun close(force: Boolean = false) {
         try {
+            if (force) executor.shutdownNow()
             dispatcher.close()
         } catch (_: Throwable) {
             // ignore
@@ -190,7 +239,10 @@ class RealPingWorkerService(
         ) {
             val url = config.server.orEmpty()
             val port = config.serverPort.orEmpty().toInt()
-            if (SpeedtestManager.socketConnectTime(url, port, TCP_PRECHECK_TIMEOUT_MS) <= -1L) {
+            if (runInterruptible(Dispatchers.IO) {
+                    SpeedtestManager.socketConnectTime(url, port, TCP_PRECHECK_TIMEOUT_MS)
+                } <= -1L
+            ) {
                 return retFailure
             }
         }
@@ -216,11 +268,13 @@ class RealPingWorkerService(
             && config.server.isNotNullEmpty()
             && config.serverPort?.toIntOrNull() != null
         ) {
-            return SpeedtestManager.socketConnectTime(
-                config.server.orEmpty(),
-                config.serverPort.orEmpty().toInt(),
-                TCP_PRECHECK_TIMEOUT_MS
-            )
+            return runInterruptible(Dispatchers.IO) {
+                SpeedtestManager.socketConnectTime(
+                    config.server.orEmpty(),
+                    config.serverPort.orEmpty().toInt(),
+                    TCP_PRECHECK_TIMEOUT_MS,
+                )
+            }
         }
 
         return retFailure
@@ -235,5 +289,6 @@ class RealPingWorkerService(
     private companion object {
         const val PROGRESS_INTERVAL_MS = 200L
         const val TCP_PRECHECK_TIMEOUT_MS = 1000
+        const val CANCEL_JOIN_TIMEOUT_MS = 5_000L
     }
 }

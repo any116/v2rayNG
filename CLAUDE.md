@@ -129,10 +129,11 @@ di/                    # Hilt 接缝：Qualifiers / DispatcherModule / NetworkMo
                        # DatabaseModule / ThemeModule / ServiceEntryPoint
 service/               # 前台服务（跑在 :daemon / :tasks）
   CoreVpnService / CoreProxyOnlyService / CoreRootService / CoreTestService
-  SubscriptionUpdateService / RealPingWorkerService / TestResultWriter / QSTileService
+  RealPingWorkerService / TestResultWriter / QSTileService
   TProxyService / DialerNativeService / DialerWebviewService / NetworkMonitor / ProcessService
 handler/               # 进程无关的数据源与领域逻辑（见 architecture-rules.md）
-  SettingsManager / AngConfigManager / SubscriptionUpdater / SubscriptionUpdateWorker(@HiltWorker)
+  SettingsManager / AngConfigManager / SubscriptionUpdater /
+  SubscriptionUpdateWorker / SubscriptionScheduleWorker(@HiltWorker)
   NotificationManager / WebDavManager / UpdateCheckerManager / SpeedtestManager
   CertificateFingerprintManager / SettingsChangeManager / WidgetStateManager / AppLocaleManager
 dto/                   # 跨层不可变数据类（ServerRowItem / GroupMapItem / ConnectionTestResult …）

@@ -401,6 +401,7 @@ open class MainRepository @Inject constructor(
     open suspend fun prepare() = withIO {
         SettingsManager.initAssets(app, app.assets)
         SubscriptionUpdater.sync(app)
+        Unit
     }
 
     private companion object {

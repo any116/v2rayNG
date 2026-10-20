@@ -6,8 +6,10 @@
 | --- | --- |
 | 默认（UI） | 所有 Activity、`MainRepository` 的 receiver |
 | `:daemon` | `CoreVpnService`、`CoreProxyOnlyService`、`CoreRootService`、`QSTileService`、`TaskerReceiver`、`ScSwitchActivity` / `ScStartActivity` / `ScStopActivity` |
-| `:tasks` | `CoreTestService`、`SubscriptionUpdateService` |
-| `:bg` | WorkManager、`WidgetProvider`（Glance）、`androidx.work.multiprocess.RemoteWorkManagerService` |
+| `:tasks` | `CoreTestService` |
+| `:bg` | WorkManager、`SubscriptionUpdateWorker`、`SubscriptionScheduleWorker`、
+  WorkManager 的 `SystemForegroundService`、
+  `WidgetProvider`（Glance）、`androidx.work.multiprocess.RemoteWorkManagerService` |
 
 跨进程**不能**共享内存对象。唯一的共享状态是 **Room 3 数据库文件**（`v2rayng.db`），
 唯一的通信手段是广播、有序广播确认与 Messenger。
@@ -22,7 +24,7 @@ Room 的跨进程一致性靠 `DatabaseModule` 的 `enableMultiInstanceInvalidat
   - `sendMsg2Service` / `sendMsg2UI` —— `sendBroadcast`（action = `BROADCAST_ACTION_SERVICE` / `_ACTIVITY`）；
   - `sendMsg2ServiceForResult` —— `sendOrderedBroadcast`，回调 `handled`（守护接收则 `RESULT_OK`，
     无守护则为初始的 `RESULT_CANCELED`），返回状态的真值以它为准（样板：`WidgetStateManager.queryDaemon`）；
-  - `sendMsg2TestService` / `sendMsg2SubscriptionService` —— 启动 / 停止对应 Service，内容放在 `"content"` extra。
+  - `sendMsg2TestService` —— 启动 / 停止对应 Service，内容放在 `"content"` extra。
 - UI 侧接收只有一个入口：`MainRepository` 内部的 `BroadcastReceiver`
   （`IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY)`，flags 用 `Utils.receiverFlags()`），
   翻译成 `MainServiceEvent` 密封接口后 `tryEmit`。
@@ -55,7 +57,7 @@ Room 的跨进程一致性靠 `DatabaseModule` 的 `enableMultiInstanceInvalidat
   失败不是终态，先 `StorageBootstrap.retry()` 再等（UI 重试按钮、`CoreStartup`、冷启动入口都这么做）。
   存储未就绪时模式（VPN / Root / 仅代理）、并发数等都会读成编码默认值，必须显式跳过或报错，不能继续启动。
 - Service 的 `serviceScope` 必须 `by lazy`：`@Inject lateinit var io` 只在 `super.onCreate()` 之后可用，
-  属性初始化器会在构造期崩溃（样板：`SubscriptionUpdateService`）。
+  属性初始化器会在构造期崩溃（样板：`CoreTestService`）。
 - `attachBaseContext` 里只能做 locale 包装（`AppLocaleManager.localizedContext`），不得读注入字段。
 
 ## 4. Receiver 规范
@@ -111,8 +113,10 @@ class XxxWorker @AssistedInject constructor(
 - `@HiltWorker` **只支持顶层类**，不能嵌套在 object 里。
 - Worker 跑在 `:bg`，只能注入进程无关的依赖。**Worker 不得依赖 `data/repository/`**，
   数据一律直接调 `handler/` / `PlatformDependencies.<dao>()`
-  （见 `repository-rules.md` §6 的表）。样板：`SubscriptionUpdateWorker`
-  只注入 `@IoDispatcher`，然后调 `SubscriptionUpdater` 并发消息给订阅服务。
+  （见 `repository-rules.md` §6 的表）。样板：`SubscriptionUpdateWorker` 直接执行订阅下载、
+  导入、可选测速及结果写入，不通过 Service IPC 转发。
+- 需要超过普通 Worker 执行时限的任务必须调用 `setForeground(ForegroundInfo)`；前台通知由
+  WorkManager 的 `SystemForegroundService` 承担，不能再启动一个业务 Service 作为 Worker 的替身。
 
 ### 改 Worker 类名 = 数据迁移
 

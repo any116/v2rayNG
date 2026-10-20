@@ -18,7 +18,6 @@ import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.SubChainValidation
 import com.v2ray.ang.dto.SubEditData
 import com.v2ray.ang.dto.SubUpdateOptions
-import com.v2ray.ang.dto.SubscriptionUpdateMessage
 import com.v2ray.ang.dto.SubscriptionUpdateResult
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
@@ -26,7 +25,6 @@ import com.v2ray.ang.extension.normalizeLike
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.handler.SubscriptionUpdater
-import com.v2ray.ang.helper.MessageHelper
 import com.v2ray.ang.ui.components.DropdownOption
 import com.v2ray.ang.util.QRCodeDecoder
 import com.v2ray.ang.util.Utils
@@ -117,6 +115,7 @@ open class SubRepository @Inject constructor(
         subscriptionDao.upsert(
             item.copy(guid = subId, sortOrder = existing?.sortOrder ?: item.sortOrder)
         )
+        SubscriptionUpdater.syncOne(app, subId)
     }
 
     private val _groupRemoved = MutableSharedFlow<String>(
@@ -174,7 +173,7 @@ open class SubRepository @Inject constructor(
     }
 
     /**
-     * Hands the work to the background service, which also runs the test / prune / sort phases.
+     * Enqueues the complete update in WorkManager, including optional test / prune / sort phases.
      *
      * @param subIds restricts the batch; empty means every enabled subscription.
      * @param forced bypasses PREF_UPDATE_SUBSCRIPTION, for an explicitly requested refresh.
@@ -189,11 +188,7 @@ open class SubRepository @Inject constructor(
             .filter { subIds.isEmpty() || it.guid in subIds }
             .map { it.guid }
         if (targets.isEmpty()) return@withIO false
-        MessageHelper.sendMsg2SubscriptionService(
-            app,
-            SubscriptionUpdateMessage(AppConfig.MSG_SUB_UPDATE_START, forced, targets)
-        )
-        true
+        SubscriptionUpdater.enqueueOneTime(app, targets, forced)
     }
 
     // ---- Share ----

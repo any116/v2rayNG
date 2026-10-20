@@ -34,9 +34,8 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"
         tools:ignore="ForegroundServicesPolicy" />
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
-        android:minSdkVersion="34" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -228,16 +227,6 @@
                 android:value="test" />
         </service>
 
-        <service
-            android:name=".service.SubscriptionUpdateService"
-            android:exported="false"
-            android:foregroundServiceType="specialUse"
-            android:process=":tasks">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="test" />
-        </service>
-
         <receiver
             android:name=".receiver.WidgetProvider"
             android:exported="true"
@@ -315,6 +304,15 @@
             android:name="androidx.work.multiprocess.RemoteWorkManagerService"
             android:exported="false"
             android:process=":bg" />
+
+        <!-- WorkManager owns this foreground service for subscription data synchronization. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync"
+            android:process=":bg"
+            tools:node="merge">
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

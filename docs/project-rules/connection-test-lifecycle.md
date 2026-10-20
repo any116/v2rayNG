@@ -42,8 +42,8 @@
   完成态登记与 `stopIfIdle` 的空闲判断共用 `claimLock`，取消请求不会在两步之间误判空闲而停掉服务；
   终态消息由"移除 id"原子认领，销毁路径（`cancelFinalizing`）为仍在收尾的请求补发取消，
   finish / canceled 不重不漏。
-- `CoreTestService` / `SubscriptionUpdateService` 首次访问 DAO 前先等 `StorageBootstrap`；
-  未就绪时测试请求按取消处理、订阅更新直接跳过，不用冷快照继续。
+- `CoreTestService` / `SubscriptionUpdateWorker` 首次访问 DAO 前先等 `StorageBootstrap`；
+  未就绪时测试请求按取消处理、订阅更新返回 `Result.retry()`，不用冷快照继续。
 - UI 侧刷新是**数据库失效驱动**的：`profile_stats` 变化 → `MainRepository.serverPager`
   的 `PagingSource` 失效 → `LazyPagingItems` 自动重取受影响行。
   因此 `MainViewModel.handleServiceEvent` 里 `MeasureConfigSuccess` 是 **no-op**，

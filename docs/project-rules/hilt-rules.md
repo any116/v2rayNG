@@ -91,7 +91,7 @@ open class XxxRepository @Inject constructor(
 ## 6. 平台组件与非注入组件
 
 - Activity / Service 用 `@AndroidEntryPoint`（当前：全部 Activity +
-  `SubscriptionUpdateService`、`CoreTestService` 等 `:daemon`/`:tasks` 服务）。
+  `CoreTestService` 等 `:daemon`/`:tasks` 服务）。
 - **Assisted ViewModel**：需要构造期传入、又无法从 `SavedStateHandle` 拿到的参数
   （样板：`ShortcutViewModel` 的 `ShortcutCommand`），用
   `@HiltViewModel(assistedFactory = Xxx.Factory::class)` + `@AssistedInject` +

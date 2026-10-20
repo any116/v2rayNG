@@ -83,7 +83,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 
 **handler 不彻底融入 repository。** 原因：`SettingsManager`、`AngConfigManager`、
 `SubscriptionUpdater`、`NotificationManager`、`WidgetStateManager` 被
-`CoreVpnService`、`CoreTestService`、`SubscriptionUpdateService`、`SubscriptionUpdateWorker`、
+`CoreVpnService`、`CoreTestService`、`SubscriptionUpdateWorker`、
 `QSTileService`、`BootReceiver` 等**跑在 `:daemon` / `:tasks` / `:bg` 进程**的组件直接调用。
 那些进程里没有 UI 侧的注入点（除 `@AndroidEntryPoint` 的 Service 外），
 强行让它们走 Repository 只是给非 UI 代码加一层空壳。

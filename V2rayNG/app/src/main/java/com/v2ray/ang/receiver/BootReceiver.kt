@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class BootReceiver : BroadcastReceiver() {
 
@@ -46,30 +47,40 @@ class BootReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
-                // The bootstrap may still be running the integrity check. A
-                // cold snapshot would read the coded default of PREF_IS_BOOTED and silently
-                // skip the user's auto-start, so wait (bounded) for the storage layer first.
-                // Retry a failed attempt instead of giving up on a transient storage failure.
-                StorageBootstrap.retry()
-                if (!StorageBootstrap.awaitReadyOrNull(BOOT_READY_TIMEOUT_MS)) {
-                    LogUtil.w(AppConfig.TAG, "BootReceiver: storage not ready; auto start skipped")
-                    return@launch
-                }
+                val completed = withTimeoutOrNull(BOOT_RECEIVER_TIMEOUT_MS) {
+                    // Queue this before waiting for storage. The durable Worker owns the
+                    // readiness wait and can retry even if this receiver reaches its callback
+                    // deadline.
+                    if (!SubscriptionUpdater.enqueueSync(context, requireAutoStart = true)) {
+                        LogUtil.e(AppConfig.TAG, "BootReceiver: failed to enqueue subscription schedule sync")
+                    }
 
-                if (!Prefs.bool(AppConfig.PREF_IS_BOOTED, false)) {
-                    LogUtil.i(AppConfig.TAG, "BootReceiver: Auto-start on boot is disabled")
-                    return@launch
-                }
+                    // The bootstrap may still be running the integrity check. A cold snapshot
+                    // would read the coded default of PREF_IS_BOOTED and silently skip the
+                    // user's auto-start, so wait for a bounded period before reading it.
+                    StorageBootstrap.retry()
+                    if (!StorageBootstrap.awaitReadyOrNull(BOOT_READY_TIMEOUT_MS)) {
+                        LogUtil.w(AppConfig.TAG, "BootReceiver: storage not ready; auto start skipped")
+                        return@withTimeoutOrNull false
+                    }
 
-                // No profile read here: the daemon resolves the selection and reports a missing
-                // one through MSG_STATE_START_FAILURE. Starting the foreground service first
-                // also keeps this process alive for the subscription sync below.
-                LogUtil.i(AppConfig.TAG, "BootReceiver: Starting V2Ray service")
-                withContext(Dispatchers.Main.immediate) {
-                    LauncherManager.startService(context)
-                }
+                    if (!Prefs.bool(AppConfig.PREF_IS_BOOTED, false)) {
+                        LogUtil.i(AppConfig.TAG, "BootReceiver: Auto-start on boot is disabled")
+                        return@withTimeoutOrNull true
+                    }
 
-                SubscriptionUpdater.sync(context)
+                    // No profile read here: the daemon resolves the selection and reports a
+                    // missing one through MSG_STATE_START_FAILURE. Subscription scheduling is
+                    // handed to a durable Worker instead of running inside goAsync().
+                    LogUtil.i(AppConfig.TAG, "BootReceiver: Starting V2Ray service")
+                    withContext(Dispatchers.Main.immediate) {
+                        LauncherManager.startService(context)
+                    }
+                    true
+                }
+                if (completed == null) {
+                    LogUtil.w(AppConfig.TAG, "BootReceiver: startup handoff timed out")
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -81,10 +92,8 @@ class BootReceiver : BroadcastReceiver() {
     }
 
     private companion object {
-        /**
-         * goAsync() allows background work well past 10s, while the database integrity check and
-         * settings refresh may still be in progress during a cold start.
-         */
-        const val BOOT_READY_TIMEOUT_MS = 25_000L
+        /** Keep the receiver callback bounded; longer scheduling work runs in WorkManager. */
+        const val BOOT_RECEIVER_TIMEOUT_MS = 8_000L
+        const val BOOT_READY_TIMEOUT_MS = 7_000L
     }
 }

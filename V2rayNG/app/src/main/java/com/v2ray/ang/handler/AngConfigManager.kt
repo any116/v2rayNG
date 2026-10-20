@@ -656,7 +656,9 @@ object AngConfigManager {
                 if (downloaded == 0L) {
                     downloaded = downloadSubscription(directRequest, download) { context.ensureActive() }
                 }
-                if (downloaded == 0L) return SubscriptionUpdateResult(failureCount = 1)
+                if (downloaded == 0L) {
+                    return SubscriptionUpdateResult(failureCount = 1, retryableFailureCount = 1)
+                }
                 importConfig(
                     { download.bufferedReader() }, it.guid,
                     append = false, source = ConfigImportSource.SUBSCRIPTION_RESPONSE
@@ -667,7 +669,14 @@ object AngConfigManager {
                 }.onFailure { LogUtil.e(AppConfig.TAG, "Failed to clean subscription download", it) }
             }
             if (count > 0) {
-                subscriptionDao.upsert(it.copy(lastUpdated = System.currentTimeMillis()))
+                if (subscriptionDao.touch(it.guid, System.currentTimeMillis()) == 0) {
+                    LogUtil.w(AppConfig.TAG, "Subscription disappeared during update: ${it.guid}")
+                    // The normal delete path already removes these rows transactionally. Keep
+                    // this defensive cleanup for legacy/direct row deletions so a successful
+                    // import can never leave profiles behind without an owning subscription.
+                    subscriptionDao.deleteProfilesOf(it.guid)
+                    return SubscriptionUpdateResult(skipCount = 1)
+                }
                 LogUtil.i(AppConfig.TAG, "Subscription updated: ${it.remarks}, $count configs")
                 return SubscriptionUpdateResult(
                     configCount = count,
@@ -681,7 +690,7 @@ object AngConfigManager {
             throw e
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to update config via subscription", e)
-            return SubscriptionUpdateResult(failureCount = 1)
+            return SubscriptionUpdateResult(failureCount = 1, retryableFailureCount = 1)
         }
     }
 

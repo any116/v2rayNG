@@ -46,7 +46,7 @@ interface SubscriptionDao {
     suspend fun setSortOrder(guid: String, sortOrder: Long)
 
     @Query("UPDATE subscriptions SET lastUpdated = :time WHERE guid = :guid")
-    suspend fun touch(guid: String, time: Long)
+    suspend fun touch(guid: String, time: Long): Int
 
     @Query("DELETE FROM subscriptions WHERE guid = :guid")
     suspend fun deleteRow(guid: String)
