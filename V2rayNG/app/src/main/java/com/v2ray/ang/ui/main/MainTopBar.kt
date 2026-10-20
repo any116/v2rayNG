@@ -3,7 +3,6 @@ package com.v2ray.ang.ui.main
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
@@ -22,16 +21,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.components.AppSearchState
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.verticalScrollbar
+import kotlin.math.roundToInt
+
+private val MainMenuWindowMargin = 20.dp
 
 @Composable
 fun MainTopBar(
@@ -43,17 +49,42 @@ fun MainTopBar(
     onSearchClose: () -> Unit,
     onAction: (MainAction) -> Unit,
     onShowDialog: (MainDialog) -> Unit,
+    bottomOverlayHeightPx: Int,
     modifier: Modifier = Modifier
 ) {
     var showImportMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var importMenuAnchor by remember { mutableStateOf<IntRect?>(null) }
+    var moreMenuAnchor by remember { mutableStateOf<IntRect?>(null) }
 
     val importScrollState = rememberScrollState()
     val moreScrollState = rememberScrollState()
-    val statusBarHeight = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val maxMenuHeight =
-        LocalConfiguration.current.screenHeightDp.dp - statusBarHeight - navBarHeight - 20.dp
+    val density = LocalDensity.current
+    val windowHeight = LocalWindowInfo.current.containerSize.height
+    val topInset = WindowInsets.statusBars.getTop(density)
+    val bottomInset = WindowInsets.navigationBars.getBottom(density)
+    // The bottom bar is overlaid on the page, so its measured top edge is another safe bottom limit.
+    val bottomLimit = minOf(
+        (windowHeight - bottomInset).coerceAtLeast(topInset),
+        (windowHeight - bottomOverlayHeightPx.coerceAtLeast(0)).coerceAtLeast(topInset)
+    )
+    val menuMargin = with(density) { MainMenuWindowMargin.roundToPx() }
+    val maxImportMenuHeight = with(density) {
+        calculateMainMenuMaxHeight(
+            anchorBounds = importMenuAnchor,
+            topInset = topInset,
+            bottomLimit = bottomLimit,
+            margin = menuMargin
+        ).toDp()
+    }
+    val maxMoreMenuHeight = with(density) {
+        calculateMainMenuMaxHeight(
+            anchorBounds = moreMenuAnchor,
+            topInset = topInset,
+            bottomLimit = bottomLimit,
+            margin = menuMargin
+        ).toDp()
+    }
 
     AppTopBar(
         modifier = modifier,
@@ -92,7 +123,23 @@ fun MainTopBar(
                     )
                 }
             }
-            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+            Box(
+                modifier = Modifier
+                    .wrapContentSize(Alignment.TopEnd)
+                    .onGloballyPositioned { coordinates ->
+                        if (!coordinates.isAttached) return@onGloballyPositioned
+                        val origin = coordinates.positionInWindow()
+                        val left = origin.x.roundToInt()
+                        val top = origin.y.roundToInt()
+                        val bounds = IntRect(
+                            left,
+                            top,
+                            left + coordinates.size.width,
+                            top + coordinates.size.height
+                        )
+                        if (bounds != importMenuAnchor) importMenuAnchor = bounds
+                    }
+            ) {
                 IconButton(onClick = { showImportMenu = true }) {
                     Icon(
                         painterResource(R.drawable.ic_add_24dp),
@@ -105,7 +152,7 @@ fun MainTopBar(
                     scrollState = importScrollState,
                     containerColor = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
-                        .heightIn(max = maxMenuHeight)
+                        .heightIn(max = maxImportMenuHeight)
                         .verticalScrollbar(importScrollState)
                 ) {
                     ImportMenuContent { action ->
@@ -114,7 +161,23 @@ fun MainTopBar(
                     }
                 }
             }
-            Box(modifier = Modifier.wrapContentSize(Alignment.TopEnd)) {
+            Box(
+                modifier = Modifier
+                    .wrapContentSize(Alignment.TopEnd)
+                    .onGloballyPositioned { coordinates ->
+                        if (!coordinates.isAttached) return@onGloballyPositioned
+                        val origin = coordinates.positionInWindow()
+                        val left = origin.x.roundToInt()
+                        val top = origin.y.roundToInt()
+                        val bounds = IntRect(
+                            left,
+                            top,
+                            left + coordinates.size.width,
+                            top + coordinates.size.height
+                        )
+                        if (bounds != moreMenuAnchor) moreMenuAnchor = bounds
+                    }
+            ) {
                 IconButton(onClick = { showMoreMenu = true }) {
                     Icon(
                         painterResource(R.drawable.ic_more_vert_24dp),
@@ -127,7 +190,7 @@ fun MainTopBar(
                     scrollState = moreScrollState,
                     containerColor = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
-                        .heightIn(max = maxMenuHeight)
+                        .heightIn(max = maxMoreMenuHeight)
                         .verticalScrollbar(moreScrollState)
                 ) {
                     MoreMenuContent(
@@ -146,6 +209,21 @@ fun MainTopBar(
     )
 }
 
+private fun calculateMainMenuMaxHeight(
+    anchorBounds: IntRect?,
+    topInset: Int,
+    bottomLimit: Int,
+    margin: Int
+): Int {
+    val topLimit = topInset.coerceAtLeast(0)
+    val safeBottomLimit = bottomLimit.coerceAtLeast(topLimit)
+    if (anchorBounds == null) return (safeBottomLimit - topLimit - margin).coerceAtLeast(0)
+
+    val spaceBelow = safeBottomLimit - anchorBounds.bottom - margin
+    val spaceAbove = anchorBounds.top - topLimit - margin
+    return maxOf(spaceBelow, spaceAbove).coerceAtLeast(0)
+}
+
 @Preview(showBackground = true)
 @Preview(showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
@@ -158,6 +236,7 @@ private fun MainTopBarSearchPreview() = AppTheme {
         onSearchOpen = {},
         onSearchClose = {},
         onAction = {},
-        onShowDialog = {}
+        onShowDialog = {},
+        bottomOverlayHeightPx = 0
     )
 }

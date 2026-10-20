@@ -125,7 +125,8 @@ fun MainScreen(
                     onSearchOpen = openSearch,
                     onSearchClose = closeSearch,
                     onAction = dispatch,
-                    onShowDialog = dialogs.show
+                    onShowDialog = dialogs.show,
+                    bottomOverlayHeightPx = bottomBarHeight
                 )
             }
         ) { state, _ ->
