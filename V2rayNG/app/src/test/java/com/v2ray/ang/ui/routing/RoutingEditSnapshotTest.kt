@@ -1,6 +1,5 @@
 package com.v2ray.ang.ui.routing
 
-import android.os.Bundle
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
@@ -9,7 +8,6 @@ import com.v2ray.ang.data.repository.RoutingRepository
 import com.v2ray.ang.dto.RoutingEditData
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEvent
-import com.v2ray.ang.util.JsonUtil
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -165,30 +163,6 @@ class RoutingEditSnapshotTest {
         assertFalse(vm.uiState.value.isReady)
         verify(repo, never()).updateRule(any())
         verify(repo, never()).removeRule(any())
-    }
-
-    @Test
-    fun legacyFormProvidesTheInitialTextAndLockOnlyOnce() = runTest(dispatcher) {
-        val legacyForm = RoutingForm(remarks = "legacy", process = "com.legacy", locked = true)
-        val legacy = mock<Bundle> {
-            on { getBoolean("user_edited", false) } doReturn true
-            on { getString("form") } doReturn JsonUtil.toJson(legacyForm)
-        }
-        val vm = viewModel(handle = SavedStateHandle(mapOf(
-            AppRoute.EXTRA_RULE_ID to "rule",
-            "routing_edit_saved_state" to legacy
-        )))
-        runCurrent()
-        val editor = RoutingEditorState()
-
-        assertEquals(legacyForm, vm.uiState.value.initialForm)
-        assertNull(handle.get<Bundle>("routing_edit_saved_state"))
-        assertTrue(editor.initialize(checkNotNull(vm.uiState.value.initialForm)))
-        editor.locked = false
-        editor[RoutingField.PROCESS].setTextAndPlaceCursorAtEnd("com.ui")
-        assertFalse(editor.initialize(legacyForm))
-        assertEquals("com.ui", editor.snapshot().process)
-        assertFalse(editor.locked)
     }
 
     @Test

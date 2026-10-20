@@ -144,7 +144,7 @@ sealed interface XxxDialog {
 - 保存/删除用 `BaseEditViewModel.save { ... }` / `delete()`：内部有 `mutationJob` 防重入，
   成功即 `finishWith(result)`。
 - 需要跨进程死亡保活的草稿使用 `rememberSaveable` + feature Saver，保存初始化状态、flags 和
-  动态字段的身份/顺序；未初始化的恢复值不能阻止真实加载。`EditFormSaver.consume()` 仅一次性兼容并移除旧数据。
+  动态字段的身份/顺序；未初始化的恢复值不能阻止真实加载。
 - 快速连续写入用 Job 链串行（`SettingsViewModel.persist()`），离开页面前 `writeJob?.join()`。
 
 ## 7. 结果回传

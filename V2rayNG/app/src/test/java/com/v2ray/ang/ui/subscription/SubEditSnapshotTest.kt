@@ -1,6 +1,5 @@
 package com.v2ray.ang.ui.subscription
 
-import android.os.Bundle
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelStore
@@ -10,7 +9,6 @@ import com.v2ray.ang.data.repository.SubRepository
 import com.v2ray.ang.dto.SubChainValidation
 import com.v2ray.ang.dto.SubEditData
 import com.v2ray.ang.ui.AppRoute
-import com.v2ray.ang.util.JsonUtil
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -165,27 +163,6 @@ class SubEditSnapshotTest {
         load.complete(SubEditData(loaded, true))
         runCurrent()
         verify(repo).remove("sub")
-    }
-
-    @Test
-    fun legacyFormIsALoadSeedAndDoesNotReplaceAnAlreadyRestoredDraft() = runTest(dispatcher) {
-        val legacyForm = SubEditForm(remarks = "legacy", enabled = false)
-        val legacy = mock<Bundle> {
-            on { getBoolean("user_edited", false) } doReturn true
-            on { getString("form") } doReturn JsonUtil.toJson(legacyForm)
-        }
-        val vm = viewModel(SavedStateHandle(mapOf(
-            AppRoute.EXTRA_SUB_GUID to "sub",
-            "sub_edit_saved_state" to legacy
-        )))
-        val editor = SubEditEditorState().apply { initialize(SubEditForm(remarks = "ui draft")) }
-        runCurrent()
-
-        assertEquals(legacyForm, vm.uiState.value.initialForm)
-        assertNull(handle.get<Bundle>("sub_edit_saved_state"))
-        assertFalse(editor.initialize(checkNotNull(vm.uiState.value.initialForm)))
-        assertEquals("ui draft", editor.snapshot().remarks)
-        assertTrue(editor.enabled)
     }
 
     @Test

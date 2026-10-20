@@ -13,7 +13,6 @@ import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
-import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.ui.components.ToastType
 import com.v2ray.ang.util.JsonUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -47,8 +46,6 @@ class ServerEditViewModel @Inject constructor(
     } else {
         "new:${state.configType.value}"
     }
-    private val legacyForm: ServerForm?
-    private val legacyRawContent: String?
 
     val header: StateFlow<ServerHeader> = uiState
         .map { it.header }
@@ -84,10 +81,6 @@ class ServerEditViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
-        // Read an old-version process snapshot once. The UI saver owns all future drafts.
-        val legacy = EditFormSaver(handle, KEY_SAVED).consume()
-        legacyForm = legacy?.getString(KEY_FORM)?.let { JsonUtil.fromJsonSafe(it, ServerForm::class.java) }
-        legacyRawContent = legacy?.getString(KEY_RAW)
         loadJob = load()
     }
 
@@ -139,18 +132,12 @@ class ServerEditViewModel @Inject constructor(
             EConfigType.POLICYGROUP -> ServerOptions(subscriptions = data.subscriptions)
             else -> ServerOptions()
         }
-        val form = when {
-            legacyForm != null -> legacyForm
-            data.profile == null -> ServerForm(
-                streamSecurity = if (configType == EConfigType.MASQUE) AppConfig.TLS else ""
-            )
-            else -> ServerForm.from(data.profile)
+        val form = if (data.profile == null) {
+            ServerForm(streamSecurity = if (configType == EConfigType.MASQUE) AppConfig.TLS else "")
+        } else {
+            ServerForm.from(data.profile)
         }
-        val rawContent = when {
-            configType != EConfigType.CUSTOM -> ""
-            legacyRawContent != null -> legacyRawContent
-            else -> data.rawContent
-        }
+        val rawContent = if (configType == EConfigType.CUSTOM) data.rawContent else ""
 
         setState {
             copy(
@@ -381,9 +368,6 @@ class ServerEditViewModel @Inject constructor(
     }
 
     companion object {
-        private const val KEY_SAVED = "server_edit_saved_state"
-        private const val KEY_FORM = "form"
-        private const val KEY_RAW = "raw"
         private fun initialState(handle: SavedStateHandle): ServerUiState {
             val typeValue = handle.get<Int>(AppRoute.EXTRA_TYPE) ?: EConfigType.VMESS.value
             val guid = handle.get<String>(AppRoute.EXTRA_GUID).orEmpty()

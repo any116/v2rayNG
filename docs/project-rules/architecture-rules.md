@@ -168,8 +168,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
   编辑页的 `save { ... }` 操作返回 `null` 表示"留在本页"。校验错误绑定本次提交值，
   不把旧提交的失败标记应用到用户随后修改的新值。
 - 草稿通过 UI `rememberSaveable` + feature Saver 保存；文本委托 foundation `TextFieldState.Saver`，
-  flags、初始化状态及动态字段身份一同恢复。`SavedStateHandle` 可保存已应用查询等非编辑元数据；
-  `EditFormSaver.consume()` 仅作为旧版本快照的一次兼容读取并移除，不注册持续 String provider。
+  flags、初始化状态及动态字段身份一同恢复。`SavedStateHandle` 可保存已应用查询等非编辑元数据。
 - **不要**在 ViewModel 里持有 `Closeable` Repository 的生命周期：Repository 现为 Hilt
   `@Singleton` 或无 scope 的构造注入，进程级资源由 Hilt 图管理。
 

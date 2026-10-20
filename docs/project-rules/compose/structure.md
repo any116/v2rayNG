@@ -8,7 +8,7 @@ Kotlin `2.4.20` + `org.jetbrains.kotlin.plugin.compose`。
 ```
 ui/base/       屏幕基座（BaseScreen / BaseActivity / BaseHelperActivity /
                BaseViewModel / BaseEditViewModel / BaseContract / BaseResult /
-               EditFormSaver / PlatformActions），不可随意扩充
+               PlatformActions），不可随意扩充
 ui/components/ 跨屏共享组件与主题
   Theme.kt                    AppTheme、色板、AppSemanticColors、LocalAppColors、
                               LocalDarkTheme、ThemeManager、resolveDarkTheme

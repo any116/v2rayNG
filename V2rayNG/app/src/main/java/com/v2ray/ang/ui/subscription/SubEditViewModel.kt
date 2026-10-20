@@ -12,9 +12,7 @@ import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
-import com.v2ray.ang.ui.base.EditFormSaver
 import com.v2ray.ang.ui.components.ToastType
-import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -50,10 +48,7 @@ class SubEditViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
-        val legacyForm = EditFormSaver(handle, KEY_SAVED).consume()
-            ?.getString(KEY_FORM)
-            ?.let { JsonUtil.fromJsonSafe(it, SubEditForm::class.java) }
-        loadJob = load(legacyForm)
+        loadJob = load()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -61,7 +56,7 @@ class SubEditViewModel @Inject constructor(
         flatMapLatest { repo.profileRemarkPager(it) }
             .cachedIn(viewModelScope)
 
-    private fun load(legacyForm: SubEditForm?): Job = launch(onError = { loadFailed = true; toastError() }) {
+    private fun load(): Job = launch(onError = { loadFailed = true; toastError() }) {
         val data = repo.loadEdit(state.subId)
         initial = data.item
         if (state.isEdit && data.item == null) {
@@ -71,7 +66,7 @@ class SubEditViewModel @Inject constructor(
         }
         setState {
             copy(
-                initialForm = legacyForm ?: data.item.toSubEditForm(),
+                initialForm = data.item.toSubEditForm(),
                 isReady = true,
                 confirmRemove = data.confirmRemove
             )
@@ -156,10 +151,5 @@ class SubEditViewModel @Inject constructor(
         loadJob?.join()
         if (loadFailed) toastError(R.string.toast_failure)
         return !loadFailed
-    }
-
-    private companion object {
-        const val KEY_SAVED = "sub_edit_saved_state"
-        const val KEY_FORM = "form"
     }
 }

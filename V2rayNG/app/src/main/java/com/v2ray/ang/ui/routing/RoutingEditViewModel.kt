@@ -9,8 +9,6 @@ import com.v2ray.ang.data.repository.RoutingRepository
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.base.BaseEditViewModel
 import com.v2ray.ang.ui.base.BaseResult
-import com.v2ray.ang.ui.base.EditFormSaver
-import com.v2ray.ang.util.JsonUtil
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -43,13 +41,10 @@ class RoutingEditViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
-        val legacyForm = EditFormSaver(handle, KEY_SAVED).consume()
-            ?.getString(KEY_FORM)
-            ?.let { JsonUtil.fromJsonSafe(it, RoutingForm::class.java) }
-        loadJob = load(legacyForm)
+        loadJob = load()
     }
 
-    private fun load(legacyForm: RoutingForm?): Job = launch(onError = { loadFailed = true; toastError() }) {
+    private fun load(): Job = launch(onError = { loadFailed = true; toastError() }) {
         val data = repo.loadEditData(state.ruleId)
         initial = data.ruleset
         if (state.isEdit && data.ruleset == null) {
@@ -59,7 +54,7 @@ class RoutingEditViewModel @Inject constructor(
         }
         setState {
             copy(
-                initialForm = legacyForm ?: data.ruleset.toRoutingForm(),
+                initialForm = data.ruleset.toRoutingForm(),
                 isReady = true,
                 canUseProcess = data.canUseProcess
             )
@@ -133,10 +128,5 @@ class RoutingEditViewModel @Inject constructor(
         loadJob?.join()
         if (loadFailed) toastError(R.string.toast_failure)
         return !loadFailed
-    }
-
-    private companion object {
-        const val KEY_SAVED = "routing_edit_saved_state"
-        const val KEY_FORM = "form"
     }
 }

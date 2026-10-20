@@ -150,7 +150,7 @@ util/                  # Utils / HttpUtil / JsonUtil / LogUtil / QRCodeDecoder /
 ui/                    # 全部 Compose UI
   AppRoute.kt          # 所有导航目标，自己构造 Intent
   base/                # BaseActivity / BaseHelperActivity / BaseContract / BaseScreen /
-                       # BaseViewModel / BaseEditViewModel / BaseResult / EditFormSaver
+                       # BaseViewModel / BaseEditViewModel / BaseResult
   components/          # 跨屏共享组件：Theme / Common / Dialog / FormFields /
                        # FormPagedDropdownField / TextEditorState / SearchFieldController / PrefsState /
                        # SettingsItem / Menu / Scrollbar / SnackBar
@@ -159,7 +159,7 @@ ui/                    # 全部 Compose UI
   widght/              # Glance 桌面组件 SwitchWidget（包名 com.v2ray.ang.ui.widget，目录名为历史拼写）
 ```
 
-### Base 层契约（`ui/base/`，共 8 个文件）
+### Base 层契约（`ui/base/`，共 7 个文件）
 
 - `BaseUiState` / `BaseAction` / `BaseEvent` / `BaseRoute` / `BaseText` / `BaseMessage`
   —— 在 `BaseContract.kt`，是 SSOT/UDF 的类型基座。
@@ -175,8 +175,7 @@ ui/                    # 全部 Compose UI
   `ScreenContent()`；需要文件、权限、扫码时继承 `BaseHelperActivity`，
   能力通过 `LocalPlatformActions` 下发，**禁止在 Composable 里 `context as XxxActivity`**。
 - `BaseRepository`：只做线程收敛，`withIO { }` 包住所有阻塞调用，注入 `@IoDispatcher`。
-- 编辑草稿由 UI-owned `TextFieldState` 及 feature Saver 保存，ViewModel 接收不可变动作快照；
-  `EditFormSaver.consume()` 仅用于一次读取并移除旧版本带 dirty 标记的恢复数据，不再写入 String 草稿镜像。
+- 编辑草稿由 UI-owned `TextFieldState` 及 feature Saver 保存，ViewModel 接收不可变动作快照。
 
 ### 每个功能屏的固定文件集
 
