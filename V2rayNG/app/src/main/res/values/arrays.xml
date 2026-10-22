@@ -120,6 +120,20 @@
         <item>none</item>
     </string-array>
 
+    <string-array name="root_certificate_provider_entries">
+        <item>@string/root_certificate_provider_follow_system</item>
+        <item>@string/root_certificate_provider_system_and_user</item>
+        <item>@string/root_certificate_provider_mozilla</item>
+        <item>@string/root_certificate_provider_chrome</item>
+    </string-array>
+
+    <string-array name="root_certificate_provider_values" translatable="false">
+        <item>system</item>
+        <item>system_user</item>
+        <item>mozilla</item>
+        <item>chrome</item>
+    </string-array>
+
     <string-array name="mode_value" translatable="false">
         <item>VPN</item>
         <item>Proxy only</item>

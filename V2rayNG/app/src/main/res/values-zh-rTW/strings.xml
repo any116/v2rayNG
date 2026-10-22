@@ -273,6 +273,12 @@
 
     <string name="title_pref_ip_api_url">目前連線資訊測試 URL</string>
     <string name="summary_pref_ip_api_url" translatable="false">URL</string>
+    <string name="title_pref_root_certificate_provider">根憑證提供者</string>
+    <string name="summary_pref_root_certificate_provider">套用於應用程式網路請求以及 Xray 核心 TLS、DNS over HTTPS、DNS over TLS、DNS over QUIC 的憑證驗證。變更後會重新啟動核心。</string>
+    <string name="root_certificate_provider_follow_system">跟隨系統</string>
+    <string name="root_certificate_provider_system_and_user">系統與使用者</string>
+    <string name="root_certificate_provider_mozilla">Mozilla</string>
+    <string name="root_certificate_provider_chrome">Chrome</string>
 
     <string name="title_pref_proxy_sharing_enabled">允許來自區域網路的連線</string>
     <string name="summary_pref_proxy_sharing_enabled">其他裝置可以透過您的 IP 位址連線到本機代理。請只在受信任的網路中啟用，以避免未經授權的連線。</string>

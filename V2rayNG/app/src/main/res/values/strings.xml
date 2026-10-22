@@ -273,6 +273,12 @@
 
     <string name="title_pref_ip_api_url">Current connection info test URL</string>
     <string name="summary_pref_ip_api_url" translatable="false">URL</string>
+    <string name="title_pref_root_certificate_provider">Root certificate provider</string>
+    <string name="summary_pref_root_certificate_provider">Applies to app requests and Xray core TLS/DNS-over-HTTPS/DNS-over-TLS/DNS-over-QUIC validation. Changes restart the core.</string>
+    <string name="root_certificate_provider_follow_system">Follow system</string>
+    <string name="root_certificate_provider_system_and_user">System and user</string>
+    <string name="root_certificate_provider_mozilla">Mozilla</string>
+    <string name="root_certificate_provider_chrome">Chrome</string>
 
     <string name="title_pref_proxy_sharing_enabled">Allow connections from the LAN</string>
     <string name="summary_pref_proxy_sharing_enabled">Other devices can connect to proxy by your IP address through local proxy. Only enable in trusted networks to avoid unauthorized connections</string>

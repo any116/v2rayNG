@@ -3,6 +3,7 @@ package com.v2ray.ang.handler
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.entities.WebDavConfig
 import com.v2ray.ang.util.LogUtil
+import com.v2ray.ang.util.RootCertificateManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
@@ -26,7 +27,7 @@ object WebDavManager {
      */
     fun init(config: WebDavConfig) {
         cfg = config
-        client = OkHttpClient.Builder()
+        client = OkHttpClient.Builder().apply { RootCertificateManager.configure(this) }
             .connectTimeout(config.timeoutSeconds, TimeUnit.SECONDS)
             .readTimeout(config.timeoutSeconds, TimeUnit.SECONDS)
             .writeTimeout(config.timeoutSeconds, TimeUnit.SECONDS)

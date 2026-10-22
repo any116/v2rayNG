@@ -1,6 +1,7 @@
 package com.v2ray.ang.data
 
 import com.v2ray.ang.AppConfig
+import com.v2ray.ang.enums.RootCertificateProvider
 
 /**
  * Coded defaults written once at first launch, replacing
@@ -29,6 +30,7 @@ internal object SettingsDefaults {
         Entry(AppConfig.PREF_DOMESTIC_DNS, AppConfig.DNS_DIRECT),
         Entry(AppConfig.PREF_DELAY_TEST_URL, AppConfig.DELAY_TEST_URL),
         Entry(AppConfig.PREF_IP_API_URL, AppConfig.IP_API_URL),
+        Entry(AppConfig.PREF_ROOT_CERTIFICATE_PROVIDER, RootCertificateProvider.SYSTEM.value),
         Entry(AppConfig.PREF_PREDICTIVE_BACK, "true", SettingsStore.KIND_BOOL),
         // "warning" is not a member of R.array.hev_tunnel_loglevel.
         Entry(AppConfig.PREF_HEV_TUNNEL_LOGLEVEL, AppConfig.HEVTUN_LOGLEVEL),

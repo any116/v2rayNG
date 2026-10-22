@@ -273,6 +273,12 @@
 
     <string name="title_pref_ip_api_url">نشۊوی اینترنتی آزمایش دووسمندیا منپیز هیم سکویی</string>
     <string name="summary_pref_ip_api_url" translatable="false">URL</string>
+    <string name="title_pref_root_certificate_provider">ارائه‌دهنده گوواهی ریشه</string>
+    <string name="summary_pref_root_certificate_provider">سی درخواستای شبکه برنامه و اعتبارسنجی گوواهیای TLS، DNS over HTTPS، DNS over TLS و DNS over QUIC هسته Xray کار گرنه. پس ز تغییر، هسته دوباره ره ونده وابی.</string>
+    <string name="root_certificate_provider_follow_system">پیروی ز سیستم</string>
+    <string name="root_certificate_provider_system_and_user">سیستم و کاربر</string>
+    <string name="root_certificate_provider_mozilla">Mozilla</string>
+    <string name="root_certificate_provider_chrome">Chrome</string>
 
     <string name="title_pref_proxy_sharing_enabled">یک رسۊوی پروکسی من شبکه محلی LAN</string>
     <string name="summary_pref_proxy_sharing_enabled">پوی دسگایل ترن وا نشۊوی IP ایسا، ز ره socks/http و پروکسی منپیز بۊن، تینا من شبکه قابل ائتماڌ ره ونده بۊ تا ز منپیز غیر موجاز جلو گری بۊ.</string>

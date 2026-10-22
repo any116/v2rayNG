@@ -5,6 +5,7 @@ import com.v2ray.ang.AppConfig.VPN
 import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.enums.AppThemeMode
+import com.v2ray.ang.enums.RootCertificateProvider
 import com.v2ray.ang.handler.SettingsChangeManager
 import com.v2ray.ang.root.RootManager
 import kotlinx.coroutines.CoroutineDispatcher
@@ -96,6 +97,7 @@ enum class StringPref(val key: String, val default: String) {
     DELAY_TEST_URL(AppConfig.PREF_DELAY_TEST_URL, ""),
     REAL_PING_CONCURRENCY(AppConfig.PREF_REAL_PING_CONCURRENCY, "16"),
     IP_API_URL(AppConfig.PREF_IP_API_URL, ""),
+    ROOT_CERTIFICATE_PROVIDER(AppConfig.PREF_ROOT_CERTIFICATE_PROVIDER, RootCertificateProvider.SYSTEM.value),
 
     MODE(AppConfig.PREF_MODE, VPN);
 

@@ -23,6 +23,7 @@ import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.PackageUidResolver
+import com.v2ray.ang.util.RootCertificateManager
 import com.v2ray.ang.util.Utils
 
 object CoreConfigManager {
@@ -45,6 +46,7 @@ object CoreConfigManager {
                     guid = guid,
                     errorMessage = "Failed to build config context"
                 )
+            RootCertificateManager.prepareCoreCertificateFile(context)
             if (configContext.isCustom) {
                 buildV2rayCustomConfig(context, configContext)
             } else {
@@ -73,6 +75,7 @@ object CoreConfigManager {
                     guid = guid,
                     errorMessage = "Failed to build config context"
                 )
+            RootCertificateManager.prepareCoreCertificateFile(context)
             if (configContext.isCustom) {
                 return buildV2rayCustomConfig(context, configContext)
             }
@@ -107,6 +110,8 @@ object CoreConfigManager {
         val result = ConfigResult(true, configContext.guid, raw)
 
         val json = JsonUtil.parseString(raw)?.takeIf { it.isJsonObject }?.asJsonObject ?: return result
+
+        RootCertificateManager.applyCoreCustomConfig(json, context)
 
         // Inject or remove traffic statistics configuration based on user preference
         if (Prefs.bool(AppConfig.PREF_SPEED_ENABLED) == true) {
@@ -724,7 +729,9 @@ object CoreConfigManager {
     ) {
         val servers = ArrayList<Any>()
         val remoteDns = SettingsManager.getRemoteDnsServers()
+            .map { RootCertificateManager.applyDnsCertificateFile(it, configContext.context) }
         val domesticDns = SettingsManager.getDomesticDnsServers()
+            .map { RootCertificateManager.applyDnsCertificateFile(it, configContext.context) }
 
         remoteDns.forEach { servers.add(it) }
 

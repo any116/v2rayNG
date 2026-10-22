@@ -210,6 +210,8 @@ object Utils {
         return s.startsWith("https") ||
                 s.startsWith("tcp") ||
                 s.startsWith("quic") ||
+                s.startsWith("tls") ||
+                s.startsWith("dot") ||
                 s == "localhost"
     }
 

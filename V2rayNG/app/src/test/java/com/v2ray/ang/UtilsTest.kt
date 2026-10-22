@@ -59,4 +59,12 @@ class UtilsTest {
         assertFalse(Utils.isIpInCidr("192.168.1.1", "invalid-cidr"))
     }
 
+    @Test
+    fun test_coreDnsAddressIncludesTlsSchemes() {
+        assertTrue(Utils.isCoreDNSAddress("tls://dns.example:853"))
+        assertTrue(Utils.isCoreDNSAddress("tls+local://dns.example:853"))
+        assertTrue(Utils.isCoreDNSAddress("dot://dns.example:853"))
+        assertTrue(Utils.isCoreDNSAddress("dot+local://dns.example:853"))
+    }
+
 }

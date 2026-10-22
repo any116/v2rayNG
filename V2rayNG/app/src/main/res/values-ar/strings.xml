@@ -273,6 +273,12 @@
 
     <string name="title_pref_ip_api_url">عنوان URL لاختبار معلومات الاتصال الحالي</string>
     <string name="summary_pref_ip_api_url" translatable="false">URL</string>
+    <string name="title_pref_root_certificate_provider">موفّر شهادات الجذر</string>
+    <string name="summary_pref_root_certificate_provider">ينطبق على طلبات الشبكة للتطبيق والتحقق من شهادات TLS وDNS over HTTPS وDNS over TLS وDNS over QUIC في نواة Xray. ستؤدي التغييرات إلى إعادة تشغيل النواة.</string>
+    <string name="root_certificate_provider_follow_system">اتباع النظام</string>
+    <string name="root_certificate_provider_system_and_user">النظام والمستخدم</string>
+    <string name="root_certificate_provider_mozilla">Mozilla</string>
+    <string name="root_certificate_provider_chrome">Chrome</string>
 
     <string name="title_pref_proxy_sharing_enabled">السماح بالاتصالات من الشبكة المحلية</string>
     <string name="summary_pref_proxy_sharing_enabled">يمكن للأجهزة الأخرى الاتصال بالبروكسي بواسطة عنوان IP الخاص بك من خلال socks/http، يتم التمكين فقط في الشبكة الموثوقة لتجنب الاتصال غير المصرح به</string>

@@ -14,6 +14,7 @@ import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.LogUtil
+import com.v2ray.ang.util.RootCertificateManager
 import com.v2ray.ang.util.Utils
 import com.v2ray.ang.util.XdriveConfigValidator
 
@@ -673,6 +674,7 @@ object CoreOutboundBuilder {
             mldsa65Verify = profileItem.mldsa65Verify.nullIfBlank(),
         )
         if (streamSettings.security == AppConfig.TLS) {
+            RootCertificateManager.configureCoreTls(tlsSetting)
             streamSettings.tlsSettings = tlsSetting
             streamSettings.realitySettings = null
         } else if (streamSettings.security == AppConfig.REALITY) {

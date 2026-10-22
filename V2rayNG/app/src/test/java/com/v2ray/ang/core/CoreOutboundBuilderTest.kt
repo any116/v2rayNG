@@ -45,6 +45,22 @@ class CoreOutboundBuilderTest {
         assertNull(CoreOutboundBuilder.convert(xdriveProfile().copy(configType = EConfigType.VMESS)))
     }
 
+    @Test
+    fun tlsOutboundDefaultsToSystemCertificateRoots() {
+        val profile = ProfileItem.create(EConfigType.VMESS).apply {
+            server = "example.com"
+            serverPort = "443"
+            security = AppConfig.TLS
+            finalMask = "{}"
+        }
+        val stream = OutboundBean.StreamSettingsBean()
+
+        CoreOutboundBuilder.populateTlsSettings(stream, profile, "example.com")
+
+        assertEquals(true, stream.tlsSettings?.useSystemCA)
+        assertEquals(false, stream.tlsSettings?.disableSystemRoot)
+    }
+
     private fun xdriveProfile() = ProfileItem.create(EConfigType.VLESS).apply {
         remarks = "XDRIVE"
         server = "xdrive.example.com"

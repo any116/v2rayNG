@@ -1,0 +1,344 @@
+diff --git a/app/dns/nameserver_doh.go b/app/dns/nameserver_doh.go
+index ed7f184..ab6f48b 100644
+--- a/app/dns/nameserver_doh.go
++++ b/app/dns/nameserver_doh.go
+@@ -4,6 +4,7 @@ import (
+ 	"bytes"
+ 	"context"
+ 	"crypto/tls"
++	"crypto/x509"
+ 	"fmt"
+ 	"io"
+ 	"net/http"
+@@ -34,10 +35,13 @@ type DoHNameServer struct {
+ 	httpClient      *http.Client
+ 	dohURL          string
+ 	clientIP        net.IP
++	rootCAs         *x509.CertPool
++	rootCAError     error
+ }
+ 
+ // NewDoHNameServer creates DOH/DOHL client object for remote/local resolving.
+ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) *DoHNameServer {
++	rootCAs, rootCAError := loadRootCertPoolFromURL(url)
+ 	url.Scheme = "https"
+ 	mode := "DOH"
+ 	if dispatcher == nil {
+@@ -48,12 +52,17 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, dis
+ 		cacheController: NewCacheController(mode+"//"+url.Host, disableCache, serveStale, serveExpiredTTL),
+ 		dohURL:          url.String(),
+ 		clientIP:        clientIP,
++		rootCAs:         rootCAs,
++		rootCAError:     rootCAError,
+ 	}
+ 	s.httpClient = &http.Client{
+ 		Transport: &http2.Transport{
+ 			IdleConnTimeout: net.ConnIdleTimeout,
+ 			ReadIdleTimeout: net.ChromeH2KeepAlivePeriod,
+ 			DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
++				if !h2c && s.rootCAError != nil {
++					return nil, s.rootCAError
++				}
+ 				dest, err := net.ParseDestination(network + ":" + addr)
+ 				if err != nil {
+ 					return nil, err
+@@ -99,7 +108,10 @@ func NewDoHNameServer(url *url.URL, dispatcher routing.Dispatcher, h2c bool, dis
+ 					}
+ 				}
+ 				if !h2c {
+-					conn = utls.UClient(conn, &utls.Config{ServerName: url.Hostname()}, utls.HelloChrome_Auto)
++					conn = utls.UClient(conn, &utls.Config{
++						ServerName: url.Hostname(),
++						RootCAs:    s.rootCAs,
++					}, utls.HelloChrome_Auto)
+ 					if err := conn.(*utls.UConn).HandshakeContext(ctx); err != nil {
+ 						return nil, err
+ 					}
+diff --git a/app/dns/nameserver_quic.go b/app/dns/nameserver_quic.go
+index 058d25b..45fbfe9 100644
+--- a/app/dns/nameserver_quic.go
++++ b/app/dns/nameserver_quic.go
+@@ -3,6 +3,7 @@ package dns
+ import (
+ 	"bytes"
+ 	"context"
++	"crypto/x509"
+ 	"encoding/binary"
+ 	"net/url"
+ 	"sync"
+@@ -33,6 +34,7 @@ type QUICNameServer struct {
+ 	destination     *net.Destination
+ 	connection      *quic.Conn
+ 	clientIP        net.IP
++	rootCAs         *x509.CertPool
+ }
+ 
+ // NewQUICNameServer creates DNS-over-QUIC client object for local resolving
+@@ -46,11 +48,16 @@ func NewQUICNameServer(url *url.URL, disableCache bool, serveStale bool, serveEx
+ 		}
+ 	}
+ 	dest := net.UDPDestination(net.ParseAddress(url.Hostname()), port)
++	rootCAs, err := loadRootCertPoolFromURL(url)
++	if err != nil {
++		return nil, err
++	}
+ 
+ 	s := &QUICNameServer{
+ 		cacheController: NewCacheController(url.String(), disableCache, serveStale, serveExpiredTTL),
+ 		destination:     &dest,
+ 		clientIP:        clientIP,
++		rootCAs:         rootCAs,
+ 	}
+ 
+ 	errors.LogInfo(context.Background(), "DNS: created Local DNS-over-QUIC client for ", url.String())
+@@ -263,7 +270,9 @@ func (s *QUICNameServer) openConnection() (*quic.Conn, error) {
+ 		HandshakeIdleTimeout: handshakeTimeout,
+ 	}
+ 	tlsConfig.ServerName = s.destination.Address.String()
+-	conn, err := quic.DialAddr(context.Background(), s.destination.NetAddr(), tlsConfig.GetTLSConfig(tls.WithNextProto("http/1.1", http2.NextProtoTLS, NextProtoDQ)), quicConfig)
++	standardTLSConfig := tlsConfig.GetTLSConfig(tls.WithNextProto("http/1.1", http2.NextProtoTLS, NextProtoDQ))
++	standardTLSConfig.RootCAs = s.rootCAs
++	conn, err := quic.DialAddr(context.Background(), s.destination.NetAddr(), standardTLSConfig, quicConfig)
+ 	log.Record(&log.AccessMessage{
+ 		From:   "DNS",
+ 		To:     s.destination,
+diff --git a/app/dns/root_certs.go b/app/dns/root_certs.go
+new file mode 100644
+index 0000000..292e4347
+--- /dev/null
++++ b/app/dns/root_certs.go
+@@ -0,0 +1,38 @@
++package dns
++
++import (
++	"crypto/x509"
++	"fmt"
++	"net/url"
++	"os"
++	"strings"
++)
++
++const rootCertFileQuery = "xrayRootCertFile"
++
++// loadRootCertPoolFromURL consumes the app-private CA bundle query parameter.
++// The parameter is removed from the URL before the URL is used for an HTTP request,
++// so the local file path is never sent to the DNS provider.
++func loadRootCertPoolFromURL(u *url.URL) (*x509.CertPool, error) {
++	if u == nil {
++		return nil, nil
++	}
++
++	query := u.Query()
++	path := strings.TrimSpace(query.Get(rootCertFileQuery))
++	if path == "" {
++		return nil, nil
++	}
++	query.Del(rootCertFileQuery)
++	u.RawQuery = query.Encode()
++
++	pemBytes, err := os.ReadFile(path)
++	if err != nil {
++		return nil, fmt.Errorf("read root certificate file %q: %w", path, err)
++	}
++	pool := x509.NewCertPool()
++	if !pool.AppendCertsFromPEM(pemBytes) {
++		return nil, fmt.Errorf("parse root certificate file %q", path)
++	}
++	return pool, nil
++}
+diff --git a/app/dns/nameserver.go b/app/dns/nameserver.go
+index 5112f35..34b0b27 100644
+--- a/app/dns/nameserver.go
++++ b/app/dns/nameserver.go
+@@ -64,6 +64,10 @@ func NewServer(ctx context.Context, dest net.Destination, dispatcher routing.Dis
+ 			return NewDoHNameServer(u, nil, true, disableCache, serveStale, serveExpiredTTL, clientIP), nil
+ 		case strings.EqualFold(u.Scheme, "quic+local"): // DNS-over-QUIC Local mode
+ 			return NewQUICNameServer(u, disableCache, serveStale, serveExpiredTTL, clientIP)
++		case strings.EqualFold(u.Scheme, "tls"), strings.EqualFold(u.Scheme, "dot"): // DNS-over-TLS Remote mode
++			return NewDoTNameServer(u, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
++		case strings.EqualFold(u.Scheme, "tls+local"), strings.EqualFold(u.Scheme, "dot+local"): // DNS-over-TLS Local mode
++			return NewDoTLocalNameServer(u, disableCache, serveStale, serveExpiredTTL, clientIP)
+ 		case strings.EqualFold(u.Scheme, "tcp"): // DNS-over-TCP Remote mode
+ 			return NewTCPNameServer(u, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP)
+ 		case strings.EqualFold(u.Scheme, "tcp+local"): // DNS-over-TCP Local mode
+diff --git a/app/dns/nameserver_tcp.go b/app/dns/nameserver_tcp.go
+index 185dbad..2c3324b 100644
+--- a/app/dns/nameserver_tcp.go
++++ b/app/dns/nameserver_tcp.go
+@@ -3,6 +3,7 @@ package dns
+ import (
+ 	"bytes"
+ 	"context"
++	gotls "crypto/tls"
+ 	"encoding/binary"
+ 	"net/url"
+ 	"sync/atomic"
+@@ -26,6 +27,7 @@ type TCPNameServer struct {
+ 	reqID           uint32
+ 	dial            func(context.Context) (net.Conn, error)
+ 	clientIP        net.IP
++	tlsConfig       *gotls.Config
+ }
+ 
+ // NewTCPNameServer creates DNS over TCP server object for remote resolving.
+@@ -71,8 +73,70 @@ func NewTCPLocalNameServer(url *url.URL, disableCache bool, serveStale bool, ser
+ 	return s, nil
+ }
+ 
++// NewDoTNameServer creates a DNS-over-TLS server object for remote resolving.
++// The connection is dispatched through Xray before the TLS handshake.
++func NewDoTNameServer(
++	url *url.URL,
++	dispatcher routing.Dispatcher,
++	disableCache bool, serveStale bool, serveExpiredTTL uint32,
++	clientIP net.IP,
++) (*TCPNameServer, error) {
++	return newDoTNameServer(url, dispatcher, disableCache, serveStale, serveExpiredTTL, clientIP, "DOT")
++}
++
++// NewDoTLocalNameServer creates a DNS-over-TLS server object for local resolving.
++func NewDoTLocalNameServer(url *url.URL, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*TCPNameServer, error) {
++	return newDoTNameServer(url, nil, disableCache, serveStale, serveExpiredTTL, clientIP, "DOTL")
++}
++
++func newDoTNameServer(
++	url *url.URL,
++	dispatcher routing.Dispatcher,
++	disableCache bool, serveStale bool, serveExpiredTTL uint32,
++	clientIP net.IP,
++	prefix string,
++) (*TCPNameServer, error) {
++	rootCAs, err := loadRootCertPoolFromURL(url)
++	if err != nil {
++		return nil, err
++	}
++	s, err := baseTCPNameServerWithPort(url, prefix, net.Port(853), disableCache, serveStale, serveExpiredTTL, clientIP)
++	if err != nil {
++		return nil, err
++	}
++	s.tlsConfig = &gotls.Config{
++		MinVersion: gotls.VersionTLS12,
++		RootCAs:    rootCAs,
++		ServerName: url.Hostname(),
++	}
++	if dispatcher == nil {
++		s.dial = func(ctx context.Context) (net.Conn, error) {
++			return internet.DialSystem(ctx, *s.destination, nil)
++		}
++	} else {
++		s.dial = func(ctx context.Context) (net.Conn, error) {
++			link, err := dispatcher.Dispatch(toDnsContext(ctx, s.destination.String()), *s.destination)
++			if err != nil {
++				return nil, err
++			}
++
++			return cnc.NewConnection(
++				cnc.ConnectionInputMulti(link.Writer),
++				cnc.ConnectionOutputMulti(link.Reader),
++			), nil
++		}
++	}
++
++	errors.LogInfo(context.Background(), "DNS: created ", prefix, " client initialized for ", url.String())
++	return s, nil
++}
++
+ func baseTCPNameServer(url *url.URL, prefix string, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*TCPNameServer, error) {
+-	port := net.Port(53)
++	return baseTCPNameServerWithPort(url, prefix, net.Port(53), disableCache, serveStale, serveExpiredTTL, clientIP)
++}
++
++func baseTCPNameServerWithPort(url *url.URL, prefix string, defaultPort net.Port, disableCache bool, serveStale bool, serveExpiredTTL uint32, clientIP net.IP) (*TCPNameServer, error) {
++	port := defaultPort
+ 	if url.Port() != "" {
+ 		var err error
+ 		if port, err = net.PortFromString(url.Port()); err != nil {
+@@ -168,6 +228,14 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
+ 				}
+ 				return
+ 			}
++			conn, err = s.secure(dnsCtx, conn)
++			if err != nil {
++				errors.LogErrorInner(ctx, err, "failed to establish DNS-over-TLS connection")
++				if noResponseErrCh != nil {
++					noResponseErrCh <- err
++				}
++				return
++			}
+ 			defer conn.Close()
+ 			dnsReqBuf := buf.New()
+ 			err = binary.Write(dnsReqBuf, binary.BigEndian, uint16(b.Len()))
+@@ -241,6 +309,18 @@ func (s *TCPNameServer) sendQuery(ctx context.Context, noResponseErrCh chan<- er
+ 	}
+ }
+ 
++func (s *TCPNameServer) secure(ctx context.Context, conn net.Conn) (net.Conn, error) {
++	if s.tlsConfig == nil {
++		return conn, nil
++	}
++	tlsConn := gotls.Client(conn, s.tlsConfig.Clone())
++	if err := tlsConn.HandshakeContext(ctx); err != nil {
++		_ = conn.Close()
++		return nil, err
++	}
++	return tlsConn, nil
++}
++
+ // QueryIP implements Server.
+ func (s *TCPNameServer) QueryIP(ctx context.Context, domain string, option dns_feature.IPOption) ([]net.IP, uint32, error) {
+ 	return queryIP(ctx, s, domain, option)
+diff --git a/app/dns/root_certs_test.go b/app/dns/root_certs_test.go
+new file mode 100644
+index 0000000..2e565a99
+--- /dev/null
++++ b/app/dns/root_certs_test.go
+@@ -0,0 +1,49 @@
++package dns
++
++import (
++	"net/url"
++	"testing"
++)
++
++func TestLoadRootCertPoolRemovesPrivateQueryOnReadError(t *testing.T) {
++	u, err := url.Parse("dot+local://dns.example:853?keep=1&xrayRootCertFile=/missing/root.pem")
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	if _, err = loadRootCertPoolFromURL(u); err == nil {
++		t.Fatal("expected missing root certificate file to fail")
++	}
++	if got := u.Query().Get(rootCertFileQuery); got != "" {
++		t.Fatalf("private root certificate query remains: %q", got)
++	}
++	if got := u.Query().Get("keep"); got != "1" {
++		t.Fatalf("unrelated query parameter changed: %q", got)
++	}
++}
++
++func TestDoTLocalNameServerRejectsUnreadableRootFile(t *testing.T) {
++	u, err := url.Parse("dot+local://dns.example:853?xrayRootCertFile=/missing/root.pem")
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	if _, err = NewDoTLocalNameServer(u, false, false, 0, nil); err == nil {
++		t.Fatal("expected DoT constructor to reject an unreadable root certificate file")
++	}
++}
++
++func TestDoTLocalNameServerDefaultsToPort853(t *testing.T) {
++	u, err := url.Parse("dot+local://dns.example")
++	if err != nil {
++		t.Fatal(err)
++	}
++
++	s, err := NewDoTLocalNameServer(u, false, false, 0, nil)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if got := s.Name(); got != "DOTL//dns.example:853" {
++		t.Fatalf("unexpected DoT destination: %q", got)
++	}
++}

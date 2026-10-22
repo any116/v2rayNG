@@ -5,6 +5,7 @@ import com.v2ray.ang.AppConfig
 import com.v2ray.ang.contracts.IDialerService
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.util.LogUtil
+import com.v2ray.ang.util.RootCertificateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -124,7 +125,7 @@ class DialerNativeService : IDialerService {
         scope = CoroutineScope(serviceJob + Dispatchers.IO)
         if (dialerAddr.isEmpty()) return
 
-        val nativeClient = OkHttpClient.Builder()
+        val nativeClient = OkHttpClient.Builder().apply { RootCertificateManager.configure(this) }
             .retryOnConnectionFailure(true)
             .pingInterval(25, TimeUnit.SECONDS)
             .connectTimeout(30, TimeUnit.SECONDS)

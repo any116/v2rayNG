@@ -3,7 +3,10 @@ set -e
 export ANDROID_NDK_HOME=${NDK_HOME}
 
 git clone -b main https://github.com/xtls/xray-core.git ./xray-core
-patch --verbose -p1 --directory=xray-core < xray.patch
+git -C ./xray-core apply --check ../xray.patch
+git -C ./xray-core apply ../xray.patch
+git -C ./xray-core apply --check ../xray-root-certs.patch
+git -C ./xray-core apply ../xray-root-certs.patch
 #patch --verbose -p1 --directory=AndroidLibXrayLite < libv2ray.patch
 cp trimgeo.go ./xray-core
 cd ./xray-core

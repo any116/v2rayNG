@@ -79,6 +79,24 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 当前快照取自 `2.3.6` 发布的 fdroid APK（提交 `ed0228bb`），保留 174 个库条目的完整元数据。
 增删或升级发布依赖时需同步维护此 JSON 的库版本与许可信息。
 
+### 根证书资产来源
+
+`RootCertificateManager` 使用 `V2rayNG/app/src/main/assets/` 下固定提交的
+`mozilla_roots_pem` 与 `chrome_roots_pem`，运行时不联网更新根证书，而是从 APK 内的
+PEM 快照加载：
+
+- **Mozilla**：来自 CCADB 的 Mozilla Included Roots PEM 数据源，并限定
+  `TrustBitsInclude=Websites`，即 Mozilla 根证书库中启用网站（TLS/SSL）信任位的根证书：
+  `https://ccadb.my.salesforce-sites.com/mozilla/IncludedRootsPEMTxt?TrustBitsInclude=Websites`
+- **Chrome**：来自 Chromium 源码中的 Chrome Root Store `root_store.certs`，该 Gitiles
+  接口返回 Base64 内容，更新时需要解码并保留其中的 PEM 证书块：
+  `https://chromium.googlesource.com/chromium/src/+/main/net/data/ssl/chrome_root_store/root_store.certs?format=TEXT`
+
+Mozilla 数据遵循 CCADB 数据使用条款（CDLA-2.0 Permissive），Chromium 根证书库遵循
+BSD 3-Clause。更新上述资产时应从对应上游重新生成 PEM 快照，检查证书数量与差异，并同步
+维护根证书相关测试；不要改成运行时直接下载。生成和清洗 PEM 的参考实现是
+v2rayN 上游的 `.github/scripts/UpdateCert.cs`。
+
 **DI 框架：Hilt**（`com.google.dagger.hilt.android`，KSP 处理器）。
 Application 带 `@HiltAndroidApp`，Activity / Service 带 `@AndroidEntryPoint`，ViewModel 带
 `@HiltViewModel` + `@Inject constructor`，Activity 侧用标准 `by viewModels<XxxViewModel>()`。

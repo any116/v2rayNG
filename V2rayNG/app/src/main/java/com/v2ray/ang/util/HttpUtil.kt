@@ -270,6 +270,8 @@ object HttpUtil {
             .followRedirects(followRedirects)
             .followSslRedirects(followRedirects)
 
+        RootCertificateManager.configure(builder)
+
         if (httpPort != 0) {
             builder.proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(LOOPBACK, httpPort)))
             if (!proxyUsername.isNullOrBlank() && !proxyPassword.isNullOrBlank()) {

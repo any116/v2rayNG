@@ -273,6 +273,12 @@
 
     <string name="title_pref_ip_api_url">URL kiểm tra thông tin kết nối hiện tại</string>
     <string name="summary_pref_ip_api_url" translatable="false">URL</string>
+    <string name="title_pref_root_certificate_provider">Nhà cung cấp chứng chỉ gốc</string>
+    <string name="summary_pref_root_certificate_provider">Áp dụng cho các yêu cầu mạng của ứng dụng và việc xác thực chứng chỉ TLS, DNS over HTTPS, DNS over TLS, DNS over QUIC của lõi Xray. Thay đổi sẽ khởi động lại lõi.</string>
+    <string name="root_certificate_provider_follow_system">Theo hệ thống</string>
+    <string name="root_certificate_provider_system_and_user">Hệ thống và người dùng</string>
+    <string name="root_certificate_provider_mozilla">Mozilla</string>
+    <string name="root_certificate_provider_chrome">Chrome</string>
 
     <string name="title_pref_proxy_sharing_enabled">Cho phép kết nối từ mạng LAN</string>
     <string name="summary_pref_proxy_sharing_enabled">Các thiết bị khác có thể kết nối với proxy SOCKS/HTTP trên thiết bị của bạn qua mạng LAN.\nChỉ bật tính năng này trong các mạng đáng tin cậy để tránh kết nối trái phép.</string>

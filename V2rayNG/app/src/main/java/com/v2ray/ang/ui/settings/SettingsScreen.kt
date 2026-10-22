@@ -653,6 +653,14 @@ private fun AdvancedSection(state: SettingsUiState, onAction: (SettingsAction) -
         R.string.title_pref_ip_api_url,
         onAction = onAction
     )
+    OptionItem(
+        StringPref.ROOT_CERTIFICATE_PROVIDER,
+        state[StringPref.ROOT_CERTIFICATE_PROVIDER],
+        R.string.title_pref_root_certificate_provider,
+        rememberStringOptions(R.array.root_certificate_provider_entries),
+        rememberStringOptions(R.array.root_certificate_provider_values),
+        onAction = onAction
+    )
 }
 
 @Composable

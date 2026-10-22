@@ -273,6 +273,12 @@
 
     <string name="title_pref_ip_api_url">বর্তমান সংযোগের তথ্য পরীক্ষার URL</string>
     <string name="summary_pref_ip_api_url" translatable="false">URL</string>
+    <string name="title_pref_root_certificate_provider">রুট সার্টিফিকেট প্রদানকারী</string>
+    <string name="summary_pref_root_certificate_provider">অ্যাপের নেটওয়ার্ক অনুরোধ এবং Xray কোরের TLS, DNS over HTTPS, DNS over TLS, DNS over QUIC সার্টিফিকেট যাচাইকরণে প্রযোজ্য। পরিবর্তন করলে কোর পুনরায় চালু হবে।</string>
+    <string name="root_certificate_provider_follow_system">সিস্টেম অনুসরণ করুন</string>
+    <string name="root_certificate_provider_system_and_user">সিস্টেম ও ব্যবহারকারী</string>
+    <string name="root_certificate_provider_mozilla">Mozilla</string>
+    <string name="root_certificate_provider_chrome">Chrome</string>
 
     <string name="title_pref_proxy_sharing_enabled">LAN থেকে সংযোগ অনুমোদন করুন</string>
     <string name="summary_pref_proxy_sharing_enabled">অন্যান্য ডিভাইসগুলি আপনার আইপি ঠিকানা ব্যবহার করে প্রক্সিতে সংযুক্ত হতে পারে, শুধুমাত্র বিশ্বস্ত নেটওয়ার্কে সক্রিয় করুন যাতে অনুমোদিত সংযোগ এড়ানো যায়</string>

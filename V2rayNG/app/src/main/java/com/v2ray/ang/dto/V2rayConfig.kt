@@ -223,8 +223,9 @@ data class V2rayConfig(
                 val preferServerCipherSuites: Boolean? = null,
                 val cipherSuites: String? = null,
                 val fingerprint: String? = null,
-                val certificates: List<Any>? = null,
-                val disableSystemRoot: Boolean? = null,
+                var certificates: List<CertificateBean>? = null,
+                var disableSystemRoot: Boolean? = null,
+                var useSystemCA: Boolean? = null,
                 val enableSessionResumption: Boolean? = null,
                 var echConfigList: String? = null,
                 var verifyPeerCertByName: String? = null,
@@ -234,7 +235,12 @@ data class V2rayConfig(
                 var shortId: String? = null,
                 var spiderX: String? = null,
                 var mldsa65Verify: String? = null
-            )
+            ) {
+                data class CertificateBean(
+                    val usage: String = "verify",
+                    val certificate: List<String> = emptyList()
+                )
+            }
 
             data class QuicSettingBean(
                 var security: String = "none",
