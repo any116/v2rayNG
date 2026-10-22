@@ -47,7 +47,8 @@ data class ScrollbarConfig(
     val padding: Dp = 2.dp,
     val cornerRadius: Dp = 2.dp,
     val fadeOutDurationMs: Int = 1500,
-    val fadeAnimDurationMs: Int = 300
+    val fadeAnimDurationMs: Int = 300,
+    val isFadeEnabled: Boolean = true
 ) {
     companion object {
         val Default = ScrollbarConfig()
@@ -85,7 +86,7 @@ private fun Modifier.m3Scrollbar(
             thickness = config.thickness,
             thumbMinLength = config.minThumbSize,
             thumbMaxLengthFraction = ThumbMaxLengthFraction,
-            isFadeEnabled = true,
+            isFadeEnabled = config.isFadeEnabled,
             fadeDelayMillis = config.fadeOutDurationMs,
             fadeDurationMillis = config.fadeAnimDurationMs,
             mainAxisTrackInset = config.padding,

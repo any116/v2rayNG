@@ -34,10 +34,12 @@ import com.v2ray.ang.R
 import com.v2ray.ang.ui.components.AppSearchState
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
+import com.v2ray.ang.ui.components.ScrollbarConfig
 import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlin.math.roundToInt
 
 private val MainMenuWindowMargin = 20.dp
+private val MainMenuScrollbarConfig = ScrollbarConfig.Default.copy(isFadeEnabled = false)
 
 @Composable
 fun MainTopBar(
@@ -153,7 +155,7 @@ fun MainTopBar(
                     containerColor = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .heightIn(max = maxImportMenuHeight)
-                        .verticalScrollbar(importScrollState)
+                        .verticalScrollbar(importScrollState, MainMenuScrollbarConfig)
                 ) {
                     ImportMenuContent { action ->
                         showImportMenu = false
@@ -191,7 +193,7 @@ fun MainTopBar(
                     containerColor = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .heightIn(max = maxMoreMenuHeight)
-                        .verticalScrollbar(moreScrollState)
+                        .verticalScrollbar(moreScrollState, MainMenuScrollbarConfig)
                 ) {
                     MoreMenuContent(
                         onAction = { action ->
