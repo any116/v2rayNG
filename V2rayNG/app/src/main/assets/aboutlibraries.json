@@ -522,10 +522,10 @@
     },
     {
       "uniqueId": "androidx.compose.material3:material3",
-      "artifactVersion": "1.5.0-alpha29",
+      "artifactVersion": "1.5.0-beta02",
       "name": "Compose Material3 Components",
       "description": "Compose Material You Design Components library",
-      "website": "https://developer.android.com/jetpack/androidx/releases/compose-material3#1.5.0-alpha29",
+      "website": "https://developer.android.com/jetpack/androidx/releases/compose-material3#1.5.0-beta02",
       "developers": [
         {
           "name": "The Android Open Source Project"
@@ -544,10 +544,10 @@
     },
     {
       "uniqueId": "androidx.compose.material3:material3-ripple",
-      "artifactVersion": "1.5.0-alpha29",
+      "artifactVersion": "1.5.0-beta02",
       "name": "Compose Material3 Ripple",
       "description": "Building block APIs to build ripples that follow a Material 3 specification.",
-      "website": "https://developer.android.com/jetpack/androidx/releases/compose-material3#1.5.0-alpha29",
+      "website": "https://developer.android.com/jetpack/androidx/releases/compose-material3#1.5.0-beta02",
       "developers": [
         {
           "name": "The Android Open Source Project"
@@ -1847,10 +1847,10 @@
     },
     {
       "uniqueId": "androidx.paging:paging-common",
-      "artifactVersion": "3.5.1",
+      "artifactVersion": "3.5.3",
       "name": "Paging-Common",
       "description": "Android Paging-Common",
-      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.1",
+      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.3",
       "developers": [
         {
           "name": "The Android Open Source Project"
@@ -1869,10 +1869,10 @@
     },
     {
       "uniqueId": "androidx.paging:paging-common-ktx",
-      "artifactVersion": "3.5.1",
+      "artifactVersion": "3.5.3",
       "name": "Paging-Common Kotlin Extensions",
       "description": "Kotlin extensions for 'paging-common' artifact",
-      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.1",
+      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.3",
       "developers": [
         {
           "name": "The Android Open Source Project"
@@ -1891,10 +1891,10 @@
     },
     {
       "uniqueId": "androidx.paging:paging-compose",
-      "artifactVersion": "3.5.1",
+      "artifactVersion": "3.5.3",
       "name": "Paging-Compose",
       "description": "Compose integration with Paging",
-      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.1",
+      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.3",
       "developers": [
         {
           "name": "The Android Open Source Project"
@@ -1913,10 +1913,10 @@
     },
     {
       "uniqueId": "androidx.paging:paging-runtime",
-      "artifactVersion": "3.5.1",
+      "artifactVersion": "3.5.3",
       "name": "Paging-Runtime",
       "description": "Android Paging-Runtime",
-      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.1",
+      "website": "https://developer.android.com/jetpack/androidx/releases/paging#3.5.3",
       "developers": [
         {
           "name": "The Android Open Source Project"
@@ -2567,7 +2567,7 @@
     },
     {
       "uniqueId": "com.google.code.gson:gson",
-      "artifactVersion": "2.14.0",
+      "artifactVersion": "2.15.0",
       "name": "Gson",
       "description": "Gson JSON library",
       "website": "https://github.com/google/gson",
@@ -2748,7 +2748,7 @@
     },
     {
       "uniqueId": "com.mikepenz:aboutlibraries-compose-core",
-      "artifactVersion": "15.2.0",
+      "artifactVersion": "15.3.0",
       "name": "AboutLibraries Compose UI Library",
       "description": "AboutLibraries automatically detects all dependencies of a project and collects their information including the license. Optionally visualising it via the provided ui components.",
       "website": "https://github.com/mikepenz/AboutLibraries",
@@ -2768,7 +2768,7 @@
     },
     {
       "uniqueId": "com.mikepenz:aboutlibraries-compose-m3",
-      "artifactVersion": "15.2.0",
+      "artifactVersion": "15.3.0",
       "name": "AboutLibraries Compose Material 3 Library",
       "description": "AboutLibraries automatically detects all dependencies of a project and collects their information including the license. Optionally visualising it via the provided ui components.",
       "website": "https://github.com/mikepenz/AboutLibraries",
@@ -2788,7 +2788,7 @@
     },
     {
       "uniqueId": "com.mikepenz:aboutlibraries-core",
-      "artifactVersion": "15.2.0",
+      "artifactVersion": "15.3.0",
       "name": "AboutLibraries Core Library",
       "description": "AboutLibraries automatically detects all dependencies of a project and collects their information including the license. Optionally visualising it via the provided ui components.",
       "website": "https://github.com/mikepenz/AboutLibraries",
@@ -2808,7 +2808,7 @@
     },
     {
       "uniqueId": "com.squareup.okhttp3:okhttp",
-      "artifactVersion": "5.5.0",
+      "artifactVersion": "5.5.1",
       "name": "okhttp",
       "description": "Square’s meticulous HTTP client for Java and Kotlin.",
       "website": "https://lysine.dev/okhttp/",
@@ -3458,7 +3458,7 @@
     },
     {
       "uniqueId": "org.jetbrains.kotlin:kotlin-stdlib",
-      "artifactVersion": "2.4.20",
+      "artifactVersion": "2.4.21",
       "name": "Kotlin Stdlib",
       "description": "Kotlin Standard Library",
       "website": "https://kotlinlang.org/",
@@ -3479,7 +3479,7 @@
     },
     {
       "uniqueId": "org.jetbrains.kotlin:kotlin-stdlib-common",
-      "artifactVersion": "2.4.20",
+      "artifactVersion": "2.4.21",
       "name": "Kotlin Stdlib Common",
       "description": "Kotlin Common Standard Library (legacy, use kotlin-stdlib instead)",
       "website": "https://kotlinlang.org/",

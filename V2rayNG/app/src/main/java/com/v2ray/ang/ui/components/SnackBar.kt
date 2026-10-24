@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -174,6 +175,7 @@ private fun Modifier.maxWidthFraction(fraction: Float) = layout { measurable, co
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun AppSnackbarHost(hostState: SnackbarHostState, modifier: Modifier = Modifier) {
     SnackbarHost(hostState = hostState, modifier = modifier.fillMaxSize()) { data ->
         val colors = LocalAppColors.current

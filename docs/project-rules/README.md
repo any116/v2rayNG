@@ -41,11 +41,11 @@
 
 | 项 | 版本 |
 | --- | --- |
-| Kotlin / AGP | 2.4.20 / 9.4.1（KSP 2.3.12） |
-| Compose BOM / Material3 | 2026.09.00 / 1.5.0-alpha29（显式覆盖 BOM） |
+| Kotlin / AGP | 2.4.21 / 9.4.1（KSP 2.3.12） |
+| Compose BOM / Material3 | 2026.09.00 / 1.5.0-beta02（显式覆盖 BOM） |
 | Hilt / androidx.hilt | 2.60.1 / 1.4.0 |
 | Room 3 / SQLite driver | 3.0.3 / sqlite-bundled 2.7.1 |
-| Paging | 3.5.1 |
+| Paging | 3.5.3 |
 | Glance | 1.3.0-alpha02 |
 | compileSdk / targetSdk / minSdk | 37 / 37 / 24 |
 
