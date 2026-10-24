@@ -38,6 +38,10 @@ open class AboutRepository @Inject constructor(
 
     open fun shortVersionText(): String = "$VERSION_PREFIX${BuildConfig.VERSION_NAME}"
 
+    open fun commitHash(): String = BuildConfig.GIT_COMMIT_HASH
+
+    open fun commitTime(): String = BuildConfig.GIT_COMMIT_TIME
+
     open suspend fun fullVersionText(): String = withIO {
         "$VERSION_PREFIX${BuildConfig.VERSION_NAME} (${CoreNativeManager.getLibVersion()})"
     }

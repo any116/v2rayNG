@@ -18,6 +18,8 @@ enum class AboutPage(@StringRes val titleRes: Int) {
 data class AboutUiState(
     val versionText: String = "",
     val appId: String = "",
+    val commitHash: String = "",
+    val commitTime: String = "",
     val page: AboutPage = AboutPage.MENU,
     val translators: List<TranslatorGroup> = emptyList()
 ) : BaseUiState

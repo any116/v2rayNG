@@ -1,5 +1,8 @@
 import com.android.build.api.variant.BuildConfigField
 import com.android.build.api.variant.FilterConfiguration
+import java.time.Instant
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 plugins {
     alias(libs.plugins.android.application)
@@ -8,6 +11,22 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.room3)
 }
+
+fun gitValue(fallback: String, vararg arguments: String): String = runCatching {
+    providers.exec {
+        commandLine("git", *arguments)
+    }.standardOutput.asText.get().trim()
+}.getOrDefault(fallback)
+
+val gitCommitHash = gitValue("unknown", "rev-parse", "--short=8", "HEAD")
+val gitCommitTime = gitValue("unknown", "show", "-s", "--format=%ct", "HEAD")
+    .toLongOrNull()
+    ?.let {
+        Instant.ofEpochSecond(it)
+            .atOffset(ZoneOffset.ofHours(8))
+            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+    }
+    ?: "unknown"
 
 android {
     namespace = "com.v2ray.ang"
@@ -140,6 +159,14 @@ androidComponents {
         checkNotNull(variant.buildConfigFields) { "BuildConfig must be enabled for ${variant.name}" }.put(
             "DISTRIBUTION",
             BuildConfigField("String", "\"$distribution\"", null)
+        )
+        checkNotNull(variant.buildConfigFields).put(
+            "GIT_COMMIT_HASH",
+            BuildConfigField("String", "\"$gitCommitHash\"", null)
+        )
+        checkNotNull(variant.buildConfigFields).put(
+            "GIT_COMMIT_TIME",
+            BuildConfigField("String", "\"$gitCommitTime\"", null)
         )
         val distributionSuffix = if (isFdroid) "-fdroid" else ""
         val abiVersionCodes = mapOf(

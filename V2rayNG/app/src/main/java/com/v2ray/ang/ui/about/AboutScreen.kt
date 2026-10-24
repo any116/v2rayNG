@@ -83,6 +83,8 @@ fun AboutScreen(viewModel: AboutViewModel) {
             AboutPage.MENU -> AboutContent(
                 versionText = state.versionText,
                 appId = state.appId,
+                commitHash = state.commitHash,
+                commitTime = state.commitTime,
                 onAction = onAction
             )
             AboutPage.TRANSLATORS -> TranslatorsContent(
@@ -109,6 +111,8 @@ private fun rememberAboutPage(viewModel: AboutViewModel): State<AboutPage> {
 private fun AboutContent(
     versionText: String,
     appId: String,
+    commitHash: String,
+    commitTime: String,
     onAction: (AboutAction) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -126,7 +130,34 @@ private fun AboutContent(
         if (versionText.isNotEmpty()) {
             VersionInfoBlock(versionText = versionText, appIdText = appId.ifEmpty { null })
         }
+        BuildMetadataBlock(commitHash = commitHash, commitTime = commitTime)
         NavigationBarsSpacer()
+    }
+}
+
+@Composable
+private fun BuildMetadataBlock(
+    commitHash: String,
+    commitTime: String,
+    modifier: Modifier = Modifier
+) {
+    if (commitHash.isEmpty() && commitTime.isEmpty()) return
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = ListHorizontalPad, vertical = ListVerticalPad),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        val metadata = listOf(commitHash, commitTime)
+            .filter(String::isNotEmpty)
+            .joinToString(separator = " ")
+        if (metadata.isNotEmpty()) {
+            Text(
+                text = metadata,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 
@@ -283,6 +314,8 @@ private fun AboutContentPreview() = AppTheme {
     AboutContent(
         versionText = "v2.3.6 (26.2.6)",
         appId = "com.v2ray.ang",
+        commitHash = "deead0ee",
+        commitTime = "2026-10-23T03:53:20Z",
         onAction = {}
     )
 }

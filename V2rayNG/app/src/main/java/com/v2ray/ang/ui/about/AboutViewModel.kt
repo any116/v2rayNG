@@ -18,7 +18,14 @@ class AboutViewModel @Inject constructor(
     private var loadJob: Job? = null
 
     init {
-        setState { copy(versionText = repo.shortVersionText(), appId = repo.applicationId()) }
+        setState {
+            copy(
+                versionText = repo.shortVersionText(),
+                appId = repo.applicationId(),
+                commitHash = repo.commitHash(),
+                commitTime = repo.commitTime()
+            )
+        }
 
         loadJob = launch(onError = { LogUtil.e(AppConfig.TAG, "About: background load failed", it) }) {
             val versionText = repo.fullVersionText()
