@@ -71,6 +71,8 @@ fun AppPickerScreen(viewModel: AppPickerViewModel) {
 
     // Narrow slices: every consumer reads exactly one field, through derivedStateOf on its own
     // side, so ticking a row cannot invalidate the top bar or the list container.
+    // The picker must intercept the final back too, because it returns the selected package list
+    // rather than a plain Activity cancellation. Search dismissal is handled by the same path.
     AppBackHandler(onBack = onBack)
 
     BaseScreen(

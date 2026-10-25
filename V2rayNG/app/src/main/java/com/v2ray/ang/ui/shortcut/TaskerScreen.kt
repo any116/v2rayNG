@@ -34,7 +34,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.asString
 import com.v2ray.ang.ui.components.AppTheme
@@ -55,8 +54,6 @@ fun TaskerScreen(
     onEvent: (BaseEvent) -> Boolean
 ) {
     val onAction = remember(viewModel) { viewModel::onAction }
-
-    AppBackHandler { onAction(TaskerAction.Back) }
 
     BaseScreen(
         viewModel = viewModel,

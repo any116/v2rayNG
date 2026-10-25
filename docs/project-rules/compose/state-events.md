@@ -68,9 +68,11 @@ sealed interface XxxEvent : BaseEvent.Platform {
 | 事件 | 谁消费 |
 | --- | --- |
 | `BaseEvent.Message` | `BaseEventEffect` → `LocalAppSnackbar` |
-| `BaseEvent.Navigate(route)` | `BaseScreen`：`AppRoute.OpenUrl` 走 `Utils.openUri`，其余走 `BaseResultContract` |
+| `BaseEvent.Navigate(route)` | `BaseScreen`：`AppRoute.OpenUrl` 走 `Utils.openUri`，应用内由
+  `LocalAppNavigator` 交给 `AppNavigation.kt`，兼容 Activity 才走 `BaseResultContract` |
 | `BaseEvent.Finish(result)` | `BaseEventEffect` → `Activity.finishWithResult` |
-| `BaseEvent.Platform` 子类型 | 先由 `BaseScreen(onEvent = …)` 里的屏内处理器截获（弹窗、滚动定位），未截获的再交给 `XxxActivity.handlePlatformEvent` |
+| `BaseEvent.Platform` 子类型 | 先由 `BaseScreen(onEvent = …)` 里的屏内处理器截获（弹窗、滚动定位），未截获的由
+  `AppNavigation.kt` 或兼容 `XxxActivity.handlePlatformEvent` 翻译 |
 
 `onEvent` 返回 `true` = 已消费。样板：
 

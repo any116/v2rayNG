@@ -30,7 +30,6 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.base.BaseScreen
-import com.v2ray.ang.ui.components.AppBackHandler
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
@@ -82,8 +81,6 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
     val confirmRemoveFlow = remember(viewModel) {
         viewModel.uiState.map { it.confirmRemove }.distinctUntilChanged()
     }
-
-    AppBackHandler { onAction(SubEditAction.Back) }
 
     BaseScreen(
         viewModel = viewModel,

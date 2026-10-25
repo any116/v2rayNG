@@ -8,7 +8,8 @@ Kotlin `2.4.21` + `org.jetbrains.kotlin.plugin.compose`。
 ```
 ui/base/       屏幕基座（BaseScreen / BaseActivity / BaseHelperActivity /
                BaseViewModel / BaseEditViewModel / BaseContract / BaseResult /
-               PlatformActions），不可随意扩充
+               AppNavigator / PlatformActions），不可随意扩充
+ui/AppNavigation.kt  单 Activity 的 Navigation Compose 图、结果回传与统一转场
 ui/components/ 跨屏共享组件与主题
   Theme.kt                    AppTheme、色板、AppSemanticColors、LocalAppColors、
                               LocalDarkTheme、ThemeManager、resolveDarkTheme
@@ -39,7 +40,7 @@ feature 目录，宁可以后再上提，不要预先泛化。
 | `XxxContract.kt` | `XxxUiState`、`XxxAction`、`XxxEvent`，以及该屏专用的 `@Immutable` 小模型 |
 | `XxxScreen.kt` | `XxxScreen(viewModel, …)` 根 Composable + 少量私有子 Composable |
 | `XxxViewModel.kt` | 一个 `@HiltViewModel` 类 |
-| `XxxActivity.kt` | 一个 `@AndroidEntryPoint` 类 |
+| `XxxActivity.kt` | 外部/兼容入口才保留的 `@AndroidEntryPoint` 类 |
 | `XxxDialogs.kt` | `XxxDialog` 密封接口 + `XxxDialogs(...)` 宿主 |
 | `XxxTopBar.kt` / `XxxBottomBar.kt` | 复杂栏区 |
 | `XxxSections.kt` / `XxxRuleList.kt` / `XxxFormFields.kt` / `XxxProtocolForm.kt` 等 | 大表单/大列表的分块 |

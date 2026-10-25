@@ -18,7 +18,8 @@
       manifest 入口→`receiver/`
 - [ ] 没有新增 SharedPreferences / DataStore / Room 2 / 第二种持久化；
       持久化统一使用 Room 3
-- [ ] 没有引入 Navigation-Compose、material-icons-extended
+- [ ] 应用内导航统一复用 `AppNavigation.kt` 的 Navigation-Compose 图，未为单个 feature
+      另起导航栈；没有引入 material-icons-extended
 - [ ] 没有新增 XML 业务布局、没有新增 `AndroidView`（除非 PR 中说明了不可替代的理由）
 
 ## B. SSOT（Blocker）
@@ -42,7 +43,8 @@
 - [ ] 没有把 `viewModel` 传给非根 Composable
 - [ ] `onAction` 的 `when` 是穷尽的（没有 `else` 兜底）
 - [ ] Action 命名表达用户意图，不是 setter
-- [ ] 一次性效果走 `BaseEvent`；`BaseEvent.Platform` 由 Activity 翻译或屏内 `onEvent` 截获
+- [ ] 一次性效果走 `BaseEvent`；`BaseEvent.Platform` 由 `AppNavigation`/兼容 Activity 翻译
+      或屏内 `onEvent` 截获
 - [ ] 提示文案用 `BaseText` 描述，由 UI 渲染；ViewModel 没有直接弹 toast/Snackbar
 - [ ] 子页结果通过 `BaseResult` 回传；草稿字段结果在 UI 更新明确目标，业务处理经 Action
 - [ ] Activity 里没有业务判断，只有 VM 构造、平台能力翻译、系统回调
@@ -75,7 +77,8 @@
 
 ## F. Compose 结构（Blocker）
 
-- [ ] 文件按 `XxxActivity/Contract/Screen/ViewModel` 四件套组织，超长文件已拆分
+- [ ] feature 文件按 `Contract/Screen/ViewModel` 组织；只有外部/兼容入口才保留
+      `XxxActivity`，导航图集中在 `AppNavigation.kt`
 - [ ] 每个可复用 Composable 有 `modifier: Modifier = Modifier` 且作用在最外层
 - [ ] 参数顺序正确（必填数据 → 必填回调 → modifier → 可选参数）
 - [ ] Content 层是无状态的，能被 Preview 直接调用

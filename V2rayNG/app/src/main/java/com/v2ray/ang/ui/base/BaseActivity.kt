@@ -24,6 +24,8 @@ abstract class BaseActivity : AppCompatActivity() {
         enableEdgeToEdge()
         predictiveBackEnabled = PredictiveBackManager.isEnabled()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !predictiveBackEnabled) {
+            // This callback is only the explicit opt-out bridge. It is never registered on the
+            // predictive path, so it cannot compete with PredictiveBackHandler.
             legacyBackCallback = Api33Impl.register(this)
         }
         setContent {
@@ -70,4 +72,5 @@ abstract class BaseActivity : AppCompatActivity() {
             )
         }
     }
+
 }

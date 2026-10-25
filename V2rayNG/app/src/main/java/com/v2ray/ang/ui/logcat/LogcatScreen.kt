@@ -93,7 +93,7 @@ fun LogcatScreen(
     }
     search.ObserveQuery { dispatch(LogcatAction.QueryChanged(it)) }
 
-    AppBackHandler(onBack = onBack)
+    AppBackHandler(enabled = search.isActive, onBack = onBack)
     LifecycleStartEffect(viewModel) {
         dispatch(LogcatAction.Started)
         onStopOrDispose { dispatch(LogcatAction.Stopped) }

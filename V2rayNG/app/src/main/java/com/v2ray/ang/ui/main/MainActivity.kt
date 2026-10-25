@@ -35,7 +35,9 @@ import com.v2ray.ang.R
 import com.v2ray.ang.core.LauncherManager
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.enums.PermissionType
+import com.v2ray.ang.handler.PredictiveBackManager
 import com.v2ray.ang.ui.AppRoute
+import com.v2ray.ang.ui.AppNavHost
 import com.v2ray.ang.ui.base.BaseHelperActivity
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -60,11 +62,17 @@ class MainActivity : BaseHelperActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                moveTaskToBack(false)
-            }
-        })
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE ||
+            !PredictiveBackManager.isEnabled()
+        ) {
+            // Let Android own the root Activity gesture when predictive back is enabled, so the
+            // system can render its back-to-home preview. Keep the legacy task behavior elsewhere.
+            onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() {
+                    moveTaskToBack(false)
+                }
+            })
+        }
         // The notification permission request moved behind the storage barrier (see
         // ScreenContent): a system dialog on the very first frame competes with first draw.
         viewModel.onAction(MainAction.Initialize)
@@ -113,9 +121,9 @@ class MainActivity : BaseHelperActivity() {
                         requestPermission(PermissionType.POST_NOTIFICATIONS) {}
                     }
                 }
-                MainScreen(
-                    viewModel = viewModel,
-                    onPlatformEvent = ::handlePlatformEvent
+                AppNavHost(
+                    mainViewModel = viewModel,
+                    onMainPlatformEvent = ::handlePlatformEvent
                 )
             }
 

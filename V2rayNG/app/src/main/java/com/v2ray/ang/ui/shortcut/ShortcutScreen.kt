@@ -19,7 +19,7 @@ fun ShortcutScreen(
 ) {
     val context = LocalContext.current
 
-    BaseEventEffect(events = viewModel.events) { event ->
+    BaseEventEffect(events = viewModel.events, onEvent = { event ->
         when {
             onEvent(event) -> true
 
@@ -35,7 +35,7 @@ fun ShortcutScreen(
 
             else -> false
         }
-    }
+    })
 }
 
 /**

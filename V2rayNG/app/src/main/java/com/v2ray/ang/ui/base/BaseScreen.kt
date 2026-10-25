@@ -60,6 +60,7 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
     val context = LocalContext.current
     val snackbar = LocalAppSnackbar.current
     val okText = stringResource(R.string.toast_success)
+    val navigator = LocalAppNavigator.current
 
     val resultHandler by rememberUpdatedState(onResult)
     val launcher = rememberLauncherForActivityResult(BaseResultContract()) { result ->
@@ -67,8 +68,20 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
         resultHandler(result)
     }
 
+    if (navigator != null) {
+        LaunchedEffect(navigator) {
+            navigator.results.collect { result ->
+                result ?: return@collect
+                if (autoToastResult && result.notify) snackbar.show(okText, ToastType.SUCCESS)
+                resultHandler(result)
+                navigator.consumeResult()
+            }
+        }
+    }
+
     BaseEventEffect(
         events = viewModel.events,
+        onFinish = { result -> navigator?.finish(result) == true },
         onEvent = { event ->
             when {
                 onEvent(event) -> true
@@ -77,7 +90,8 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
                         Utils.openUri(context, route.url)
                         true
                     }
-                    else -> route.intent(context)?.let { launcher.launch(it); true } ?: false
+                    else -> navigator?.navigate(route) == true ||
+                        route.intent(context)?.let { launcher.launch(it); true } == true
                 }
                 else -> false
             }
@@ -113,11 +127,13 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
 fun BaseEventEffect(
     events: Flow<BaseEvent>,
     onEvent: (BaseEvent) -> Boolean = { false },
+    onFinish: (BaseResult) -> Boolean = { false },
 ) {
     val context = LocalContext.current
     val snackbar = LocalAppSnackbar.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val handler by rememberUpdatedState(onEvent)
+    val finishHandler by rememberUpdatedState(onFinish)
 
     LaunchedEffect(events, lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -129,7 +145,9 @@ fun BaseEventEffect(
                         type = event.message.type,
                         long = event.message.long,
                     )
-                    is BaseEvent.Finish -> context.findActivity()?.finishWithResult(event.result)
+                    is BaseEvent.Finish -> if (!finishHandler(event.result)) {
+                        context.findActivity()?.finishWithResult(event.result)
+                    }
                     // Navigate is intercepted by BaseScreen; Platform is handled by host Activity.
                     is BaseEvent.Navigate, is BaseEvent.Platform -> Unit
                 }

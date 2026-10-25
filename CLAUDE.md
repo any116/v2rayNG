@@ -166,7 +166,8 @@ extension/             # Kotlin 扩展（ListExt / StringExt / ToastExt / _Ext�
 util/                  # Utils / HttpUtil / JsonUtil / LogUtil / QRCodeDecoder / ZipUtil /
                        # AppIconFetcher …
 ui/                    # 全部 Compose UI
-  AppRoute.kt          # 所有导航目标，自己构造 Intent
+  AppRoute.kt          # 所有导航目标与参数定义
+  AppNavigation.kt     # 单 Activity 的 Navigation Compose 图、结果回传与转场
   base/                # BaseActivity / BaseHelperActivity / BaseContract / BaseScreen /
                        # BaseViewModel / BaseEditViewModel / BaseResult
   components/          # 跨屏共享组件：Theme / Common / Dialog / FormFields /
@@ -177,7 +178,7 @@ ui/                    # 全部 Compose UI
   widght/              # Glance 桌面组件 SwitchWidget（包名 com.v2ray.ang.ui.widget，目录名为历史拼写）
 ```
 
-### Base 层契约（`ui/base/`，共 7 个文件）
+### Base 层契约（`ui/base/`，共 8 个文件）
 
 - `BaseUiState` / `BaseAction` / `BaseEvent` / `BaseRoute` / `BaseText` / `BaseMessage`
   —— 在 `BaseContract.kt`，是 SSOT/UDF 的类型基座。
@@ -187,11 +188,15 @@ ui/                    # 全部 Compose UI
 - `BaseEditViewModel<S, A>`：编辑页父类，`save { saveSnapshot(action.form) }` 捕获提交快照，
   子类实现 `doDelete()`；操作返回 `null` 留在原页，`mutationJob` 负责防重入。
 - `BaseScreen(...)`：**唯一**收集 `uiState` 的地方，提供 Scaffold 槽位、事件消费、
-  `BaseResultContract` 启动子页并回传 `BaseResult`。
+  在 Compose 图内通过 `LocalAppNavigator` 导航并回传 `BaseResult`；兼容 Activity 包装层
+  才使用 `BaseResultContract`。
   它**不**订阅 `isLoading`（也无全屏遮罩）；需要顶栏进度时在槽位内自行收集。
 - `BaseActivity` / `BaseHelperActivity`：`BaseActivity` 只做 edge-to-edge + `AppTheme` +
-  `ScreenContent()`；需要文件、权限、扫码时继承 `BaseHelperActivity`，
+  `ScreenContent()`；应用内页面统一由 `MainActivity` 的 `AppNavHost` 承载；需要文件、权限、
+  扫码时继承 `BaseHelperActivity`，
   能力通过 `LocalPlatformActions` 下发，**禁止在 Composable 里 `context as XxxActivity`**。
+- `AppNavigator` / `LocalAppNavigator`：Compose 图内的导航与 `BaseResult` 回传桥；没有该
+  CompositionLocal 的兼容 Activity 继续走 `BaseResultContract`。
 - `BaseRepository`：只做线程收敛，`withIO { }` 包住所有阻塞调用，注入 `@IoDispatcher`。
 - 编辑草稿由 UI-owned `TextFieldState` 及 feature Saver 保存，ViewModel 接收不可变动作快照。
 
@@ -199,7 +204,7 @@ ui/                    # 全部 Compose UI
 
 ```
 ui/<feature>/
-  XxxActivity.kt     # 仅：@AndroidEntryPoint + by viewModels()、ScreenContent()、平台事件翻译
+  XxxActivity.kt     # 外部/兼容入口才保留；应用内页面由 AppNavigation 承载
   XxxContract.kt     # XxxUiState / XxxAction / XxxEvent（+ 该屏专用 @Immutable 模型）
   XxxScreen.kt       # 根 Composable，内部只有 BaseScreen + 槽位
   XxxViewModel.kt    # @HiltViewModel，继承 BaseViewModel / BaseEditViewModel
@@ -211,9 +216,13 @@ ui/<feature>/
 
 ### 导航与返回值
 
-无 Navigation-Compose。一屏一 Activity，`AppRoute` 的每个成员自己 `intent(context)`；
-`BaseScreen` 用 `BaseResultContract` 启动，子页 `finishWithResult(BaseResult.Saved/Deleted/…)`，
-父页在 `onResult` 里 dispatch 一个 Action。`AppRoute.OpenUrl` 返回 `null` intent，由宿主用
+应用内页面统一由 `MainActivity` 承载，`AppNavigation.kt` 持有 Navigation Compose 图；
+页面之间的 slide/fade 转场使用 Compose 的 `enterTransition` / `exitTransition` /
+`popEnterTransition` / `popExitTransition`。外部入口（Tasker、分享、URL Scheme）以及存储启动
+失败时的恢复入口仍可保留独立 Activity 包装层，不参与应用内页面导航。
+
+`BaseScreen` 在 Compose 图内通过 `LocalAppNavigator` 导航并回传 `BaseResult`；兼容包装 Activity
+没有该 CompositionLocal 时，继续使用 `BaseResultContract`。`AppRoute.OpenUrl` 仍由宿主走
 `Utils.openUri` 处理。
 
 ### 多进程与 IPC

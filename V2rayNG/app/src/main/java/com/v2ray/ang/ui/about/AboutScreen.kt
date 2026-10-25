@@ -69,13 +69,14 @@ private const val TranslatorGroupContentType = "translator-group"
 fun AboutScreen(viewModel: AboutViewModel) {
     val dispatch = remember(viewModel) { viewModel::onAction }
     val onBack = remember(dispatch) { { dispatch(AboutAction.Back) } }
+    val page by rememberAboutPage(viewModel)
 
-    AppBackHandler(onBack = onBack)
+    // The menu has no app-owned back work, so leave that gesture to Android's destination preview.
+    AppBackHandler(enabled = page != AboutPage.MENU, onBack = onBack)
 
     BaseScreen(
         viewModel = viewModel,
         topBar = {
-            val page by rememberAboutPage(viewModel)
             AppTopBar(title = stringResource(page.titleRes), onBackClick = onBack)
         }
     ) { state, onAction ->

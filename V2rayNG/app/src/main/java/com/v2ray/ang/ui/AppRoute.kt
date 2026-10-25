@@ -23,11 +23,12 @@ import com.v2ray.ang.ui.userasset.UserAssetActivity
 import com.v2ray.ang.ui.userasset.UserAssetUrlActivity
 
 /**
- * Every navigation target of the app, and the single owner of the Intent extra keys.
+ * Every navigation target of the app, and the single owner of the route argument keys.
  *
- * A route builds its own Intent, so ViewModels emit `navigate(AppRoute.X)` without touching a
- * Context and Activities no longer keep a `when (destination)` table. Screens must read their
- * arguments through the keys in [AppRoute.Companion] rather than re-typing string literals.
+ * Compose destinations use `AppNavigation.kt` for in-app navigation. The compatibility [intent]
+ * implementations remain for external entry points and legacy Activity wrappers, so ViewModels
+ * still emit `navigate(AppRoute.X)` without touching a Context. Screens must read arguments
+ * through the keys in [AppRoute.Companion] rather than re-typing string literals.
  */
 sealed interface AppRoute : BaseRoute {
 

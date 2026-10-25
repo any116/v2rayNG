@@ -2,7 +2,9 @@
 
 ## 1. 导航模型
 
-本项目**不使用 Navigation-Compose**：一屏一 Activity，导航即 Intent。
+应用内页面使用**单 Activity + Navigation Compose**；`ui/AppNavigation.kt` 是唯一的应用内
+导航图与转场入口。`ui/AppRoute.kt` 仍集中定义目标与参数，并保留兼容 Intent，但应用内正常
+导航优先由 `LocalAppNavigator` 交给 Compose 图处理。
 
 `ui/AppRoute.kt` 里每个目标自己构造 Intent：
 
@@ -28,27 +30,40 @@ sealed interface AppRoute : BaseRoute {
 
 规则：
 
-1. 新增目标 → 在 `AppRoute` 加成员 + 实现 `intent(context)` + 在
-   `AppRoute.Companion` 加 `EXTRA_*` 常量 + manifest 注册 Activity。
+1. 新增应用内目标 → 在 `AppRoute` 加成员 + 在 `AppNavigation.kt` 注册 destination + 在
+   `AppRoute.Companion` 加 `EXTRA_*` 常量。只有外部入口才需要 manifest 注册 Activity。
    **不要**在 Activity 里手写 `Intent(this, XxxActivity::class.java)`。
 2. ViewModel 侧只调 `navigate(AppRoute.Xxx(...))`，不接触 `Intent`。
 3. 参数只传可序列化的标量（String / Int / Boolean / 枚举值 / 字符串数组），不传对象；
    接收方用 id 从数据层重新取。
 4. 外部链接一律 `AppRoute.OpenUrl(url)`，`BaseScreen` 会走 `Utils.openUri`。
-5. 返回值走 `BaseResult`（见 `state-events.md` §7），
-   `BaseScreen` 内部用 `rememberLauncherForActivityResult(BaseResultContract())` 启动。
-6. 目标 Activity 读参数在 Activity 或 `SavedStateHandle` 里，
-   转成 ViewModel 的构造参数或初始 State，Composable 不读 Intent。
+5. 返回值走 `BaseResult`（见 `state-events.md` §7）。Compose destination 通过
+   `NavBackStackEntry.savedStateHandle` 回传；兼容 Activity 包装层才使用
+   `rememberLauncherForActivityResult(BaseResultContract())`。
+6. Compose destination 从 `NavBackStackEntry` / `SavedStateHandle` 读参数；兼容 Activity
+   入口在 Activity 或 `SavedStateHandle` 里读参数，转成 ViewModel 的构造参数或初始 State，
+   Composable 不读 Intent。
 
-## 2. 返回键
+## 2. Compose 转场
 
-- 普通屏：系统默认返回即可；需要在返回前保存/确认的，用 `BackHandler`
+`AppNavigation.kt` 统一提供前进与返回转场：
+
+- 前进：当前页向左退出，目标页从右侧进入，并淡出/淡入；
+- 返回：当前页向右退出，上一页从左侧进入，并淡出/淡入；
+- 转场只由 `NavHost` 管理，禁止再给 Compose 内容套 Activity 级 `res/anim`。
+
+需要 app-owned 返回逻辑（搜索、表单结果、页面内子状态）的页面才使用
+`AppBackHandler`；普通 destination 交给 Navigation Compose 的 back dispatcher。
+
+## 3. 返回键
+
+- 普通屏：Navigation Compose 默认返回即可；需要在返回前保存/确认的，用 `BackHandler`
   把返回翻成 Action（如 `ScannerScreen`、`FormPagedDropdownField` 的弹出层），
   ViewModel 决定 `finishWith` 什么结果。
 - `MainActivity` 通过 `OnBackPressedDispatcher` 将系统返回退到后台；仅保留
   `onKeyDown` 对 `KEYCODE_BUTTON_B` 的手柄兼容，这是主屏特例，不要复制到别处。
 
-## 3. Preview 规范
+## 4. Preview 规范
 
 **每个可复用组件与每个 Content 层 Composable 至少一个 Preview。**
 
