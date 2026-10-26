@@ -76,6 +76,8 @@ fun PredictiveBackLayout(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    // The holder is stable for the lifetime of this layout; only changing the preference creates
+    // a new instance. Consumers may safely observe its mutable progress fields across recomposes.
     val state = remember(enabled) {
         PredictiveBackProgressState(
             enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE

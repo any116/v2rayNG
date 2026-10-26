@@ -97,6 +97,7 @@ class CoreProxyOnlyService : Service(), ServiceControl {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun attachBaseContext(newBase: Context?) {
-        super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
+        val base = requireNotNull(newBase) { "attachBaseContext called with null" }
+        super.attachBaseContext(AppLocaleManager.localizedContext(base))
     }
 }

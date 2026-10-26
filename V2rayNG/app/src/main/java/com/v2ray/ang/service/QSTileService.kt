@@ -21,7 +21,8 @@ import java.lang.ref.SoftReference
 class QSTileService : TileService() {
 
     override fun attachBaseContext(newBase: Context?) {
-        super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
+        val base = requireNotNull(newBase) { "attachBaseContext called with null" }
+        super.attachBaseContext(AppLocaleManager.localizedContext(base))
     }
 
     /**
@@ -36,7 +37,7 @@ class QSTileService : TileService() {
         qsTile?.icon = Icon.createWithResource(applicationContext, R.drawable.ic_stat_name)
         if (state == Tile.STATE_INACTIVE) {
             qsTile?.state = Tile.STATE_INACTIVE
-            qsTile?.label = resourceContext.getString(R.string.app_name)
+            qsTile?.label = resourceContext.resources.getString(R.string.app_name)
         } else if (state == Tile.STATE_ACTIVE) {
             qsTile?.state = Tile.STATE_ACTIVE
             qsTile?.label = CoreServiceManager.getRunningServerName()

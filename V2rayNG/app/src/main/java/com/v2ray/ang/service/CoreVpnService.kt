@@ -174,7 +174,8 @@ class CoreVpnService : VpnService(), ServiceControl {
         super<VpnService>.setUnderlyingNetworks(networks)
 
     override fun attachBaseContext(newBase: Context?) {
-        super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
+        val base = requireNotNull(newBase) { "attachBaseContext called with null" }
+        super.attachBaseContext(AppLocaleManager.localizedContext(base))
     }
 
     private fun setupVpnService(bypassLan: Boolean): Boolean {

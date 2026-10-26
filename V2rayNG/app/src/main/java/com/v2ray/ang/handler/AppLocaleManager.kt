@@ -11,6 +11,7 @@ import android.content.res.Resources
 import android.os.Build
 import android.os.LocaleList
 import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.Prefs
 import com.v2ray.ang.data.StorageBootstrap
@@ -22,6 +23,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlin.LazyThreadSafetyMode.PUBLICATION
 
 /**
  * Keeps the in-app language preference synchronized with Android's per-app locale APIs.
@@ -44,6 +46,10 @@ object AppLocaleManager {
     /** Synchronizes the persisted locale after a BaseActivity has rendered its first frame. */
     suspend fun prepareActivity(context: Context) {
         try {
+            if (!StorageBootstrap.awaitReadyOrNull()) {
+                LogUtil.e(AppConfig.TAG, "StorageBootstrap not ready; skipping locale refresh")
+                return
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 initializationJob?.join()
                 if (Prefs.isReady) {
@@ -72,7 +78,15 @@ object AppLocaleManager {
         }
     }
 
-    /** Returns a context using the selected application language for non-Activity components. */
+    /**
+     * Returns a context using the selected application language for non-Activity components.
+     *
+     * The wrapper deliberately resolves the Room-backed preference lazily. A service or other
+     * non-Activity caller will therefore see the selected language once the startup snapshot is
+     * ready. Activities are different: ContextThemeWrapper caches its first [getResources]
+     * result, so [com.v2ray.ang.ui.base.BaseActivity] refreshes its CompositionLocals after the
+     * startup barrier has opened.
+     */
     fun localizedContext(context: Context): Context =
         if (context is LocaleContextWrapper) context else LocaleContextWrapper(context)
 
@@ -91,7 +105,7 @@ object AppLocaleManager {
     }
 
     private suspend fun persistLegacyPreference(language: Language) {
-        if (!Prefs.isReady && !StorageBootstrap.awaitReadyOrNull()) return
+        if (!StorageBootstrap.isReady && !StorageBootstrap.awaitReadyOrNull()) return
         if (!Prefs.isReady) return
         if (Prefs.string(AppConfig.PREF_LANGUAGE) == language.code) return
         Prefs.putString(AppConfig.PREF_LANGUAGE, language.code)
@@ -134,6 +148,15 @@ object AppLocaleManager {
         base: Context,
         private val languageOverride: Language? = null,
     ) : ContextWrapper(base) {
+        /**
+         * Keep the first observable language in the identity of the wrapper. This distinguishes a
+         * wrapper created before the Room snapshot is ready from one created after it, allowing
+         * Compose to refresh an Activity's cached resources exactly once.
+         */
+        private val initialLanguage: Language? by lazy(PUBLICATION) {
+            languageOverride ?: resolveInitialLanguage(base)
+        }
+
         @Volatile
         private var cachedLanguage: Language? = null
 
@@ -153,12 +176,15 @@ object AppLocaleManager {
             if (
                 languageOverride == null &&
                 Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU &&
-                !Prefs.isReady
+                initialLanguage == null &&
+                !StorageBootstrap.isReady
             ) {
                 return baseContext.resources
             }
 
-            val language = languageOverride ?: AppLocaleManager.resolveLanguage(baseContext)
+            val language = languageOverride
+                ?: (if (!StorageBootstrap.isReady) initialLanguage else null)
+                ?: AppLocaleManager.resolveLanguage(baseContext)
             if (language == Language.AUTO) {
                 cachedLanguage = null
                 cachedResources = null
@@ -188,9 +214,11 @@ object AppLocaleManager {
         }
 
         /**
-         * Context's string/color helpers are final and resolve through [getResources]. Assets and
-         * themes, however, are delegated by ContextWrapper, so keep them paired with the
-         * localized Resources instance as well.
+         * Context's String/Color helpers are final on the Android SDK and resolve through
+         * getResources(). ContextWrapper delegates getAssets() and getTheme() to baseContext, so
+         * keep those paired with the localized Resources instance as well. Callers that need a
+         * localized helper must use `localeContext.resources.getString(...)` (and the equivalent
+         * Resources API) rather than `localeContext.getString(...)`.
          */
         override fun getAssets(): AssetManager = getResources().assets
 
@@ -212,6 +240,30 @@ object AppLocaleManager {
             baseContext.setTheme(resid)
             cachedThemeResources = null
             cachedTheme = null
+        }
+
+        override fun equals(other: Any?): Boolean =
+            other is LocaleContextWrapper &&
+                other.baseContext == baseContext &&
+                other.effectiveLanguage() == effectiveLanguage()
+
+        override fun hashCode(): Int = 31 * baseContext.hashCode() + effectiveLanguage().hashCode()
+
+        private fun effectiveLanguage(): Language? = languageOverride ?: initialLanguage
+
+        private fun resolveInitialLanguage(context: Context): Language? {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU || StorageBootstrap.isReady) {
+                return AppLocaleManager.resolveLanguage(context)
+            }
+
+            // AndroidX Core can expose a legacy per-app locale context on older Android versions.
+            // This is only a best-effort cold-start hint: it may be the system locale rather than
+            // the current Room preference. Once the storage barrier opens, resolveLanguage() wins.
+            val compatContext = ContextCompat.getContextForLanguage(context)
+            if (compatContext === context) return null
+            return Language.fromLanguageTag(
+                compatContext.resources.configuration.locales.get(0)?.toLanguageTag()
+            ).takeUnless { it == Language.AUTO }
         }
     }
 

@@ -98,7 +98,7 @@ object NotificationManager {
 
         mBuilder = NotificationCompat.Builder(resourceContext, channelId)
             .setSmallIcon(R.drawable.ic_stat_name)
-            .setContentTitle(currentConfig?.remarks ?: resourceContext.getString(R.string.app_name))
+            .setContentTitle(currentConfig?.remarks ?: resourceContext.resources.getString(R.string.app_name))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setShowWhen(false)
@@ -106,12 +106,12 @@ object NotificationManager {
             .setContentIntent(contentPendingIntent)
             .addAction(
                 R.drawable.ic_delete_24dp,
-                resourceContext.getString(R.string.notification_action_stop_v2ray),
+                resourceContext.resources.getString(R.string.notification_action_stop_v2ray),
                 stopV2RayPendingIntent
             )
             .addAction(
                 R.drawable.ic_restore_24dp,
-                resourceContext.getString(R.string.title_service_restart),
+                resourceContext.resources.getString(R.string.title_service_restart),
                 restartV2RayPendingIntent
             )
 
@@ -168,13 +168,21 @@ object NotificationManager {
     @RequiresApi(Build.VERSION_CODES.O)
     private fun createNotificationChannel(context: Context): String {
         val channelId = AppConfig.RAY_NG_CHANNEL_ID
-        val channelName = context.getString(R.string.notification_channel_core_background_service)
-        // Foreground-service notifications must remain visible; LOW is silent but valid.
-        val chan = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW)
-        chan.lightColor = Color.DKGRAY
-        chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        context.getSystemService(android.app.NotificationManager::class.java)
-            ?.createNotificationChannel(chan)
+        val channelName = context.resources.getString(R.string.notification_channel_core_background_service)
+        val notificationManager = context.getSystemService(android.app.NotificationManager::class.java)
+            ?: return channelId
+        val channel = notificationManager.getNotificationChannel(channelId)
+        if (channel == null) {
+            // Foreground-service notifications must remain visible; LOW is silent but valid.
+            NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW).apply {
+                lightColor = Color.DKGRAY
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            }.also(notificationManager::createNotificationChannel)
+        } else if (channel.name?.toString() != channelName) {
+            // Importance is user-owned, but the display name can follow an application locale.
+            channel.name = channelName
+            notificationManager.createNotificationChannel(channel)
+        }
         return channelId
     }
 

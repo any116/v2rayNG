@@ -94,7 +94,8 @@ class CoreTestService : Service() {
     private var lastStartId = 0
 
     override fun attachBaseContext(newBase: Context?) {
-        super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
+        val base = requireNotNull(newBase) { "attachBaseContext called with null" }
+        super.attachBaseContext(AppLocaleManager.localizedContext(base))
     }
 
     private val cancelAction by lazy {

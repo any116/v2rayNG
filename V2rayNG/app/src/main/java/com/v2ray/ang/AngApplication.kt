@@ -4,7 +4,6 @@ import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
 import android.os.Build
-import androidx.core.content.ContextCompat
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import androidx.work.WorkManager
@@ -43,14 +42,15 @@ class AngApplication : Application() {
     private val observerStarted = AtomicBoolean(false)
 
     override fun attachBaseContext(base: Context?) {
-        super.attachBaseContext(base?.let(ContextCompat::getContextForLanguage))
+        val original = requireNotNull(base) { "attachBaseContext called with null" }
+        // ActivityThread expects Application.getBaseContext() to remain the raw ContextImpl when
+        // it creates receivers. Locale wrappers belong on Activities and Services instead.
+        super.attachBaseContext(original)
         application = this
     }
 
     override fun onCreate() {
         super.onCreate()
-
-        AppLocaleManager.initialize(this)
 
         // A process killed during a large import cannot run ImportBuffer.close(). Remove only
         // old import artifacts; recent files may still belong to another active process.
@@ -62,6 +62,11 @@ class AngApplication : Application() {
         // when bootstrapStorage() returns normally; services, receivers and the UI wait on it.
         val isMain = isMainProcess()
         StorageBootstrap.install(appScope) { bootstrapStorage(isMain) }
+        if (isMain) {
+            // applicationLocales is package-global; only the default process should migrate and
+            // write the framework locale. Each process still resolves its own localized context.
+            AppLocaleManager.initialize(this)
+        }
     }
 
     /**

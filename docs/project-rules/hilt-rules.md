@@ -70,8 +70,10 @@ open class XxxRepository @Inject constructor(
 
 `AngApplication` 带 `@HiltAndroidApp`。四条铁律：
 
-1. `attachBaseContext` 里**不得**访问任何注入字段 —— 那时还没注入
-   （它只做 `ContextCompat.getContextForLanguage` 与 `application = this`）。
+1. `attachBaseContext` 里**不得**访问任何注入字段 —— 那时还没注入。
+   `AngApplication` 必须把原始 `base` 直接传给 `super`，因为 Android 创建 Receiver 时要求
+   `Application.getBaseContext()` 保持为 `ContextImpl`；Activity / Service / Tile 再通过
+   `AppLocaleManager.localizedContext` 做 locale 包装，并设置 `application = this`。
 2. 注入在 `super.onCreate()` 内部完成，所以依赖注入字段的对象必须在
    `super.onCreate()` **之后**构建，不能写成属性初始化器
    （样板：`buildWorkManagerConfiguration()` 是函数而非 `val`）。
@@ -83,10 +85,10 @@ open class XxxRepository @Inject constructor(
    不会因为解析单例就打开文件。
 
 `onCreate` 的 bootstrap 顺序（改动前必读）：
-`AppLocaleManager.initialize` → `WorkManager.initialize` → `appScope.launch`：
-`DatabaseIntegrity.verifyOrThrow` → `settings.refresh()` →（仅主进程）`seedDefaults()` /
-规则集种子 / 默认订阅 → `LogUtil.refreshLogLevel()` → `settings.observe(appScope)` →
-`ThemeManager.refresh()`。
+`WorkManager.initialize` → `StorageBootstrap.install` →（仅主进程）`AppLocaleManager.initialize`；
+bootstrap 内依次执行 `DatabaseIntegrity.verifyOrThrow` → `settings.refresh()` →（仅主进程）
+`seedDefaults()` / 规则集种子 / 默认订阅 → `LogUtil.refreshLogLevel()` →
+`settings.observe(appScope)` → `ThemeManager.refresh()`。
 
 ## 6. 平台组件与非注入组件
 

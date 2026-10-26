@@ -218,7 +218,7 @@ object NotificationHelper {
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 }
             )
-        } else if (channel.name != channelName) {
+        } else if (channel.name?.toString() != channelName) {
             channel.name = channelName
             notificationManager.createNotificationChannel(channel)
         }

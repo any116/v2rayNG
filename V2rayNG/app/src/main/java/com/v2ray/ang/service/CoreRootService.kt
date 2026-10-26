@@ -137,6 +137,7 @@ class CoreRootService : Service(), ServiceControl {
 
     override fun attachBaseContext(newBase: Context?) {
         // Must not touch any injected field here — injection has not happened yet.
-        super.attachBaseContext(newBase?.let(AppLocaleManager::localizedContext))
+        val base = requireNotNull(newBase) { "attachBaseContext called with null" }
+        super.attachBaseContext(AppLocaleManager.localizedContext(base))
     }
 }

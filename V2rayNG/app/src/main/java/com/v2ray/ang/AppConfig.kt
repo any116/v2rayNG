@@ -180,7 +180,10 @@ object AppConfig {
     const val WIREGUARD_LOCAL_MTU = "1420"
     const val LOOPBACK = "127.0.0.1"
 
-    /** Message constants for communication. */
+    /**
+     * Message constants for cross-process communication. Values are protocol identifiers: retain
+     * existing assignments and append new codes instead of reusing retired values.
+     */
     const val MSG_REGISTER_CLIENT = 1
     const val MSG_STATE_RUNNING = 11
     const val MSG_STATE_NOT_RUNNING = 12
@@ -200,8 +203,8 @@ object AppConfig {
     const val MSG_MEASURE_CONFIG_NOTIFY = 73
     const val MSG_MEASURE_CONFIG_FINISH = 74
     const val MSG_MEASURE_CONFIG_CANCELED = 75
+    // Legacy protocol code kept out of numeric order for protocol compatibility; do not reuse.
     const val MSG_WARN_INSECURE = 9
-    // Message codes are part of the cross-process protocol; 9 is still used above.
     const val MSG_LOCALE_CHANGED = 10
 
     /** Notification channel IDs. */

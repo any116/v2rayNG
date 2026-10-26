@@ -58,7 +58,9 @@ Room 的跨进程一致性靠 `DatabaseModule` 的 `enableMultiInstanceInvalidat
   存储未就绪时模式（VPN / Root / 仅代理）、并发数等都会读成编码默认值，必须显式跳过或报错，不能继续启动。
 - Service 的 `serviceScope` 必须 `by lazy`：`@Inject lateinit var io` 只在 `super.onCreate()` 之后可用，
   属性初始化器会在构造期崩溃（样板：`CoreTestService`）。
-- `attachBaseContext` 里只能做 locale 包装（`AppLocaleManager.localizedContext`），不得读注入字段。
+- `attachBaseContext` 不得读注入字段。`AngApplication` 必须把原始 `base` 直接传给 `super`，
+  以保持 Android 创建 Receiver 所需的 `ContextImpl`；Activity / Service / Tile 才使用
+  `AppLocaleManager.localizedContext` 做 locale 包装。
 
 ## 4. Receiver 规范
 
