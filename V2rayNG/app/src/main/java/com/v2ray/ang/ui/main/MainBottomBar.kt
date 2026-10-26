@@ -79,7 +79,8 @@ internal fun MainBottomBar(
     isRunning: Boolean,
     isTesting: Boolean,
     onAction: (MainAction) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    suppressAnimations: Boolean = false
 ) {
     val colors = MaterialTheme.colorScheme
     val shape = MaterialTheme.shapes.extraLarge
@@ -112,10 +113,12 @@ internal fun MainBottomBar(
                 enabled = isRunning || isTesting,
                 isTesting = isTesting,
                 shape = shape,
+                suppressAnimations = suppressAnimations,
                 onClick = { onAction(MainAction.StatusBarClick) }
             )
             ServiceFab(
                 isRunning = isRunning,
+                suppressAnimations = suppressAnimations,
                 onClick = { onAction(MainAction.ToggleService) }
             )
         }
@@ -128,6 +131,7 @@ private fun RowScope.StatusSection(
     enabled: Boolean,
     isTesting: Boolean,
     shape: Shape,
+    suppressAnimations: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -148,7 +152,8 @@ private fun RowScope.StatusSection(
                 state = wave,
                 color = colors.scrim,
                 darkTheme = darkTheme,
-                enabled = enabled
+                enabled = enabled,
+                suppressAnimations = suppressAnimations
             )
             .border(
                 width = BarBorderWidth,
@@ -191,6 +196,7 @@ private fun RowScope.StatusSection(
 private fun ServiceFab(
     isRunning: Boolean,
     onClick: () -> Unit,
+    suppressAnimations: Boolean,
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
@@ -246,7 +252,7 @@ private fun ServiceFab(
                     shape = FloatingActionButtonDefaults.shape
                 )
                 .graphicsLayer {
-                    val value = bounce.value
+                    val value = if (suppressAnimations) 1f else bounce.value
                     scaleX = value
                     scaleY = value
                 },
@@ -262,6 +268,7 @@ private fun ServiceFab(
         ) {
             ServiceIcon(
                 isRunning = isRunning,
+                suppressAnimations = suppressAnimations,
                 modifier = Modifier.size(FabIconSize)
             )
         }
@@ -272,6 +279,7 @@ private fun ServiceFab(
 @Composable
 private fun ServiceIcon(
     isRunning: Boolean,
+    suppressAnimations: Boolean,
     modifier: Modifier = Modifier
 ) {
     // Resolve both vectors up front so resource parsing cannot happen during the swap animation.
@@ -317,14 +325,21 @@ private fun ServiceIcon(
         contentDescription = stringResource(if (isRunning) R.string.acc_stop else R.string.acc_start),
         modifier = modifier
             .graphicsLayer {
-                val fadeScale = FabIconMinScale + (1f - FabIconMinScale) * scaleProgress.value
-                val waveValue = wave.value
-                val waveScale = FabIconWaveStartScale + (1f - FabIconWaveStartScale) * waveValue
-                val scale = fadeScale * waveScale
-                alpha = alphaProgress.value
-                scaleX = scale
-                scaleY = scale
-                rotationZ = (1f - waveValue) * FabIconWaveRotationDegrees
+                if (suppressAnimations) {
+                    alpha = 1f
+                    scaleX = 1f
+                    scaleY = 1f
+                    rotationZ = 0f
+                } else {
+                    val fadeScale = FabIconMinScale + (1f - FabIconMinScale) * scaleProgress.value
+                    val waveValue = wave.value
+                    val waveScale = FabIconWaveStartScale + (1f - FabIconWaveStartScale) * waveValue
+                    val scale = fadeScale * waveScale
+                    alpha = alphaProgress.value
+                    scaleX = scale
+                    scaleY = scale
+                    rotationZ = (1f - waveValue) * FabIconWaveRotationDegrees
+                }
             }
     )
 }

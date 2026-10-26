@@ -42,7 +42,10 @@ fun SettingsScreen(
 ) {
     val onAction = remember(viewModel) { viewModel::onAction }
     val onBack = remember(onAction) { { onAction(SettingsAction.Back) } }
-    AppBackHandler(onBack = onBack)
+    AppBackHandler(onBack = {
+        onBack()
+        true
+    })
 
     BaseScreen(
         viewModel = viewModel,

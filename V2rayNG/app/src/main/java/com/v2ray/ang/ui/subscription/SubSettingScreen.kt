@@ -54,7 +54,10 @@ fun SubSettingScreen(viewModel: SubSettingViewModel) {
     val onAction = remember(viewModel) { viewModel::onAction }
     val dialogs = rememberSubDialogHost(onAction)
 
-    AppBackHandler { onAction(SubAction.Back) }
+    AppBackHandler {
+        onAction(SubAction.Back)
+        true
+    }
 
     BaseScreen(
         viewModel = viewModel,

@@ -63,6 +63,20 @@ sealed interface AppRoute : BaseRoute {
 - `MainActivity` 通过 `OnBackPressedDispatcher` 将系统返回退到后台；仅保留
   `onKeyDown` 对 `KEYCODE_BUTTON_B` 的手柄兼容，这是主屏特例，不要复制到别处。
 
+### 3.1 预测性返回进度与降载
+
+`PredictiveBackLayout` 通过 `LocalPredictiveBackProgress` 暴露只读的预测性返回状态：
+
+- `progress` 只由页面自己的 `PredictiveBackHandler` 提供，是每帧高频值，只能在 draw/layout lambda
+  中读取，不能让 MAIN 根节点订阅；
+- `isInProgress` 是低频的开始/取消/提交信号，用于在 MAIN 的顶栏、底栏和波形/FAB 绘制期间降载；
+- Android 16+ 使用 `PRIORITY_SYSTEM_NAVIGATION_OBSERVER` 观察根 Activity 的**提交**，observer 不消费返回，
+  因而保留系统 home preview；该 observer 不提供 `onBackStarted/onBackProgressed`；
+- Android 14/15 没有公开的等价非消费进度观察 API，不能在根页面启用一个空的
+  `PredictiveBackHandler` 代替，否则会抢占系统返回；这些版本在 Activity `ON_PAUSE` 时只做提交后的降载；
+- 子页返回只有在真正开始 destination pop 时保持抑制，MAIN destination 在完成返回转场并重新
+  `ON_RESUME` 后清理；局部返回（搜索/子页面）在 action 完成后立即清理，Activity 重新 `ON_RESUME` 也会清理。
+
 ## 4. Preview 规范
 
 **每个可复用组件与每个 Content 层 Composable 至少一个 Preview。**

@@ -61,7 +61,10 @@ fun RoutingSettingScreen(
     val domainStrategies = rememberStringOptions(R.array.routing_domain_strategy)
     val dialogs = remember { RoutingDialogHost() }
 
-    AppBackHandler { onAction(RoutingAction.Back) }
+    AppBackHandler {
+        onAction(RoutingAction.Back)
+        true
+    }
 
     BaseScreen(
         viewModel = viewModel,

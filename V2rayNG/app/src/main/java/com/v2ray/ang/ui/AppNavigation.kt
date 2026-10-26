@@ -2,6 +2,7 @@ package com.v2ray.ang.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -162,6 +163,16 @@ private fun exitToRight(): ExitTransition =
         targetOffsetX = { (it * TransitionOffsetFraction).roundToInt() }
     ) + fadeOut(tween(TransitionDurationMillis, easing = FastOutLinearInEasing))
 
+/**
+ * Keeps the retained home screen stationary while the smaller child destination leaves.
+ *
+ * Main contains a paged server list, so animating its whole content on every frame doubles the
+ * amount of work during a pop. The child still slides away, which preserves the navigation cue
+ * without competing with the home screen's first visible frame.
+ */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnterTransitionForDestination(): EnterTransition =
+    if (targetState.destination.route == NavRoute.MAIN) EnterTransition.None else enterFromLeft()
+
 private class NavEntryNavigator(
     private val entry: NavBackStackEntry,
     private val navigateRoute: (AppRoute) -> Boolean,
@@ -262,9 +273,9 @@ fun AppNavHost(
         modifier = modifier.fillMaxSize(),
         enterTransition = { enterFromRight() },
         exitTransition = { exitToLeft() },
-        popEnterTransition = { enterFromLeft() },
+        popEnterTransition = { popEnterTransitionForDestination() },
         popExitTransition = { exitToRight() },
-        predictivePopEnterTransition = { _ -> enterFromLeft() },
+        predictivePopEnterTransition = { _ -> popEnterTransitionForDestination() },
         predictivePopExitTransition = { _ -> exitToRight() },
     ) {
         composable(NavRoute.MAIN) { entry ->

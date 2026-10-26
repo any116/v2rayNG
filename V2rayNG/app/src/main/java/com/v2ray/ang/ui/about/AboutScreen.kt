@@ -72,7 +72,10 @@ fun AboutScreen(viewModel: AboutViewModel) {
     val page by rememberAboutPage(viewModel)
 
     // The menu has no app-owned back work, so leave that gesture to Android's destination preview.
-    AppBackHandler(enabled = page != AboutPage.MENU, onBack = onBack)
+    AppBackHandler(enabled = page != AboutPage.MENU, onBack = {
+        onBack()
+        false
+    })
 
     BaseScreen(
         viewModel = viewModel,

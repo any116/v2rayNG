@@ -13,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -31,10 +32,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.GroupMapItem
 import com.v2ray.ang.ui.base.BaseScreen
+import com.v2ray.ang.ui.components.LocalPredictiveBackProgress
 import com.v2ray.ang.ui.components.ObserveQuery
 import com.v2ray.ang.ui.components.rememberSearchFieldController
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -55,6 +60,15 @@ fun MainScreen(
     onPlatformEvent: (MainEvent) -> Boolean
 ) {
     val scope = rememberCoroutineScope()
+    val predictiveBackState = LocalPredictiveBackProgress.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, predictiveBackState) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) predictiveBackState?.onBackFinished()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val dispatch = remember(viewModel) { viewModel::onAction }
     val search = rememberSearchFieldController(
@@ -117,8 +131,10 @@ fun MainScreen(
             onResult = { result -> dispatch(MainAction.ResultReceived(result)) },
             topBar = {
                 val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+                val suppressAnimations = predictiveBackState?.isInProgress == true
                 MainTopBar(
                     isLoading = isLoading,
+                    suppressAnimations = suppressAnimations,
                     isSearchActive = search.isActive,
                     searchInput = search.input,
                     onMenuClick = { scope.launch { drawerState.open() } },
@@ -183,11 +199,13 @@ private fun MainBottomBarOverlay(
 ) {
     // Read the narrow slice here, so test progress doesn't recompose the server pager.
     val bottom by bottomState
+    val suppressAnimations = LocalPredictiveBackProgress.current?.isInProgress == true
     MainBottomBar(
         statusText = bottom.status.asText(),
         isRunning = bottom.isRunning,
         isTesting = bottom.isTesting,
         onAction = onAction,
+        suppressAnimations = suppressAnimations,
         modifier = modifier
     )
 }

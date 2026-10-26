@@ -71,6 +71,7 @@ private val AppIconSize = 40.dp
 private val ItemHorizontalPad = 16.dp
 private val ItemVerticalPad = 12.dp
 private val DragElevation = 4.dp
+private val LoadingBarHeight = 4.dp
 
 /** Search presentation; each screen owns the text state and any live-search collector. */
 @Stable
@@ -88,6 +89,7 @@ fun AppTopBar(
     modifier: Modifier = Modifier,
     isLoading: Boolean = false,
     progress: Float? = null,
+    suppressAnimations: Boolean = false,
     searchState: AppSearchState? = null,
     onSearchClose: () -> Unit = {},
     navigationIcon: @Composable (() -> Unit)? = null,
@@ -127,22 +129,26 @@ fun AppTopBar(
                 actionIconContentColor = MaterialTheme.colorScheme.onSurface
             )
         )
-        AnimatedVisibility(
-            visible = isLoading,
-            enter = expandVertically(),
-            exit = shrinkVertically()
-        ) {
-            if (progress == null) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.secondary
-                )
-            } else {
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.secondary
-                )
+        if (suppressAnimations) {
+            if (isLoading) Spacer(Modifier.fillMaxWidth().height(LoadingBarHeight))
+        } else {
+            AnimatedVisibility(
+                visible = isLoading,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                if (progress == null) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
             }
         }
     }

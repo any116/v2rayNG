@@ -82,7 +82,10 @@ fun UserAssetScreen(viewModel: UserAssetViewModel) {
         }
     }
 
-    AppBackHandler(onBack = onBack)
+    AppBackHandler(onBack = {
+        onBack()
+        true
+    })
 
     BaseScreen(
         viewModel = viewModel,

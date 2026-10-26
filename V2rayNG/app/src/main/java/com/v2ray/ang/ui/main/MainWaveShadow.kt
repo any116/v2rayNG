@@ -12,6 +12,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -73,7 +74,8 @@ internal fun Modifier.mainWaveShadow(
     state: MainWaveShadowState,
     color: Color,
     darkTheme: Boolean,
-    enabled: Boolean
+    enabled: Boolean,
+    suppressAnimations: Boolean
 ): Modifier {
     val motion = MaterialTheme.motionScheme
     val spatialSpec = motion.fastSpatialSpec<Float>()
@@ -81,6 +83,7 @@ internal fun Modifier.mainWaveShadow(
     val spatialProgress = remember { Animatable(1f) }
     val effectsProgress = remember { Animatable(1f) }
     val trigger = state.trigger
+    val currentSuppressAnimations = rememberUpdatedState(suppressAnimations)
     LaunchedEffect(state, trigger) {
         if (trigger == 0) return@LaunchedEffect
         spatialProgress.snapTo(0f)
@@ -93,6 +96,7 @@ internal fun Modifier.mainWaveShadow(
         .pointerInput(state, enabled) {
             if (!enabled) return@pointerInput
             awaitEachGesture {
+                if (currentSuppressAnimations.value) return@awaitEachGesture
                 try {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     state.capturePointer(down.position)
@@ -118,6 +122,7 @@ internal fun Modifier.mainWaveShadow(
             val transparent = color.copy(alpha = 0f)
 
             onDrawBehind {
+                if (suppressAnimations) return@onDrawBehind
                 val spatialPhase = spatialProgress.value.coerceAtLeast(0f)
                 val effectsPhase = effectsProgress.value.coerceIn(0f, 1f)
                 if (effectsPhase >= 1f || size.width <= 0f || size.height <= 0f) {

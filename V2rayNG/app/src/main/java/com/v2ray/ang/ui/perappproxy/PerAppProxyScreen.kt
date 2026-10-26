@@ -126,7 +126,11 @@ fun PerAppProxyScreen(viewModel: PerAppProxyViewModel) {
     val selectedProvider = remember(selectedHolder) { { selectedHolder.value } }
     val emptyResultProvider = remember(emptyResultHolder) { { emptyResultHolder.value } }
 
-    AppBackHandler(onBack = onBack)
+    AppBackHandler(onBack = {
+        val popsDestination = !search.isActive
+        onBack()
+        popsDestination
+    })
 
     BaseScreen(
         viewModel = viewModel,

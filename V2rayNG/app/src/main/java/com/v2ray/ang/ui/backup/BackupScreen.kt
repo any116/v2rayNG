@@ -46,7 +46,10 @@ fun BackupScreen(
     val callbacks = remember(dispatch) { BackupMenuCallbacks(dispatch) }
     val onBack = remember(dispatch) { { dispatch(BackupAction.Back) } }
 
-    AppBackHandler(onBack = onBack)
+    AppBackHandler(onBack = {
+        onBack()
+        true
+    })
 
     BaseScreen(
         viewModel = viewModel,

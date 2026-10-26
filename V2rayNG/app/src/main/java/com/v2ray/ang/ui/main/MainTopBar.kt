@@ -52,7 +52,8 @@ fun MainTopBar(
     onAction: (MainAction) -> Unit,
     onShowDialog: (MainDialog) -> Unit,
     bottomOverlayHeightPx: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    suppressAnimations: Boolean = false
 ) {
     var showImportMenu by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -93,6 +94,7 @@ fun MainTopBar(
         title = stringResource(R.string.title_server),
         onBackClick = onMenuClick,
         isLoading = isLoading,
+        suppressAnimations = suppressAnimations,
         searchState = if (isSearchActive) AppSearchState(
             isActive = true,
             state = searchInput,

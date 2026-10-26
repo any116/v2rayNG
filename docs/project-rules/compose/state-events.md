@@ -160,3 +160,11 @@ sealed interface BaseResult { Cancelled / Saved / Deleted / Changed / Selected }
 - ViewModel 在 `handleResult` 里按 `result.refreshList` / `result.restartService` 决定后续动作。
 - `autoToastResult = true`（默认）时框架已经替你弹成功提示，别重复弹。
 - `BaseResult.Selected` 用于"选择器"语义（如 `AppPicker`），`refreshList` / `notify` 都为 false。
+
+## 8. 预测性返回观察状态
+
+预测性返回的 `LocalPredictiveBackProgress` 是平台手势观察状态，不属于业务 `UiState`、Action 或
+一次性 Event。页面自己的 `PredictiveBackHandler` 才提供高频 `progress`；它只在绘制路径中读取，页面
+通常只订阅低频的 `isInProgress`，在返回提交后的转场期间暂时抑制高频动画。根 Activity 的观察器在
+Android 16+ 使用非消费优先级，但只收到提交回调；Android 14/15 没有公开的非消费进度接口，根页面
+不得用启用的 `PredictiveBackHandler` 伪造观察器，改用 `ON_PAUSE` 的提交后降载兜底。
