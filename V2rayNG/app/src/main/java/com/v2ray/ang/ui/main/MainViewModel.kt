@@ -164,6 +164,7 @@ class MainViewModel @Inject constructor(
     private var storageReadyHandled = false
 
     init {
+        observeServiceState()
         observeServiceEvents()
         observeGroupRemovals()
     }
@@ -365,14 +366,21 @@ class MainViewModel @Inject constructor(
         )
     }
 
+    private fun observeServiceState() = launch(onError = {}) {
+        repo.serviceState.collect { running ->
+            running?.let { onRunningChanged(it, keepTestingText = true) }
+        }
+    }
+
     private fun observeServiceEvents() = launch(onError = {}) {
         repo.serviceEvents.collect(::handleServiceEvent)
     }
 
     private fun handleServiceEvent(event: MainServiceEvent) {
         when (event) {
-            MainServiceEvent.StateRunning -> onRunningChanged(true, keepTestingText = true)
-            MainServiceEvent.StateNotRunning -> onRunningChanged(false, keepTestingText = true)
+            // The replayable repository state handles these handshake messages. Keeping them in
+            // the event protocol avoids changing the IPC contract for other process-local users.
+            MainServiceEvent.StateRunning, MainServiceEvent.StateNotRunning -> Unit
             MainServiceEvent.StateStartSuccess -> {
                 toastSuccess(R.string.toast_services_success)
                 onRunningChanged(true)

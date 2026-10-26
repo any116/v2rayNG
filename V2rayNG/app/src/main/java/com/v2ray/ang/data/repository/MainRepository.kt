@@ -45,7 +45,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.io.IOException
@@ -70,9 +72,10 @@ sealed interface MainServiceEvent {
 }
 
 /**
- * @Singleton because it owns a process-wide broadcast registration and a shared event flow. An
- * unscoped instance would register a second receiver every time it is injected and leak the
- * first one, and the extra buffer would split service events between two subscribers.
+ * @Singleton because it owns a process-wide broadcast registration, a replayable service-state
+ * snapshot, and a shared event flow. An unscoped instance would register a second receiver every
+ * time it is injected and leak the first one, and the extra buffer would split service events
+ * between two subscribers.
  */
 @Singleton
 open class MainRepository @Inject constructor(
@@ -93,11 +96,21 @@ open class MainRepository @Inject constructor(
     )
     open val serviceEvents: SharedFlow<MainServiceEvent> = _serviceEvents.asSharedFlow()
 
+    /**
+     * Last authoritative daemon state observed by this UI process. State events can arrive while
+     * no MainViewModel is collecting (for example during Activity recreation), so they cannot be
+     * represented only by the non-replayable service event stream.
+     */
+    private val _serviceState = MutableStateFlow<Boolean?>(null)
+    open val serviceState: StateFlow<Boolean?> = _serviceState.asStateFlow()
+
     private val serviceReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val data = intent ?: return
             val content = data.getStringExtra("content")
-            val event = when (data.getIntExtra("key", 0)) {
+            val key = data.getIntExtra("key", 0)
+            updateServiceState(key)
+            val event = when (key) {
                 AppConfig.MSG_STATE_RUNNING -> MainServiceEvent.StateRunning
                 AppConfig.MSG_STATE_NOT_RUNNING -> MainServiceEvent.StateNotRunning
                 AppConfig.MSG_STATE_START_SUCCESS -> MainServiceEvent.StateStartSuccess
@@ -125,6 +138,17 @@ open class MainRepository @Inject constructor(
                 else -> null
             }
             event?.let { _serviceEvents.tryEmit(it) }
+        }
+    }
+
+    private fun updateServiceState(key: Int) {
+        when (key) {
+            AppConfig.MSG_STATE_RUNNING,
+            AppConfig.MSG_STATE_START_SUCCESS -> _serviceState.value = true
+
+            AppConfig.MSG_STATE_NOT_RUNNING,
+            AppConfig.MSG_STATE_START_FAILURE,
+            AppConfig.MSG_STATE_STOP_SUCCESS -> _serviceState.value = false
         }
     }
 

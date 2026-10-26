@@ -9,6 +9,7 @@ import com.v2ray.ang.ui.components.closeSearchField
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -37,6 +38,7 @@ class MainSearchViewModelTest {
     private val queries = mutableListOf<String>()
     private val repo = mock<MainRepository> {
         on { serviceEvents } doReturn MutableSharedFlow<MainServiceEvent>()
+        on { serviceState } doReturn MutableStateFlow<Boolean?>(null)
     }
     private val subRepo = mock<SubRepository> {
         on { groupRemoved } doReturn MutableSharedFlow<String>()

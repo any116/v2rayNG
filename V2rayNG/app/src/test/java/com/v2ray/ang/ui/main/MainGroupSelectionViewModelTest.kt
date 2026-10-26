@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.any
@@ -36,6 +37,7 @@ class MainGroupSelectionViewModelTest {
 
     private val repo = mock<MainRepository> {
         on { serviceEvents } doReturn MutableSharedFlow<MainServiceEvent>()
+        on { serviceState } doReturn MutableStateFlow<Boolean?>(null)
         on { observeGroups() } doReturn groups
     }
     private val subRepo = mock<SubRepository> {
@@ -171,6 +173,27 @@ class MainGroupSelectionViewModelTest {
         runCurrent()
         assertEquals("a", vm.uiState.value.selectedGroupId)
         assertEquals("a", savedGroupId)
+    }
+
+    @Test
+    fun runningStateSurvivesViewModelRecreation() = runTest(dispatcher) {
+        val serviceState = MutableStateFlow<Boolean?>(null)
+        whenever(repo.serviceState).thenReturn(serviceState)
+
+        val vm = viewModel()
+        vm.awaitReady()
+        runCurrent()
+
+        serviceState.value = true
+        runCurrent()
+        assertTrue(vm.uiState.value.isRunning)
+
+        store.clear()
+        val restored = viewModel()
+        restored.awaitReady()
+        runCurrent()
+
+        assertTrue(restored.uiState.value.isRunning)
     }
 
     private fun viewModel(): MainViewModel = MainViewModel(repo, subRepo).also { store.put("main", it) }
