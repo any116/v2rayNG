@@ -200,8 +200,9 @@ object AppConfig {
     const val MSG_MEASURE_CONFIG_NOTIFY = 73
     const val MSG_MEASURE_CONFIG_FINISH = 74
     const val MSG_MEASURE_CONFIG_CANCELED = 75
-
     const val MSG_WARN_INSECURE = 9
+    // Message codes are part of the cross-process protocol; 9 is still used above.
+    const val MSG_LOCALE_CHANGED = 10
 
     /** Notification channel IDs. */
     // Use a new ID because Android does not let an app raise an existing channel's importance.

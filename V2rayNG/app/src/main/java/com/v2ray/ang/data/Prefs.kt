@@ -20,6 +20,8 @@ object Prefs {
 
     fun string(key: String, default: String? = null): String? = store.string(key, default)
 
+    val isReady: Boolean get() = store.isReady
+
     fun int(key: String, default: Int = 0): Int = store.int(key, default)
 
     fun long(key: String, default: Long = 0L): Long = store.long(key, default)

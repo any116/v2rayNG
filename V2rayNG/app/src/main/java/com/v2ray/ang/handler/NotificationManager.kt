@@ -62,8 +62,12 @@ object NotificationManager {
      * Shows the notification.
      * @param currentConfig The current profile configuration.
      */
-    fun showNotification(currentConfig: ProfileItem?) {
+    fun showNotification(currentConfig: ProfileItem?, localeCode: String? = null) {
         val service = getService() ?: return
+        val resourceContext = localeCode
+            ?.takeIf(String::isNotBlank)
+            ?.let { AppLocaleManager.localizedContext(service, it) }
+            ?: AppLocaleManager.localizedContext(service)
 
         // Reset last query time to avoid querying stats too soon after showing the notification
         lastQueryTime = System.currentTimeMillis()
@@ -85,16 +89,16 @@ object NotificationManager {
 
         val channelId =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                createNotificationChannel()
+                createNotificationChannel(resourceContext)
             } else {
                 // If earlier version channel ID is not used
                 // https://developer.android.com/reference/android/support/v4/app/NotificationCompat.Builder.html#NotificationCompat.Builder(android.content.Context)
                 ""
             }
 
-        mBuilder = NotificationCompat.Builder(service, channelId)
+        mBuilder = NotificationCompat.Builder(resourceContext, channelId)
             .setSmallIcon(R.drawable.ic_stat_name)
-            .setContentTitle(currentConfig?.remarks ?: service.getString(R.string.app_name))
+            .setContentTitle(currentConfig?.remarks ?: resourceContext.getString(R.string.app_name))
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setShowWhen(false)
@@ -102,18 +106,24 @@ object NotificationManager {
             .setContentIntent(contentPendingIntent)
             .addAction(
                 R.drawable.ic_delete_24dp,
-                service.getString(R.string.notification_action_stop_v2ray),
+                resourceContext.getString(R.string.notification_action_stop_v2ray),
                 stopV2RayPendingIntent
             )
             .addAction(
                 R.drawable.ic_restore_24dp,
-                service.getString(R.string.title_service_restart),
+                resourceContext.getString(R.string.title_service_restart),
                 restartV2RayPendingIntent
             )
 
         //mBuilder?.setDefaults(NotificationCompat.FLAG_ONLY_ALERT_ONCE)
 
         service.startForeground(NOTIFICATION_ID, mBuilder?.build())
+    }
+
+    /** Rebuilds the foreground notification after an application language change. */
+    fun refreshNotification(localeCode: String?) {
+        val currentConfig = CoreServiceManager.getCurrentConfig() ?: return
+        showNotification(currentConfig, localeCode)
     }
 
     /**
@@ -156,14 +166,15 @@ object NotificationManager {
      * @return The channel ID.
      */
     @RequiresApi(Build.VERSION_CODES.O)
-    private fun createNotificationChannel(): String {
+    private fun createNotificationChannel(context: Context): String {
         val channelId = AppConfig.RAY_NG_CHANNEL_ID
-        val channelName = getService()?.getString(R.string.notification_channel_core_background_service) ?: return channelId
+        val channelName = context.getString(R.string.notification_channel_core_background_service)
         // Foreground-service notifications must remain visible; LOW is silent but valid.
         val chan = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW)
         chan.lightColor = Color.DKGRAY
         chan.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-        getNotificationManager()?.createNotificationChannel(chan)
+        context.getSystemService(android.app.NotificationManager::class.java)
+            ?.createNotificationChannel(chan)
         return channelId
     }
 

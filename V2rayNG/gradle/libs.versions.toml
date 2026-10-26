@@ -8,7 +8,6 @@ junit = "6.1.3"
 junitVersion = "1.3.0"
 espressoCore = "3.7.0"
 activity = "1.13.0"
-appcompat = "1.8.0"
 gson = "2.15.0"
 okhttp = "5.5.1"
 kotlinxCoroutines = "1.11.0"
@@ -85,7 +84,6 @@ androidx-paging-testing = { module = "androidx.paging:paging-testing", version.r
 
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity" }
 androidx-navigation-compose = { module = "androidx.navigation:navigation-compose", version.ref = "navigationCompose" }
-androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version = "1.5.0-beta02" }

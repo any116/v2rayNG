@@ -7,7 +7,7 @@
 
 当前仍保留的非 Compose 边界（允许，且不应无理由扩大）：
 
-- `AppCompatActivity`（`BaseActivity`）与 manifest 注册。
+- `ComponentActivity`（`BaseActivity`）与必要的平台生命周期互操作。
 - Android 字符串、图标与主题资源。
 - 系统需要的 `appwidget-provider` XML 与 `res/layout` 的 Glance/RemoteViews 资源。
 - `GlanceAppWidget`（`ui/widget/SwitchWidget.kt`）——它不是普通 Compose，
@@ -18,7 +18,7 @@
 
 ## 2. 允许保留
 
-- AppCompatActivity / Manifest。
+- ComponentActivity / 平台生命周期互操作。
 - Android 字符串、图标和主题资源。
 - 系统需要的 `appwidget-provider` XML。
 - 必要的平台互操作。

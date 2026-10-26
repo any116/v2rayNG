@@ -18,7 +18,7 @@ class SettingsActivity : BaseActivity() {
 
     private fun handlePlatformEvent(event: SettingsEvent): Boolean = when (event) {
         is SettingsEvent.ApplyLanguage -> {
-            AppLocaleManager.setApplicationLanguage(event.code)
+            AppLocaleManager.setApplicationLanguage(this, event.code)
             true
         }
 

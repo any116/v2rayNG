@@ -28,11 +28,15 @@ class QSTileService : TileService() {
      * Sets the state of the tile.
      * @param state The state to set.
      */
-    fun setState(state: Int) {
+    fun setState(state: Int, localeCode: String? = null) {
+        val resourceContext = localeCode
+            ?.takeIf(String::isNotBlank)
+            ?.let { AppLocaleManager.localizedContext(this, it) }
+            ?: AppLocaleManager.localizedContext(this)
         qsTile?.icon = Icon.createWithResource(applicationContext, R.drawable.ic_stat_name)
         if (state == Tile.STATE_INACTIVE) {
             qsTile?.state = Tile.STATE_INACTIVE
-            qsTile?.label = getString(R.string.app_name)
+            qsTile?.label = resourceContext.getString(R.string.app_name)
         } else if (state == Tile.STATE_ACTIVE) {
             qsTile?.state = Tile.STATE_ACTIVE
             qsTile?.label = CoreServiceManager.getRunningServerName()
@@ -118,6 +122,15 @@ class QSTileService : TileService() {
 
                 AppConfig.MSG_STATE_STOP_SUCCESS -> {
                     context?.setState(Tile.STATE_INACTIVE)
+                }
+
+                AppConfig.MSG_LOCALE_CHANGED -> {
+                    val service = context ?: return
+                    val code = intent?.getStringExtra("content")
+                    service.setState(
+                        if (CoreServiceManager.isRunning()) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE,
+                        code
+                    )
                 }
             }
         }

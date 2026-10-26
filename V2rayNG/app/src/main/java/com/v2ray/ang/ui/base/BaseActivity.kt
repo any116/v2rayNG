@@ -1,26 +1,38 @@
 package com.v2ray.ang.ui.base
 
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import com.v2ray.ang.handler.AppLocaleManager
 import com.v2ray.ang.handler.PredictiveBackManager
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.PredictiveBackLayout
 
-abstract class BaseActivity : AppCompatActivity() {
+abstract class BaseActivity : ComponentActivity() {
 
     private var predictiveBackEnabled = true
     private var legacyBackCallback: Any? = null
 
+    override fun attachBaseContext(newBase: Context?) {
+        val base = requireNotNull(newBase) { "attachBaseContext called with null" }
+        super.attachBaseContext(AppLocaleManager.localizedContext(base))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AppLocaleManager.onActivityCreated(this)
         enableEdgeToEdge()
         predictiveBackEnabled = PredictiveBackManager.isEnabled()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !predictiveBackEnabled) {
@@ -29,10 +41,22 @@ abstract class BaseActivity : AppCompatActivity() {
             legacyBackCallback = Api33Impl.register(this)
         }
         setContent {
-            AppTheme {
-                CompositionLocalProvider(
-                    LocalPlatformActions provides (this as? PlatformActions ?: NoPlatformActions)
-                ) {
+            var localeContext by remember {
+                mutableStateOf(AppLocaleManager.localizedContext(this@BaseActivity))
+            }
+            LaunchedEffect(Unit) {
+                AppLocaleManager.prepareActivity(this@BaseActivity)
+                // The first frame is available immediately; refresh the CompositionLocals once
+                // the Room-backed locale snapshot/framework migration is ready.
+                localeContext = AppLocaleManager.localizedContext(this@BaseActivity)
+            }
+            CompositionLocalProvider(
+                LocalContext provides localeContext,
+                LocalResources provides localeContext.resources,
+                LocalPlatformActions provides (this@BaseActivity as? PlatformActions
+                    ?: NoPlatformActions)
+            ) {
+                AppTheme {
                     PredictiveBackLayout(enabled = predictiveBackEnabled) {
                         ScreenContent()
                     }

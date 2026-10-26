@@ -60,7 +60,7 @@ sealed interface SettingsAction : BaseAction {
 }
 
 sealed interface SettingsEvent : BaseEvent.Platform {
-    /** AppCompat switches the per-app locale on the main thread and recreates the Activity. */
+    /** API 33+ applies the framework locale; older Android versions restart the application. */
     data class ApplyLanguage(val code: String) : SettingsEvent
 
     /** Recreates the host after the setting write so the back dispatcher reads the new value. */

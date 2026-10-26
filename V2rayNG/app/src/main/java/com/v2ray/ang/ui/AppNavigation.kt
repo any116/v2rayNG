@@ -317,7 +317,7 @@ fun AppNavHost(
                 { event ->
                     when (event) {
                         is SettingsEvent.ApplyLanguage -> {
-                            AppLocaleManager.setApplicationLanguage(event.code)
+                            AppLocaleManager.setApplicationLanguage(context, event.code)
                             true
                         }
                         SettingsEvent.PredictiveBackChanged -> {

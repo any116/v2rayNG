@@ -92,6 +92,8 @@ object CoreServiceManager {
 
     fun getRunningServerName() = currentConfig?.remarks.orEmpty()
 
+    fun getCurrentConfig(): ProfileItem? = currentConfig
+
     /** Captures the lifecycle generation when a start request is accepted. */
     fun startRequestToken(): Long = lifecycleGeneration.get()
 
@@ -510,6 +512,11 @@ object CoreServiceManager {
                 }
 
                 AppConfig.MSG_UNREGISTER_CLIENT -> Unit
+
+                AppConfig.MSG_LOCALE_CHANGED -> {
+                    val localeCode = intent?.getStringExtra("content")
+                    NotificationManager.refreshNotification(localeCode)
+                }
 
                 AppConfig.MSG_STATE_START -> Unit
 

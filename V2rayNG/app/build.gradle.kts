@@ -201,7 +201,6 @@ dependencies {
 
     // AndroidX Core Libraries
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
 
     // Compose Libraries
     implementation(platform(libs.androidx.compose.bom))
