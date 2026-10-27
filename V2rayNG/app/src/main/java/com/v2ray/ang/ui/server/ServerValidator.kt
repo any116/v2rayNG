@@ -48,16 +48,18 @@ internal object ServerValidator {
                     errors[ServerField.PASSWORD] = R.string.server_lab_id
                 EConfigType.TROJAN, EConfigType.SHADOWSOCKS, EConfigType.HYSTERIA2 ->
                     errors[ServerField.PASSWORD] = R.string.server_lab_id3
-                EConfigType.MASQUE -> if (!hasMasqueAuthorization(form.masqueHeaders)) {
+                EConfigType.MASQUE -> if (!form.masqueWarpEnabled && !hasMasqueAuthorization(form.masqueHeaders)) {
                     errors[ServerField.PASSWORD] = R.string.server_lab_masque_password
                 }
                 else -> Unit
             }
         }
-        if (configType == EConfigType.MASQUE && form.password.isNotBlank() && form.username.isBlank()) {
+        if (configType == EConfigType.MASQUE && !form.masqueWarpEnabled &&
+            form.password.isNotBlank() && form.username.isBlank()
+        ) {
             errors[ServerField.USERNAME] = R.string.server_lab_masque_user
         }
-        if (configType == EConfigType.MASQUE && form.username.contains(':')) {
+        if (configType == EConfigType.MASQUE && !form.masqueWarpEnabled && form.username.contains(':')) {
             errors[ServerField.USERNAME] = R.string.server_lab_masque_user_error
         }
         if (configType == EConfigType.TROJAN && form.streamSecurity.isBlank()) {
@@ -77,11 +79,22 @@ internal object ServerValidator {
         ) {
             errors[ServerField.MASQUE_HEADERS] = R.string.server_lab_masque_headers_error
         }
-        if (configType == EConfigType.MASQUE &&
+        if (configType == EConfigType.MASQUE && !form.masqueWarpEnabled &&
             form.password.isNotBlank() &&
             hasMasqueAuthorization(form.masqueHeaders)
         ) {
             errors[ServerField.MASQUE_HEADERS] = R.string.server_lab_masque_auth_error
+        }
+        if (configType == EConfigType.MASQUE && form.masqueWarpEnabled) {
+            if (form.masqueWarpPrivateKey.isBlank()) {
+                errors[ServerField.MASQUE_WARP_PRIVATE_KEY] = R.string.server_lab_masque_warp_private_key
+            }
+            if (form.masqueWarpPublicKey.isBlank()) {
+                errors[ServerField.MASQUE_WARP_PUBLIC_KEY] = R.string.server_lab_masque_warp_public_key
+            }
+            if (!isValidMasqueWarpAddresses(form.masqueWarpAddress)) {
+                errors[ServerField.MASQUE_WARP_ADDRESS] = R.string.server_lab_masque_warp_address_error
+            }
         }
         if (configType == EConfigType.MASQUE && !isValidMasqueHost(form.host)) {
             errors[ServerField.HOST] = R.string.server_lab_masque_host_error
@@ -139,19 +152,35 @@ internal object ServerValidator {
             if (profile.security != TLS) {
                 return BaseText.of(R.string.server_lab_masque_tls_error)
             }
-            if (profile.password.isNullOrBlank() && !hasMasqueAuthorization(profile.masqueHeaders)) {
+            if (profile.masqueWarp) {
+                if (!profile.username.isNullOrBlank() || !profile.password.isNullOrBlank()) {
+                    return BaseText.of(R.string.server_lab_masque_warp_auth_error)
+                }
+                if (profile.masqueWarpPrivateKey.isNullOrBlank()) {
+                    return BaseText.of(R.string.server_lab_masque_warp_private_key)
+                }
+                if (profile.masqueWarpPublicKey.isNullOrBlank()) {
+                    return BaseText.of(R.string.server_lab_masque_warp_public_key)
+                }
+                if (!isValidMasqueWarpAddresses(profile.masqueWarpAddress.orEmpty())) {
+                    return BaseText.of(R.string.server_lab_masque_warp_address_error)
+                }
+            } else if (profile.password.isNullOrBlank() && !hasMasqueAuthorization(profile.masqueHeaders)) {
                 return BaseText.of(R.string.server_lab_masque_password)
             }
-            if (!profile.password.isNullOrBlank() && profile.username.isNullOrBlank()) {
+            if (!profile.masqueWarp && !profile.password.isNullOrBlank() && profile.username.isNullOrBlank()) {
                 return BaseText.of(R.string.server_lab_masque_user)
             }
-            if (profile.username?.contains(':') == true) {
+            if (!profile.masqueWarp && profile.username?.contains(':') == true) {
                 return BaseText.of(R.string.server_lab_masque_user_error)
             }
             if (!profile.masqueHeaders.isNullOrBlank() && !isValidMasqueHeaders(profile.masqueHeaders)) {
                 return BaseText.of(R.string.server_lab_masque_headers_error)
             }
-            if (!profile.password.isNullOrBlank() && hasMasqueAuthorization(profile.masqueHeaders)) {
+            if (!profile.masqueWarp &&
+                !profile.password.isNullOrBlank() &&
+                hasMasqueAuthorization(profile.masqueHeaders)
+            ) {
                 return BaseText.of(R.string.server_lab_masque_auth_error)
             }
             if (!isValidMasqueHost(profile.host.orEmpty())) {
@@ -270,6 +299,35 @@ internal object ServerValidator {
                 .none { it == '{' || it == '}' } &&
             !value.contains('\r') &&
             !value.contains('\n')
+    }
+
+    private fun isValidMasqueWarpAddresses(value: String): Boolean {
+        if (value.isBlank()) return false
+        var hasIpv4 = false
+        var hasIpv6 = false
+        return value.split(",").map(String::trim).all { entry ->
+            if (entry.isEmpty()) return@all false
+            val separator = entry.indexOf('/')
+            if (separator != entry.lastIndexOf('/')) return@all false
+            val address = if (separator >= 0) entry.substring(0, separator) else entry
+            if (address.startsWith("[") || !Utils.isPureIpAddress(address)) return@all false
+            val isIpv4 = !address.contains(':')
+            val prefix = if (separator >= 0) {
+                entry.substring(separator + 1).toIntOrNull() ?: return@all false
+            } else {
+                null
+            }
+            val maxPrefix = if (isIpv4) 32 else 128
+            if (prefix != null && prefix !in 0..maxPrefix) return@all false
+            if (isIpv4) {
+                if (hasIpv4) return@all false
+                hasIpv4 = true
+            } else {
+                if (hasIpv6) return@all false
+                hasIpv6 = true
+            }
+            true
+        }
     }
 
     private fun isValidHeaderName(value: String): Boolean =

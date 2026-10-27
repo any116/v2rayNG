@@ -148,6 +148,12 @@
     <string name="server_lab_masque_headers_error">أدخل ترويسات MASQUE كسطور key: value أو كائن JSON</string>
     <string name="server_lab_masque_auth_error">أزل Authorization عند تعيين مستخدم/كلمة مرور MASQUE</string>
     <string name="server_lab_masque_tls_error">يتطلب MASQUE أمان نقل TLS</string>
+    <string name="server_lab_masque_warp">Cloudflare WARP عبر MASQUE</string>
+    <string name="server_lab_masque_warp_private_key">المفتاح الخاص لـ WARP (PEM أو base64)</string>
+    <string name="server_lab_masque_warp_public_key">المفتاح العام لنقطة نهاية WARP (PEM أو base64)</string>
+    <string name="server_lab_masque_warp_address">عناوين نفق WARP (مفصولة بفواصل)</string>
+    <string name="server_lab_masque_warp_address_error">أدخل عنوان IPv4 صالحاً واحداً وعنوان IPv6 صالحاً واحداً كحد أقصى</string>
+    <string name="server_lab_masque_warp_auth_error">لا يمكن لـ WARP عبر MASQUE استخدام اسم مستخدم أو كلمة مرور</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

@@ -267,6 +267,13 @@ data class V2rayConfig(
                 var host: String? = null,
                 var path: String? = null,
                 var headers: Map<String, String>? = null,
+                var warp: MasqueWarpSettingsBean? = null,
+            )
+
+            data class MasqueWarpSettingsBean(
+                var privateKey: String? = null,
+                var publicKey: String? = null,
+                var address: List<String>? = null,
             )
 
             data class XdriveSettingsBean(

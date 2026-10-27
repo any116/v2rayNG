@@ -119,12 +119,14 @@ private fun ProtocolFields(
                 R.string.server_lab_id3, ServerField.PASSWORD, editor, fieldErrors
             )
         EConfigType.MASQUE -> {
-            ServerTextField(
-                R.string.server_lab_masque_user, ServerField.USERNAME, editor, fieldErrors
-            )
-            ServerTextField(
-                R.string.server_lab_masque_password, ServerField.PASSWORD, editor, fieldErrors
-            )
+            if (!editor.masqueWarpEnabled) {
+                ServerTextField(
+                    R.string.server_lab_masque_user, ServerField.USERNAME, editor, fieldErrors
+                )
+                ServerTextField(
+                    R.string.server_lab_masque_password, ServerField.PASSWORD, editor, fieldErrors
+                )
+            }
             ServerTextField(
                 R.string.server_lab_remote_dns, ServerField.REMOTE_DNS, editor, fieldErrors
             )
@@ -219,6 +221,31 @@ private fun MasqueFields(
     fieldErrors: Map<ServerField, Int>
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(ServerDimens.FieldSpacing)) {
+        SettingsSwitchItem(
+            title = stringResource(R.string.server_lab_masque_warp),
+            checked = editor.masqueWarpEnabled,
+            onCheckedChange = editor::toggleMasqueWarp
+        )
+        if (editor.masqueWarpEnabled) {
+            ServerTextField(
+                R.string.server_lab_masque_warp_private_key,
+                ServerField.MASQUE_WARP_PRIVATE_KEY,
+                editor,
+                fieldErrors
+            )
+            ServerTextField(
+                R.string.server_lab_masque_warp_public_key,
+                ServerField.MASQUE_WARP_PUBLIC_KEY,
+                editor,
+                fieldErrors
+            )
+            ServerTextField(
+                R.string.server_lab_masque_warp_address,
+                ServerField.MASQUE_WARP_ADDRESS,
+                editor,
+                fieldErrors
+            )
+        }
         ServerTextField(
             R.string.server_lab_masque_host, ServerField.HOST, editor, fieldErrors
         )

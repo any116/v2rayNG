@@ -46,6 +46,26 @@ class ServerEditorStateTest {
     }
 
     @Test
+    fun warpToggleAndCredentialsSurviveEditorSaveRestore() {
+        val editor = ServerEditorState()
+        editor.initialize(
+            ServerForm(
+                masqueWarpEnabled = true,
+                masqueWarpPrivateKey = "private-key",
+                masqueWarpPublicKey = "public-key",
+                masqueWarpAddress = "172.16.0.2/32"
+            ),
+            ""
+        )
+
+        val saved = checkNotNull(with(ServerEditorState.Saver) { saverScope.save(editor) })
+        val restored = checkNotNull(ServerEditorState.Saver.restore(serializedCopy(saved)))
+
+        assertEquals(editor.snapshot(), restored.snapshot())
+        assertTrue(restored.masqueWarpEnabled)
+    }
+
+    @Test
     fun snapshotImmediatelyReadsAllProductionFieldsWithoutACollectorOrRecomposition() {
         val editor = initializedEditor()
         ServerField.entries.forEach { field ->

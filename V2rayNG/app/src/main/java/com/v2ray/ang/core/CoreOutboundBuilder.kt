@@ -505,10 +505,15 @@ object CoreOutboundBuilder {
             NetworkType.MASQUE.type -> {
                 val masqueSetting = OutboundBean.StreamSettingsBean.MasqueSettingsBean(
                     host = host.nullIfBlank(),
-                    path = normalizeMasquePath(path.nullIfBlank() ?: AppConfig.MASQUE_DEFAULT_PATH),
+                    path = if (profileItem.masqueWarp) {
+                        path.nullIfBlank()
+                    } else {
+                        normalizeMasquePath(path.nullIfBlank() ?: AppConfig.MASQUE_DEFAULT_PATH)
+                    },
                     headers = buildMasqueHeaders(profileItem),
+                    warp = buildMasqueWarpSettings(profileItem),
                 )
-                sni = host
+                sni = if (profileItem.masqueWarp) AppConfig.MASQUE_WARP_SNI else host
                 streamSettings.masqueSettings = masqueSetting
             }
 
@@ -773,6 +778,8 @@ object CoreOutboundBuilder {
     /** Builds MASQUE request headers, including optional HTTP Basic authentication. */
     private fun buildMasqueHeaders(profileItem: ProfileItem): Map<String, String>? {
         val headers = parseMasqueHeaders(profileItem.masqueHeaders)
+        if (profileItem.masqueWarp) return headers.takeIf { it.isNotEmpty() }
+
         val user = profileItem.username?.takeIf { it.isNotBlank() }
         val password = profileItem.password?.takeIf { it.isNotBlank() }
         if (user != null || password != null) {
@@ -780,6 +787,21 @@ object CoreOutboundBuilder {
             headers["Authorization"] = "Basic ${Base64.encodeToString(credentials, Base64.NO_WRAP)}"
         }
         return headers.takeIf { it.isNotEmpty() }
+    }
+
+    private fun buildMasqueWarpSettings(
+        profileItem: ProfileItem
+    ): OutboundBean.StreamSettingsBean.MasqueWarpSettingsBean? {
+        if (!profileItem.masqueWarp) return null
+        return OutboundBean.StreamSettingsBean.MasqueWarpSettingsBean(
+            privateKey = profileItem.masqueWarpPrivateKey,
+            publicKey = profileItem.masqueWarpPublicKey,
+            address = profileItem.masqueWarpAddress
+                ?.split(",")
+                ?.map(String::trim)
+                ?.filter(String::isNotEmpty)
+                ?.takeIf { it.isNotEmpty() },
+        )
     }
 
     private fun parseMasqueHeaders(value: String?): MutableMap<String, String> {

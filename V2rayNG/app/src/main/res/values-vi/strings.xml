@@ -148,6 +148,12 @@
     <string name="server_lab_masque_headers_error">Nhập header MASQUE dưới dạng các dòng key: value hoặc một đối tượng JSON</string>
     <string name="server_lab_masque_auth_error">Xóa Authorization khi đã đặt người dùng/mật khẩu MASQUE</string>
     <string name="server_lab_masque_tls_error">MASQUE yêu cầu bảo mật truyền tải TLS</string>
+    <string name="server_lab_masque_warp">Cloudflare WARP qua MASQUE</string>
+    <string name="server_lab_masque_warp_private_key">Khóa riêng WARP (PEM hoặc base64)</string>
+    <string name="server_lab_masque_warp_public_key">Khóa công khai của điểm cuối WARP (PEM hoặc base64)</string>
+    <string name="server_lab_masque_warp_address">Địa chỉ đường hầm WARP (phân tách bằng dấu phẩy)</string>
+    <string name="server_lab_masque_warp_address_error">Nhập tối đa một địa chỉ IPv4 hợp lệ và một địa chỉ IPv6 hợp lệ</string>
+    <string name="server_lab_masque_warp_auth_error">WARP qua MASQUE không thể dùng tên người dùng hoặc mật khẩu</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

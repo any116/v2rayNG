@@ -148,6 +148,12 @@
     <string name="server_lab_masque_headers_error">Enter MASQUE headers as key: value lines or a JSON object</string>
     <string name="server_lab_masque_auth_error">Remove Authorization when MASQUE user/password is set</string>
     <string name="server_lab_masque_tls_error">MASQUE requires TLS transport security</string>
+    <string name="server_lab_masque_warp">Cloudflare WARP over MASQUE</string>
+    <string name="server_lab_masque_warp_private_key">WARP private key (PEM or base64)</string>
+    <string name="server_lab_masque_warp_public_key">WARP endpoint public key (PEM or base64)</string>
+    <string name="server_lab_masque_warp_address">WARP tunnel addresses (comma-separated)</string>
+    <string name="server_lab_masque_warp_address_error">Enter at most one valid IPv4 and one valid IPv6 WARP address</string>
+    <string name="server_lab_masque_warp_auth_error">WARP over MASQUE cannot use a username or password</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

@@ -148,6 +148,12 @@
     <string name="server_lab_masque_headers_error">هدرهای MASQUE ره وری خطوط key: value یا یه JSON درست بنویسین</string>
     <string name="server_lab_masque_auth_error">وقتی کاربَر/رمز MASQUE واره، Authorization ره پاک کۊنین</string>
     <string name="server_lab_masque_tls_error">MASQUE امنیت انتقال TLS ن ره لازم داره</string>
+    <string name="server_lab_masque_warp">Cloudflare WARP وا MASQUE</string>
+    <string name="server_lab_masque_warp_private_key">کلید خصوصی WARP (PEM یا base64)</string>
+    <string name="server_lab_masque_warp_public_key">کلید عمومی نقطه پایانی WARP (PEM یا base64)</string>
+    <string name="server_lab_masque_warp_address">نشونی‌های تونل WARP (وا ویرگول جدا بۊن)</string>
+    <string name="server_lab_masque_warp_address_error">حداکثر یه نشونی IPv4 درست و یه نشونی IPv6 درست وارد کۊنین</string>
+    <string name="server_lab_masque_warp_auth_error">WARP وا MASQUE ن تونه کاربَر یا رمز کار ببره</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

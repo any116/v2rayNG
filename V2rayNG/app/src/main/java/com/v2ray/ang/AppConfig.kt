@@ -291,6 +291,7 @@ object AppConfig {
     const val DEFAULT_LEVEL = 8
     const val DEFAULT_NETWORK = "tcp"
     const val MASQUE_DEFAULT_PATH = "/.well-known/masque/ip/*/*/"
+    const val MASQUE_WARP_SNI = "consumer-masque.cloudflareclient.com"
     const val XDRIVE_SERVICE_LOCAL = "local"
     const val XDRIVE_SERVICE_GOOGLE_DRIVE = "google-drive"
     const val XDRIVE_SERVICE_TEMPLATE = "template"

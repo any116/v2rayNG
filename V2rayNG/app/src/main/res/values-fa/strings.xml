@@ -148,6 +148,12 @@
     <string name="server_lab_masque_headers_error">هدرهای MASQUE را به‌صورت خطوط key: value یا یک شیء JSON وارد کنید</string>
     <string name="server_lab_masque_auth_error">اگر کاربر/گذرواژه MASQUE تنظیم شده، Authorization را حذف کنید</string>
     <string name="server_lab_masque_tls_error">MASQUE به امنیت انتقال TLS نیاز دارد</string>
+    <string name="server_lab_masque_warp">WARP کلادفلر از طریق MASQUE</string>
+    <string name="server_lab_masque_warp_private_key">کلید خصوصی WARP (PEM یا base64)</string>
+    <string name="server_lab_masque_warp_public_key">کلید عمومی نقطه پایانی WARP (PEM یا base64)</string>
+    <string name="server_lab_masque_warp_address">نشانی‌های تونل WARP (با ویرگول جدا شوند)</string>
+    <string name="server_lab_masque_warp_address_error">حداکثر یک نشانی معتبر IPv4 و یک نشانی معتبر IPv6 وارد کنید</string>
+    <string name="server_lab_masque_warp_auth_error">WARP از طریق MASQUE نمی‌تواند از نام کاربری یا گذرواژه استفاده کند</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

@@ -7,7 +7,9 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.util.JsonUtil
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class CoreOutboundBuilderTest {
@@ -59,6 +61,40 @@ class CoreOutboundBuilderTest {
 
         assertEquals(true, stream.tlsSettings?.useSystemCA)
         assertEquals(false, stream.tlsSettings?.disableSystemRoot)
+    }
+
+    @Test
+    fun masqueWarpOutboundUsesWarpSettingsAndSkipsBasicAuthentication() {
+        val profile = ProfileItem.create(EConfigType.MASQUE).apply {
+            server = "162.159.198.2"
+            serverPort = "443"
+            network = NetworkType.MASQUE.type
+            security = AppConfig.TLS
+            masqueWarp = true
+            masqueWarpPrivateKey = "private-key"
+            masqueWarpPublicKey = "public-key"
+            masqueWarpAddress = "172.16.0.2/32,2606:4700:110:8a36::2/128"
+            username = "ignored-user"
+            password = "ignored-password"
+        }
+
+        val outbound = checkNotNull(CoreOutboundBuilder.convert(profile))
+        val stream = checkNotNull(outbound.streamSettings)
+        val masque = checkNotNull(stream.masqueSettings)
+        val warp = checkNotNull(masque.warp)
+
+        assertEquals("private-key", warp.privateKey)
+        assertEquals("public-key", warp.publicKey)
+        assertEquals(
+            listOf("172.16.0.2/32", "2606:4700:110:8a36::2/128"),
+            warp.address
+        )
+        assertNull(masque.headers)
+        assertNull(masque.path)
+        assertEquals(AppConfig.MASQUE_WARP_SNI, stream.tlsSettings?.serverName)
+        assertEquals(false, stream.tlsSettings?.allowInsecure)
+        assertNotNull(stream.tlsSettings)
+        assertTrue(JsonUtil.toJson(outbound).contains("\"warp\""))
     }
 
     private fun xdriveProfile() = ProfileItem.create(EConfigType.VLESS).apply {

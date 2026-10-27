@@ -26,6 +26,7 @@ internal class ServerEditorState private constructor(
 
     var allowInsecure by mutableStateOf(false)
     var groupTestOutbounds by mutableStateOf(true)
+    var masqueWarpEnabled by mutableStateOf(false)
     private val members = mutableStateListOf<ServerChainMemberState>()
     val chainMembers: List<ServerChainMemberState> get() = members
     var isInitialized by mutableStateOf(false)
@@ -36,6 +37,14 @@ internal class ServerEditorState private constructor(
     }
 
     fun text(field: ServerField): String = this[field].text.toString()
+
+    fun toggleMasqueWarp(enabled: Boolean) {
+        masqueWarpEnabled = enabled
+        if (enabled) {
+            this[ServerField.USERNAME].edit { replace(0, length, "") }
+            this[ServerField.PASSWORD].edit { replace(0, length, "") }
+        }
+    }
 
     fun visibleErrors(errors: Map<ServerField, ServerFieldError>): Map<ServerField, Int> = buildMap {
         errors.forEach { (field, error) ->
@@ -58,6 +67,7 @@ internal class ServerEditorState private constructor(
         }
         allowInsecure = form.allowInsecure
         groupTestOutbounds = form.groupTestOutbounds
+        masqueWarpEnabled = form.masqueWarpEnabled
         members.addAll(form.chainMembers.map { ServerChainMemberState(it.id, TextFieldState(it.remarks)) })
         isInitialized = true
         return true
@@ -73,6 +83,7 @@ internal class ServerEditorState private constructor(
             ServerForm(
                 allowInsecure = allowInsecure,
                 groupTestOutbounds = groupTestOutbounds,
+                masqueWarpEnabled = masqueWarpEnabled,
                 chainMembers = members.map { ChainMember(it.id, it.remarks.text.toString()) }
             )
         ) { form, field -> field.set(form, text(field)) }
@@ -112,7 +123,8 @@ internal class ServerEditorState private constructor(
                     saveTextField(editor.rawContent),
                     editor.allowInsecure,
                     editor.groupTestOutbounds,
-                    editor.members.map { listOf(it.id, saveTextField(it.remarks)) }
+                    editor.members.map { listOf(it.id, saveTextField(it.remarks)) },
+                    editor.masqueWarpEnabled,
                 )
             },
             restore = { saved -> restoreEditor(saved) }
@@ -145,6 +157,7 @@ internal class ServerEditorState private constructor(
             return ServerEditorState(fields, rawContent).apply {
                 allowInsecure = values.getOrNull(2) as? Boolean ?: false
                 groupTestOutbounds = values.getOrNull(3) as? Boolean ?: true
+                masqueWarpEnabled = values.getOrNull(5) as? Boolean ?: false
                 this.members.addAll(members)
                 isInitialized = true
             }

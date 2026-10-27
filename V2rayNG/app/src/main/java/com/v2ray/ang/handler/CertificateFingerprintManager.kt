@@ -85,6 +85,7 @@ object CertificateFingerprintManager {
         val sni = profile.sni?.takeIf { it.isNotBlank() }
         if (sni != null && !Utils.isPureIpAddress(sni)) return sni
         if (profile.configType == EConfigType.MASQUE) {
+            if (profile.masqueWarp) return AppConfig.MASQUE_WARP_SNI
             val rawHost = profile.host?.trim()?.takeIf { it.isNotBlank() }
             val host = rawHost?.let {
                 runCatching { URI("https://$it").host }.getOrNull()

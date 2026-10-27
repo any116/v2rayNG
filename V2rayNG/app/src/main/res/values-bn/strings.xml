@@ -148,6 +148,12 @@
     <string name="server_lab_masque_headers_error">MASQUE হেডার key: value লাইন বা JSON অবজেক্ট হিসেবে লিখুন</string>
     <string name="server_lab_masque_auth_error">MASQUE user/password সেট থাকলে Authorization সরান</string>
     <string name="server_lab_masque_tls_error">MASQUE-এর জন্য TLS পরিবহন নিরাপত্তা প্রয়োজন</string>
+    <string name="server_lab_masque_warp">MASQUE-এর মাধ্যমে Cloudflare WARP</string>
+    <string name="server_lab_masque_warp_private_key">WARP ব্যক্তিগত কী (PEM বা base64)</string>
+    <string name="server_lab_masque_warp_public_key">WARP এন্ডপয়েন্ট পাবলিক কী (PEM বা base64)</string>
+    <string name="server_lab_masque_warp_address">WARP টানেলের ঠিকানা (কমা দিয়ে পৃথক)</string>
+    <string name="server_lab_masque_warp_address_error">সর্বাধিক একটি বৈধ IPv4 এবং একটি বৈধ IPv6 ঠিকানা লিখুন</string>
+    <string name="server_lab_masque_warp_auth_error">MASQUE-এর মাধ্যমে WARP ব্যবহারকারীর নাম বা পাসওয়ার্ড ব্যবহার করতে পারে না</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

@@ -57,6 +57,10 @@ data class ServerForm(
     val path: String = "",
     val xhttpExtra: String = "",
     val masqueHeaders: String = "",
+    val masqueWarpEnabled: Boolean = false,
+    val masqueWarpPrivateKey: String = "",
+    val masqueWarpPublicKey: String = "",
+    val masqueWarpAddress: String = "",
     val remoteFolder: String = "",
     val service: String = XDRIVE_SERVICE_LOCAL,
     val secrets: String = "",
@@ -105,14 +109,14 @@ data class ServerForm(
             remarks = remarks,
             server = address,
             serverPort = port,
-            password = password,
+            password = if (isMasque && masqueWarpEnabled) null else password,
             method = when {
                 isVmess || isShadowsocks -> method
                 isVless -> encryption
                 else -> null
             },
             flow = if (isVless && !isXdrive) flow else null,
-            username = if (isSocksOrHttp || isMasque) username else null,
+            username = if (isSocksOrHttp || (isMasque && !masqueWarpEnabled)) username else null,
             secretKey = if (isWireguard) secretKey else null,
             publicKey = when {
                 isWireguard -> publicKey
@@ -139,6 +143,10 @@ data class ServerForm(
             path = path,
             xhttpExtra = xhttpExtra.nullIfBlank(),
             masqueHeaders = if (isMasque) masqueHeaders.nullIfBlank() else null,
+            masqueWarp = isMasque && masqueWarpEnabled,
+            masqueWarpPrivateKey = if (isMasque && masqueWarpEnabled) masqueWarpPrivateKey.nullIfBlank() else null,
+            masqueWarpPublicKey = if (isMasque && masqueWarpEnabled) masqueWarpPublicKey.nullIfBlank() else null,
+            masqueWarpAddress = if (isMasque && masqueWarpEnabled) masqueWarpAddress.nullIfBlank() else null,
             remoteFolder = if (isXdrive) remoteFolder.nullIfBlank() else null,
             service = if (isXdrive) service.nullIfBlank() else null,
             secrets = if (isXdrive && service in setOf(XDRIVE_SERVICE_GOOGLE_DRIVE, XDRIVE_SERVICE_TEMPLATE)) {
@@ -210,6 +218,10 @@ data class ServerForm(
                 path = profile.path.orEmpty(),
                 xhttpExtra = profile.xhttpExtra.orEmpty(),
                 masqueHeaders = profile.masqueHeaders.orEmpty(),
+                masqueWarpEnabled = profile.masqueWarp,
+                masqueWarpPrivateKey = profile.masqueWarpPrivateKey.orEmpty(),
+                masqueWarpPublicKey = profile.masqueWarpPublicKey.orEmpty(),
+                masqueWarpAddress = profile.masqueWarpAddress.orEmpty(),
                 remoteFolder = profile.remoteFolder.orEmpty(),
                 service = profile.service ?: XDRIVE_SERVICE_LOCAL,
                 secrets = profile.secrets.orEmpty(),
@@ -273,6 +285,9 @@ enum class ServerField(
     PATH({ it.path }, { f, v -> f.copy(path = v) }),
     XHTTP_EXTRA({ it.xhttpExtra }, { f, v -> f.copy(xhttpExtra = v) }),
     MASQUE_HEADERS({ it.masqueHeaders }, { f, v -> f.copy(masqueHeaders = v) }),
+    MASQUE_WARP_PRIVATE_KEY({ it.masqueWarpPrivateKey }, { f, v -> f.copy(masqueWarpPrivateKey = v) }),
+    MASQUE_WARP_PUBLIC_KEY({ it.masqueWarpPublicKey }, { f, v -> f.copy(masqueWarpPublicKey = v) }),
+    MASQUE_WARP_ADDRESS({ it.masqueWarpAddress }, { f, v -> f.copy(masqueWarpAddress = v) }),
     REMOTE_FOLDER({ it.remoteFolder }, { f, v -> f.copy(remoteFolder = v) }),
     SERVICE({ it.service }, { f, v -> f.copy(service = v) }),
     SECRETS({ it.secrets }, { f, v -> f.copy(secrets = v) }),

@@ -122,6 +122,23 @@ internal class ProfileStorageTest {
     }
 
     @Test
+    fun masqueWarpFieldsRoundTripThroughThePayload() {
+        val original = profile("warp", type = EConfigType.MASQUE).apply {
+            masqueWarp = true
+            masqueWarpPrivateKey = "private-key"
+            masqueWarpPublicKey = "public-key"
+            masqueWarpAddress = "172.16.0.2/32,2606:4700:110:8a36::2/128"
+        }
+
+        val restored = original.toMetadataItem().merge(original.toPayloadItem())
+
+        assertTrue(restored.masqueWarp)
+        assertEquals(original.masqueWarpPrivateKey, restored.masqueWarpPrivateKey)
+        assertEquals(original.masqueWarpPublicKey, restored.masqueWarpPublicKey)
+        assertEquals(original.masqueWarpAddress, restored.masqueWarpAddress)
+    }
+
+    @Test
     fun knownFieldsCoversEverySerializableProfileProperty() {
         val declared = ProfileItem::class.java.declaredFields
             .filterNot { it.isSynthetic || Modifier.isStatic(it.modifiers) || Modifier.isTransient(it.modifiers) }

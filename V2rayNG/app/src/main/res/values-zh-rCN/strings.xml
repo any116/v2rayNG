@@ -148,6 +148,12 @@
     <string name="server_lab_masque_headers_error">请输入格式正确的 MASQUE 请求头（key: value 行或 JSON 对象）</string>
     <string name="server_lab_masque_auth_error">设置 MASQUE 用户名/密码时请移除 Authorization</string>
     <string name="server_lab_masque_tls_error">MASQUE 需要 TLS 传输安全</string>
+    <string name="server_lab_masque_warp">通过 MASQUE 使用 Cloudflare WARP</string>
+    <string name="server_lab_masque_warp_private_key">WARP 私钥（PEM 或 base64）</string>
+    <string name="server_lab_masque_warp_public_key">WARP 端点公钥（PEM 或 base64）</string>
+    <string name="server_lab_masque_warp_address">WARP 隧道地址（以英文逗号分隔）</string>
+    <string name="server_lab_masque_warp_address_error">请输入最多一个有效的 IPv4 地址和一个有效的 IPv6 地址</string>
+    <string name="server_lab_masque_warp_auth_error">通过 MASQUE 使用 WARP 不能使用用户名或密码</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
     <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>

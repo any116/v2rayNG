@@ -49,4 +49,30 @@ class MasqueFmtTest {
         assertEquals(profile.pinnedCA256, parsed?.pinnedCA256)
         assertEquals(profile.remoteDNS, parsed?.remoteDNS)
     }
+
+    @Test
+    fun warpShareLinkRoundTripPreservesDeviceCredentials() {
+        val profile = ProfileItem.create(EConfigType.MASQUE).apply {
+            remarks = "warp masque"
+            server = "162.159.198.2"
+            serverPort = "443"
+            network = NetworkType.MASQUE.type
+            security = AppConfig.TLS
+            masqueWarp = true
+            masqueWarpPrivateKey = "private-key"
+            masqueWarpPublicKey = "public-key"
+            masqueWarpAddress = "172.16.0.2/32,2606:4700:110:8a36::2/128"
+            sni = AppConfig.MASQUE_WARP_SNI
+        }
+
+        val parsed = MasqueFmt.parse(MasqueFmt.toUri(profile))
+
+        assertEquals(true, parsed?.masqueWarp)
+        assertEquals(profile.masqueWarpPrivateKey, parsed?.masqueWarpPrivateKey)
+        assertEquals(profile.masqueWarpPublicKey, parsed?.masqueWarpPublicKey)
+        assertEquals(profile.masqueWarpAddress, parsed?.masqueWarpAddress)
+        assertEquals(null, parsed?.username)
+        assertEquals(null, parsed?.password)
+        assertEquals(profile.sni, parsed?.sni)
+    }
 }

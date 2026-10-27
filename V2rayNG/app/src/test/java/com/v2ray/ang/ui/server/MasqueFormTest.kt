@@ -6,6 +6,7 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -66,5 +67,43 @@ class MasqueFormTest {
 
         assertTrue(ServerField.HOST in hostErrors)
         assertTrue(ServerField.PATH in pathErrors)
+    }
+
+    @Test
+    fun warpFormUsesXrayWarpCredentialsInsteadOfBasicAuthentication() {
+        val form = validForm.copy(
+            username = "ignored",
+            password = "ignored",
+            masqueHeaders = "X-Client: warp",
+            masqueWarpEnabled = true,
+            masqueWarpPrivateKey = "private-key",
+            masqueWarpPublicKey = "public-key",
+            masqueWarpAddress = "172.16.0.2/32,2606:4700:110:8a36::2/128"
+        )
+
+        val saved = form.toProfileItem(ProfileItem.create(EConfigType.MASQUE), EConfigType.MASQUE)
+
+        assertTrue(ServerValidator.validateForm(EConfigType.MASQUE, form).isEmpty())
+        assertTrue(saved.masqueWarp)
+        assertEquals(form.masqueWarpPrivateKey, saved.masqueWarpPrivateKey)
+        assertEquals(form.masqueWarpPublicKey, saved.masqueWarpPublicKey)
+        assertEquals(form.masqueWarpAddress, saved.masqueWarpAddress)
+        assertNull(saved.username)
+        assertNull(saved.password)
+    }
+
+    @Test
+    fun warpAddressValidationMatchesXrayOneAddressPerFamilyRule() {
+        val errors = ServerValidator.validateForm(
+            EConfigType.MASQUE,
+            validForm.copy(
+                masqueWarpEnabled = true,
+                masqueWarpPrivateKey = "private-key",
+                masqueWarpPublicKey = "public-key",
+                masqueWarpAddress = "172.16.0.2/32,172.16.0.3/32"
+            )
+        )
+
+        assertTrue(ServerField.MASQUE_WARP_ADDRESS in errors)
     }
 }
