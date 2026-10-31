@@ -21,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
@@ -59,6 +60,8 @@ fun MainTopBar(
     var showMoreMenu by remember { mutableStateOf(false) }
     var importMenuAnchor by remember { mutableStateOf<IntRect?>(null) }
     var moreMenuAnchor by remember { mutableStateOf<IntRect?>(null) }
+    val importAnchor = remember { MainMenuAnchor() }
+    val moreAnchor = remember { MainMenuAnchor() }
 
     val importScrollState = rememberScrollState()
     val moreScrollState = rememberScrollState()
@@ -131,20 +134,14 @@ fun MainTopBar(
                 modifier = Modifier
                     .wrapContentSize(Alignment.TopEnd)
                     .onGloballyPositioned { coordinates ->
-                        if (!coordinates.isAttached) return@onGloballyPositioned
-                        val origin = coordinates.positionInWindow()
-                        val left = origin.x.roundToInt()
-                        val top = origin.y.roundToInt()
-                        val bounds = IntRect(
-                            left,
-                            top,
-                            left + coordinates.size.width,
-                            top + coordinates.size.height
-                        )
-                        if (bounds != importMenuAnchor) importMenuAnchor = bounds
+                        importAnchor.coordinates = coordinates
+                        if (showImportMenu) importMenuAnchor = importAnchor.bounds()
                     }
             ) {
-                IconButton(onClick = { showImportMenu = true }) {
+                IconButton(onClick = {
+                    importMenuAnchor = importAnchor.bounds()
+                    showImportMenu = true
+                }) {
                     Icon(
                         painterResource(R.drawable.ic_add_24dp),
                         contentDescription = stringResource(R.string.acc_add)
@@ -169,20 +166,14 @@ fun MainTopBar(
                 modifier = Modifier
                     .wrapContentSize(Alignment.TopEnd)
                     .onGloballyPositioned { coordinates ->
-                        if (!coordinates.isAttached) return@onGloballyPositioned
-                        val origin = coordinates.positionInWindow()
-                        val left = origin.x.roundToInt()
-                        val top = origin.y.roundToInt()
-                        val bounds = IntRect(
-                            left,
-                            top,
-                            left + coordinates.size.width,
-                            top + coordinates.size.height
-                        )
-                        if (bounds != moreMenuAnchor) moreMenuAnchor = bounds
+                        moreAnchor.coordinates = coordinates
+                        if (showMoreMenu) moreMenuAnchor = moreAnchor.bounds()
                     }
             ) {
-                IconButton(onClick = { showMoreMenu = true }) {
+                IconButton(onClick = {
+                    moreMenuAnchor = moreAnchor.bounds()
+                    showMoreMenu = true
+                }) {
                     Icon(
                         painterResource(R.drawable.ic_more_vert_24dp),
                         contentDescription = stringResource(R.string.acc_more)
@@ -211,6 +202,19 @@ fun MainTopBar(
             }
         }
     )
+}
+
+/** Keeps moving coordinates out of snapshot state until the corresponding popup is actually used. */
+private class MainMenuAnchor {
+    var coordinates: LayoutCoordinates? = null
+
+    fun bounds(): IntRect? {
+        val current = coordinates?.takeIf { it.isAttached } ?: return null
+        val origin = current.positionInWindow()
+        val left = origin.x.roundToInt()
+        val top = origin.y.roundToInt()
+        return IntRect(left, top, left + current.size.width, top + current.size.height)
+    }
 }
 
 private fun calculateMainMenuMaxHeight(

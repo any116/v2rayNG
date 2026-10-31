@@ -8,10 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
@@ -70,7 +67,7 @@ fun MainScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val drawerState = rememberMainPushDrawerState()
     val dispatch = remember(viewModel) { viewModel::onAction }
     val search = rememberSearchFieldController(
         initialQuery = "",
@@ -114,13 +111,13 @@ fun MainScreen(
         onRequestRemove = dialogs.requestRemove
     )
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
+    MainPushDrawer(
+        state = drawerState,
+        gesturesEnabled = !search.isActive && dialogs.current == null,
         drawerContent = {
             MainDrawerContent(
                 onAction = { action ->
-                    scope.launch { drawerState.close() }
-                    dispatch(action)
+                    scope.launch { drawerState.closeThen { dispatch(action) } }
                 }
             )
         }

@@ -98,7 +98,10 @@ fun XxxScreen(viewModel: XxxViewModel) {
   在对应槽位内自己 `viewModel.isLoading.collectAsStateWithLifecycle()`（`MainScreen` 的做法）。
 - **大列表**：content 里用 `collectAsLazyPagingItems()` 拿到 `LazyPagingItems<T>`，
   不能把分页数据塞进 `UiState`（见 `performance.md` §4）。
-- 有抽屉/侧栏时把 `BaseScreen` 包在 `ModalNavigationDrawer` 里，不要反过来。
+- 有抽屉/侧栏时由侧栏容器包住 `BaseScreen`，不要反过来。覆盖式使用 `ModalNavigationDrawer`；
+  主屏使用 feature 内的 `MainPushDrawer`，整体变换 `BaseScreen`（含顶栏、列表和悬浮底栏），
+  不包整个 `AppNavHost`，不修改主页的测量尺寸或按开合状态移除主页。
+  `MainPushDrawerState` 是 UI-owned 状态，Saver 只保存开合目标；动画进度不进入 `MainUiState`。
 - **insets 职责**：`BaseScreen` 已固定 `Scaffold.contentWindowInsets = WindowInsets(0)`
   （inset0），所以**内容不会被自动内边距保护**。每屏负责自己的底部 inset，
   统一使用 `ui/components/Common.kt` 提供的 `NavigationBarsSpacer()` /

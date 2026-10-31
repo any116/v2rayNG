@@ -171,6 +171,24 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
 - 不要为了加内边距而多包一层 `Box`；直接把 padding 加在目标组件的 `modifier` 上。
 - 层级越浅越好：一个列表行不应该超过 3~4 层嵌套容器。
 
+## 5.1 主屏推移式侧栏
+
+- `MainPushDrawer` 只在前景 `graphicsLayer {}` 读取逐帧进度，驱动平移、轻微缩放和圆角；
+  不动画修改 width / height / padding，不把进度传进 `MainPagerArgs`，不重建分页流和滚动 holder。
+- `MainPushDrawerState` 用 Foundation `DraggableState` 的互斥拖动通道管理一个归一化位置；
+  点击动画、手势和预测返回共享此通道，触摸可中断普通动画，导航收起阶段禁止手势打断。
+  开合目标通过 Saver 保存，旋转按新窗口约束计算位移，不保存像素坐标或中间动画帧。
+- 焦点、返回处理和主页点击阻挡层只订阅 `derivedStateOf` 的可见边界。主页保持挂载，
+  侧栏关闭后没有动画循环；不做截图、模糊或背景采样。
+- 手势观察位于祖先节点，不用透明边缘覆盖层截断列表命中。关闭时只认起始边缘的向内横拖，
+  超过 slop 后才消费；竖向滚动和非边缘 Pager 滑动保留。搜索/弹窗期间禁用侧滑。
+- `MainTopBar` 的菜单坐标句柄不是 snapshot state；弹层关闭时只记录 LayoutCoordinates，
+  点击展开时读取 bounds，避免主页移动时每帧回写菜单锚点状态。
+- 菜单操作必须先完成收起再 dispatch，重复点击丢弃而非排队；收起取消时不得导航。
+- 验收应覆盖长列表/双列/测速期间连续开合、拖动中反向、旋转、预测返回取消、返回子页、
+  RTL 与键盘/TalkBack。记录 MainContent / GroupPagerPage / ServerRow 的重组计数和帧耗时，
+  区分侧栏引起的变化与正常业务更新；静态检查和 JVM 测试不能替代真机性能结果。
+
 ## 6. 避免每次重组重建对象
 
 - 默认参数：`config: ScrollbarConfig = ScrollbarConfig.Default`，

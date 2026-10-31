@@ -3,28 +3,29 @@ package com.v2ray.ang.ui.main
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -35,8 +36,8 @@ import com.v2ray.ang.ui.components.AppDivider
 import com.v2ray.ang.ui.components.LocalDarkTheme
 import com.v2ray.ang.ui.components.verticalScrollbar
 
-private val DrawerWidthFraction = 0.75f
 private val DrawerHeaderHeight = 180.dp
+private val DrawerHeaderPadding = 16.dp
 private val LogoSize = 120.dp
 
 @Immutable
@@ -69,44 +70,42 @@ fun MainDrawerContent(
 ) {
     val scrollState = rememberScrollState()
 
-    ModalDrawerSheet(
-        modifier = modifier.fillMaxWidth(DrawerWidthFraction),
-        drawerContainerColor = MaterialTheme.colorScheme.surface
+    // Width belongs to MainPushDrawer. Applying a fraction here would shrink it a second time.
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         Column(
             modifier = Modifier
                 .verticalScroll(scrollState)
                 .verticalScrollbar(scrollState)
         ) {
-            Surface(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(DrawerHeaderHeight)
+                    .padding(DrawerHeaderPadding),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    val isDarkTheme = LocalDarkTheme.current
-                    Image(
-                        painter = painterResource(R.mipmap.ic_launcher_foreground),
-                        contentDescription = null,
-                        modifier = Modifier.size(LogoSize),
-                        colorFilter = if (isDarkTheme) {
-                            ColorFilter.tint(Color.White, BlendMode.SrcIn)
-                        } else {
-                            null
-                        }
-                    )
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+                val isDarkTheme = LocalDarkTheme.current
+                Image(
+                    painter = painterResource(R.mipmap.ic_launcher_foreground),
+                    contentDescription = null,
+                    modifier = Modifier.size(LogoSize),
+                    colorFilter = if (isDarkTheme) {
+                        ColorFilter.tint(MaterialTheme.colorScheme.onSurface, BlendMode.SrcIn)
+                    } else {
+                        null
+                    }
+                )
+                Text(
+                    text = stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
 
             primaryMenu.forEach { item ->
