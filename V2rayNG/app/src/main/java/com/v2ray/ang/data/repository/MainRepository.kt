@@ -251,7 +251,8 @@ open class MainRepository @Inject constructor(
      * LocateSelectedServer can scroll into a not-yet-loaded region.
      */
     open fun serverPager(groupId: String, query: String): Flow<PagingData<ServerRowItem>> {
-        val escaped = query.trim().normalizeLike()
+        val pagingQuery = query.trim()
+        val escaped = pagingQuery.normalizeLike()
         val showBadge = groupId.isEmpty()
         return Pager(
             config = PagingConfig(
@@ -262,10 +263,10 @@ open class MainRepository @Inject constructor(
                 jumpThreshold = JUMP_THRESHOLD
             ),
             pagingSourceFactory = { profileDao.pageServers(groupId, escaped) }
-        ).flow.map { paging -> paging.map { row -> row.toRowItem(showBadge) } }
+        ).flow.map { paging -> paging.map { row -> row.toRowItem(showBadge, pagingQuery) } }
     }
 
-    private fun ServerRowProjection.toRowItem(showBadge: Boolean) = ServerRowItem(
+    private fun ServerRowProjection.toRowItem(showBadge: Boolean, pagingQuery: String) = ServerRowItem(
         guid = guid,
         remarks = remarks,
         statistics = description.nullIfBlank()
@@ -273,7 +274,8 @@ open class MainRepository @Inject constructor(
         typeDescription = protocolDescription(this),
         subscriptionBadge = if (showBadge) subscriptionInitial.orEmpty() else "",
         configType = configType,
-        testDelayMillis = testDelayMillis
+        testDelayMillis = testDelayMillis,
+        pagingQuery = pagingQuery
     )
 
     // ---- Position queries ----

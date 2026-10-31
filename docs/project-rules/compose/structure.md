@@ -109,7 +109,8 @@ fun XxxScreen(viewModel: XxxViewModel) {
 - `XxxContent(state, onAction)` 必须是**无状态**的：能被 Preview 直接调用。
 - 局部 UI 状态包括展开/折叠、滚动位置、焦点、弹窗，以及根屏拥有的 state-based 编辑草稿。
   草稿通过 `@Stable` feature holder 下传，文本只在 `TextFieldState` 中；需要进程恢复的状态用
-  `rememberSaveable` + Saver，不能按当前 String 值作为重建 key。
+  `rememberSaveable` + Saver，不能按当前 String 值作为重建 key。分组视口同样由 UI-owned
+  holder 保存，不进入 UiState；恢复用的业务行定位通过 Action / Event 往返，不绕过 ViewModel。
 - 持久化业务数据、加载初值及元数据来自 `state`（或 Paging 的 `LazyPagingItems`）；
   编辑草稿只在 Save/Confirm 等明确动作边界输出不可变快照，不回灌 UiState 逐字镜像。
 - Paging 分支必须处理 `items[index] == null`（占位行仍会被 `LazyColumn` 请求），

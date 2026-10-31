@@ -74,6 +74,7 @@ fun GroupPagerPage(
     canReorder: Boolean,
     handles: MainScreenHandles,
     contentPadding: PaddingValues,
+    query: String,
     modifier: Modifier = Modifier
 ) {
     val items = remember(groupId, handles) { handles.slices.servers(groupId) }
@@ -103,6 +104,7 @@ fun GroupPagerPage(
     val showBadge = groupId.isEmpty()
     if (doubleColumnDisplay) {
         val gridState = remember(handles, groupId) { handles.scrollStates.grid(groupId) }
+        ObserveGridScrollAnchor(groupId, query, items, handles.scrollStates, gridState, handles.dispatch)
         val reorderable = if (canReorder) {
             rememberReorderableLazyGridState(
                 lazyGridState = gridState,
@@ -147,6 +149,7 @@ fun GroupPagerPage(
         }
     } else {
         val listState = remember(handles, groupId) { handles.scrollStates.list(groupId) }
+        ObserveListScrollAnchor(groupId, query, items, handles.scrollStates, listState, handles.dispatch)
         val reorderable = if (canReorder) {
             rememberReorderableLazyListState(
                 lazyListState = listState,

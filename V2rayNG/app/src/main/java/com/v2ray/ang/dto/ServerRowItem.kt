@@ -11,5 +11,7 @@ data class ServerRowItem(
     val typeDescription: String,
     val subscriptionBadge: String,
     val configType: EConfigType,
-    val testDelayMillis: Long = 0L
+    val testDelayMillis: Long = 0L,
+    /** SQL filter of this PagingData generation; requested text can already be ahead of these rows. */
+    val pagingQuery: String = ""
 )

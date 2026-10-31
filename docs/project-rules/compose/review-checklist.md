@@ -110,6 +110,9 @@
 - [ ] 一次性事件处理完清了标志（`finally { onXxxHandled() }`）
 - [ ] `HorizontalPager` 有 `key`，`beyondViewportPageCount` 合理
 - [ ] 按 key 缓存的 Map（滚动状态、pager、计数流）有 `retain` / `removeAll` 清理路径
+- [ ] 跨进程恢复的滚动状态走 `rememberSaveable` + Saver；未访问的种子再次保存不丢失，清理同时覆盖种子
+- [ ] 视口 GUID、下标、像素偏移与实际分页 query 匹配；`""` 只表示未筛选范围，
+      下标变化时不得沿用旧 GUID，空加载/占位行不覆盖锚点，迟到恢复不抢用户滚动，保留的 pending 有释放路径
 - [ ] 没有为了加 padding 而多包一层容器；层级没有无谓加深
 - [ ] Bitmap 用完即弃，没有进 State 或缓存
 - [ ] 若是性能改动，PR 描述里给出了改前/改后的重组次数或帧率对比

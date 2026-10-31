@@ -14,6 +14,7 @@ import com.v2ray.ang.ui.base.BaseResult
 import com.v2ray.ang.ui.base.BaseText
 import com.v2ray.ang.ui.base.BaseViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -159,6 +160,7 @@ class MainViewModel @Inject constructor(
     private val firstPageShown = CompletableDeferred<Unit>()
     private var selectionSeeded = false
     private var groupSelectionWriteJob: Job? = null
+    private val scrollAnchorJobs = ConcurrentHashMap<String, Job>()
 
     /** Main-thread only: awaitReady() is always called from MainActivity's LaunchedEffect. */
     private var storageReadyHandled = false
@@ -237,6 +239,8 @@ class MainViewModel @Inject constructor(
             is MainAction.SetSearchActive -> setSearchActive(action.active)
             MainAction.LocateSelectedServer -> locateSelectedServer()
             MainAction.LocateFailed -> toastError()
+            is MainAction.RestoreScrollAnchor -> restoreScrollAnchor(action)
+            is MainAction.CancelScrollAnchorRestore -> scrollAnchorJobs.remove(action.requestId)?.cancel()
             is MainAction.AddServer -> navigate(
                 AppRoute.ServerEdit(
                     configType = action.configType,
@@ -623,6 +627,26 @@ class MainViewModel @Inject constructor(
         return true
     }
 
+    /**
+     * Restores by stable row identity, not by the selected server. Capture the request's filter:
+     * a later Search action must not change the meaning of an in-flight viewport lookup.
+     */
+    private fun restoreScrollAnchor(action: MainAction.RestoreScrollAnchor) {
+        scrollAnchorJobs.remove(action.requestId)?.cancel()
+        val job = launch {
+            try {
+                val index = repo.indexOf(action.groupId, action.query, action.guid)
+                platform(MainEvent.ScrollAnchorResolved(action.requestId, index))
+            } catch (e: CancellationException) {
+                throw e // Cancellation must not produce a scroll event.
+            } catch (e: Throwable) {
+                platform(MainEvent.ScrollAnchorResolved(action.requestId, null))
+            }
+        }
+        scrollAnchorJobs[action.requestId] = job
+        job.invokeOnCompletion { scrollAnchorJobs.remove(action.requestId, job) }
+    }
+
     /** The row index comes from SQL and honours the active search term. */
     private fun locateSelectedServer() = launch(onError = {}) {
         val guid = repo.selectedGuid() ?: return@launch
@@ -642,6 +666,8 @@ class MainViewModel @Inject constructor(
         batchGroupId = null
         groupSelectionWriteJob?.cancel()
         groupSelectionWriteJob = null
+        scrollAnchorJobs.values.forEach { it.cancel() }
+        scrollAnchorJobs.clear()
         // Every CachedPager scope is a child of viewModelScope's Job, which ViewModel.clear()
         // has already cancelled by the time onCleared() runs; clear() also cancels each scope.
         synchronized(pagerLock) { pagers.clear() }

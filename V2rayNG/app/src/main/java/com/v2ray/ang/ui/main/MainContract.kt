@@ -79,6 +79,15 @@ sealed interface MainAction : BaseAction {
     data class SetSearchActive(val active: Boolean) : MainAction
     data object LocateSelectedServer : MainAction
     data object LocateFailed : MainAction
+
+    /** Looks up a saved viewport's row in its original SQL filter without changing the selected group. */
+    data class RestoreScrollAnchor(
+        val requestId: String,
+        val groupId: String,
+        val guid: String,
+        val query: String
+    ) : MainAction
+    data class CancelScrollAnchorRestore(val requestId: String) : MainAction
     data class AddServer(val configType: EConfigType) : MainAction
     data class EditServer(val guid: String, val configType: EConfigType) : MainAction
     data class ShareQrCode(val guid: String) : MainAction
@@ -104,6 +113,9 @@ sealed interface MainEvent : BaseEvent.Platform {
     data object PickConfigFile : MainEvent
     data class ShowQrCode(val bitmap: Bitmap) : MainEvent
     data class LocateProfile(val target: LocateTarget) : MainEvent
+
+    /** Correlated, one-shot lookup response; null means the saved row no longer belongs to the scope. */
+    data class ScrollAnchorResolved(val requestId: String, val index: Int?) : MainEvent
 
     /** Host calls Activity.reportFullyDrawn(); emitted at most once per ViewModel. */
     data object ReportFullyDrawn : MainEvent

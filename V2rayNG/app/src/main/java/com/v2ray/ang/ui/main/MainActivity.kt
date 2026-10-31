@@ -193,6 +193,7 @@ class MainActivity : BaseHelperActivity() {
         }
         is MainEvent.ShowQrCode -> false
         is MainEvent.LocateProfile -> false
+        is MainEvent.ScrollAnchorResolved -> false
     }
 
     private fun startCore(requireVpnPermission: Boolean, requireLocalNetwork: Boolean) {

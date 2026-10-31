@@ -130,8 +130,19 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
 - **占位行必须处理**：`enablePlaceholders = true` 时 `items[index]` 可能为 `null`，
   画一个和真实行同高同宽的骨架（`ServerRowPlaceholder`），避免滚动条跳动。
 - **`collectAsLazyPagingItems()` 的结果要 `remember` 住**，不要每帧重建流。
-- **滚动状态按分组缓存**：`GroupScrollStates` 用 `HashMap<String, LazyListState>`，
-  切分组回来时位置不丢；分组列表变化后调 `retain(validIds)` 清理，防止泄漏。
+- **滚动状态按分组保存**：`GroupScrollStates` 用 `rememberSaveable` + Saver 持有；单列和双列
+  分别按分组 ID 保存 index / 像素 offset / 首行 guid / 实际分页 query，不序列化 Compose state
+  或分页数据，也不把视口写入 Room。普通 `remember` 只覆盖同一 Composition 内的切组。
+  再次保存时必须保留尚未 compose 的恢复种子；`retain(validIds)` 同时清理实例与种子，防止复活已删除分组。
+- **恢复锚点而不是选中节点**：可见页通过 `RestoreScrollAnchor` Action 请求 ViewModel 调已有
+  `MainRepository.indexOf`，相关联的 `ScrollAnchorResolved` Event 由屏内处理；不把锚点放进 UiState，
+  不暴露绕过 Action 的挂起查询。GUID 重排时保留原像素偏移；已删除/已过滤行退到有效的保存下标。
+  等待实际 query 对应的分页及布局就绪，SQL 与布局等待整体有超时；用户滑动或显式定位优先。
+  初始空数据、未加载占位行不能覆盖恢复种子或把旧 GUID 配给新下标；每页仅消费一次，不能因此翻动 Pager。
+  锚点携带产生它的 SQL 范围：只有已记录过锚点的分组才写入视口，实时下标与已记录下标一致才保留 GUID，
+  否则退回纯下标。`""` 是未筛选范围而不是通配符，保存侧不伪造未知范围；恢复侧要求 query 严格相等，
+  不一致时丢弃旧种子并从顶部开始。空结果按 forward（append）到端判定完成，不用恒为 false 的
+  refresh 结束标志；程序滚动被打断后必须结束 pending，否则后续位置记录会被持续忽略。
 - `HorizontalPager` 设 `beyondViewportPageCount = 0`，并给 `key = { groups[it].id }`。
 - 分页切换用 `snapshotFlow { pagerState.settledPage }.distinctUntilChanged()`，
   不要监听 `currentPage`（滑动过程中每帧都变）。分组 ID 是恢复选择的唯一依据：

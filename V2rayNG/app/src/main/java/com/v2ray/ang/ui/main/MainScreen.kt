@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -81,16 +82,22 @@ fun MainScreen(
     val closeSearch = remember(search, dispatch) {
         { search.close { dispatch(MainAction.SetSearchActive(false)) } }
     }
+    // Deliberately remember, not rememberSaveable: a restored process must seed the new ViewModel again.
+    var searchReady by remember(viewModel, search) { mutableStateOf(false) }
     LaunchedEffect(search, dispatch) {
         dispatch(MainAction.SetSearchActive(search.isActive))
+        dispatch(MainAction.Search(if (search.isActive) search.input.text.toString() else ""))
+        // Seed the restored filter before any page requests an unfiltered PagingData generation.
+        searchReady = true
     }
     search.ObserveQuery { dispatch(MainAction.Search(it)) }
     val dialogs = remember(dispatch) { MainDialogHost(dispatch) }
-    val handles = remember(viewModel, dialogs) {
+    val scrollStates = rememberSaveable(saver = GroupScrollStates.Saver) { GroupScrollStates() }
+    val handles = remember(viewModel, dialogs, scrollStates) {
         MainScreenHandles(
             dispatch = dispatch,
             slices = MainSlices(viewModel::servers, viewModel::serverCount),
-            scrollStates = GroupScrollStates(),
+            scrollStates = scrollStates,
             showDialog = dialogs.show,
             requestRemove = dialogs.requestRemove
         )
@@ -124,6 +131,10 @@ fun MainScreen(
                 when (event) {
                     is MainEvent.ShowQrCode -> { dialogs.show(MainDialog.QrCode(event.bitmap)); true }
                     is MainEvent.LocateProfile -> { locateTarget = event.target; true }
+                    is MainEvent.ScrollAnchorResolved -> {
+                        scrollStates.resolveAnchorIndex(event.requestId, event.index)
+                        true
+                    }
                     is MainEvent -> onPlatformEvent(event)
                     else -> false
                 }
@@ -153,19 +164,22 @@ fun MainScreen(
                         .matchParentSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    MainContent(
-                        args = MainPagerArgs(
-                            groups = state.groups,
-                            selectedGroupId = state.selectedGroupId,
-                            selectedGuid = state.selectedGuid,
-                            doubleColumnDisplay = state.doubleColumnDisplay,
-                            isFiltering = state.isFiltering
-                        ),
-                        handles = handles,
-                        contentPadding = PaddingValues(bottom = bottomPadding),
-                        locateTarget = locateTarget,
-                        onLocateHandled = { locateTarget = null }
-                    )
+                    if (searchReady) {
+                        MainContent(
+                            args = MainPagerArgs(
+                                groups = state.groups,
+                                selectedGroupId = state.selectedGroupId,
+                                selectedGuid = state.selectedGuid,
+                                doubleColumnDisplay = state.doubleColumnDisplay,
+                                isFiltering = state.isFiltering,
+                                searchQuery = state.searchQuery
+                            ),
+                            handles = handles,
+                            contentPadding = PaddingValues(bottom = bottomPadding),
+                            locateTarget = locateTarget,
+                            onLocateHandled = { locateTarget = null }
+                        )
+                    }
                 }
                 MainBottomBarOverlay(
                     bottomState = bottomState,
@@ -229,7 +243,8 @@ private data class MainPagerArgs(
     val selectedGroupId: String,
     val selectedGuid: String?,
     val doubleColumnDisplay: Boolean,
-    val isFiltering: Boolean
+    val isFiltering: Boolean,
+    val searchQuery: String
 )
 
 @Composable
@@ -270,6 +285,8 @@ private fun MainContent(
                 handles.dispatch(MainAction.LocateFailed)
                 return@LaunchedEffect
             }
+            // Explicit navigation/locating wins over a slower background restoration lookup.
+            scrollStates.finishRestore(target.groupId, args.doubleColumnDisplay)
             if (pagerState.settledPage != page) pagerState.scrollToPage(page)
 
             if (args.doubleColumnDisplay) {
@@ -330,7 +347,8 @@ private fun MainContent(
                 doubleColumnDisplay = args.doubleColumnDisplay,
                 canReorder = group.id.isNotEmpty() && !args.isFiltering,
                 handles = handles,
-                contentPadding = contentPadding
+                contentPadding = contentPadding,
+                query = args.searchQuery
             )
         }
     }
