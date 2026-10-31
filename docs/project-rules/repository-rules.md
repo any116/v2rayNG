@@ -122,6 +122,17 @@ open class XxxRepository @Inject constructor(
 - 网络订阅流式下载到缓存文件，URI 导入直接提供可重开的 Reader；不得先 `readText()` 再构造全量节点 List。
 - `data/ImportBuffer` 只用于当前导入的临时 JSON-lines 暂存，成功/失败/取消后关闭并删除；不作为持久层或恢复数据源。
   `AngApplication` 启动时还会清理超过 1 小时的残留导入文件，以覆盖进程被杀的场景。
+- 所有用户配置导入（首页扫码、剪贴板、文件、外部分享 / URL Scheme、独立快捷扫码）必须使用
+  `append = true` 保留旧配置；`append = false` 仅用于订阅内容更新，不能用于用户扫码。
+- 非替换导入（`append = true`）保留旧配置，但将本次导入作为一个整体放到**所属分组顶部**，
+  与手动新建配置一致；同次导入保持暂存流顺序，不能逐批置顶导致批次倒序。“全部”页仍以订阅顺序优先。
+  `append = false` 的订阅替换保持源顺序，从 `SORT_STEP` 开始排列，不改变选中项修复规则。
+- 这里改变的是持久化排序，不是仅反转显示：`findByRemarks` 继续按全局列表顺序解析重名，
+  因此同组新导入的重名配置优先，但不会因此直接切换仍有效的选中 GUID。
+  同组导入与订阅更新按事务顺序生效；更新仍会替换该组全部旧条目，包含之前手工导入的条目。
+- 暂存缓冲的总条数必须显式传给 DAO 的 `profileCount`，在同一个导入事务内基于组内最小
+  `sortOrder` 预留整个导入的稀疏区间；通常不重写旧行，只有 Long 下溢风险时才先 `renormalize`。
+  空导入不改排序，条数不符/失败/取消时连同重排一起回滚；禁止遍历两次单次流或全量加载配置来计数。
 - 全部内容先解析并序列化到临时缓冲，再以 `AppConfig.IMPORT_BATCH_SIZE`（300）分批交给
   `ProfileDao.importGroupBatchesPrefetched`；
   导入端用有界 channel 最多预取两个批次，解析与 Room 写入流水线并行，避免把全部 profile 放进内存。

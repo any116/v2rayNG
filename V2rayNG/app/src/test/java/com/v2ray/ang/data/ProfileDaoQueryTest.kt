@@ -226,6 +226,31 @@ internal class ProfileDaoQueryTest {
     // hint and trigger agreement in both directions.
     // ------------------------------------------------------------------
 
+    @Test
+    fun additiveImportsPrependWithinTheirGroupWithoutReorderingSubscriptions() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            seed(db)
+            dao.writeSelectedGuid("g4")
+
+            dao.replaceGroup("subB", listOf(profile("n1"), profile("n2")), emptyList(), append = true)
+
+            assertEquals(listOf("n1", "n2", "g4"), pageSnapshot(dao, "subB", "").map { it.guid })
+            assertEquals(
+                listOf("g1", "g2", "g3", "n1", "n2", "g4", "g5"),
+                pageSnapshot(dao, "", "").map { it.guid }
+            )
+            assertEquals(0, dao.indexOf("subB", "", "n1"))
+            assertEquals(3, dao.indexOf("", "", "n1"))
+            assertEquals("g4", dao.selectedGuid())
+            assertEquals(-1L, dao.stats("g4")!!.testDelayMillis)
+            assertEquals(1024L, dao.findMetadataByGuid("g4")!!.sortOrder)
+        } finally {
+            db.close()
+        }
+    }
+
     /** Existing subscription: the hint matches the trigger, so no corrective UPDATE is needed. */
     @Test
     fun replaceGroupPreFillsGroupSortOrderFromSubscription() = runTest {

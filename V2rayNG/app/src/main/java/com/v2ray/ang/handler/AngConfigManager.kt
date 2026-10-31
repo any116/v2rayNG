@@ -221,7 +221,7 @@ object AngConfigManager {
      *
      * @param server The server string.
      * @param subid The subscription ID; empty means the "All" tab, which is not a real group.
-     * @param append Whether to append the configurations.
+     * @param append Whether to retain existing configurations and prepend the imported batch.
      * @return A pair containing the number of configurations and subscriptions imported.
      */
     suspend fun importBatchConfig(server: String?, subid: String, append: Boolean): Pair<Int, Int> =
@@ -479,7 +479,8 @@ object AngConfigManager {
         subid: String,
         append: Boolean
     ): Int {
-        if (profiles.count + v2rayn.count == 0) return 0
+        val profileCount = profiles.count + v2rayn.count
+        if (profileCount == 0) return 0
         if (subid == AppConfig.DEFAULT_SUBSCRIPTION_ID) {
             subscriptionDao.ensureDefaultForced(AppConfig.DEFAULT_SUBSCRIPTION_REMARKS)
         }
@@ -502,7 +503,7 @@ object AngConfigManager {
                         }
                     }
                     try {
-                        profileDao.importGroupBatchesPrefetched(subid, batches, append)
+                        profileDao.importGroupBatchesPrefetched(subid, batches, append, profileCount)
                     } finally {
                         producer.cancelAndJoin()
                         batches.cancel()

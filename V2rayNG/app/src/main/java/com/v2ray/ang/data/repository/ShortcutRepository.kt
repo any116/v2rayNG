@@ -20,13 +20,18 @@ open class ShortcutRepository @Inject constructor(
     open suspend fun isCoreRunning(): Boolean = withIO { CoreServiceManager.isRunning() }
 
     /**
-     * Imports profiles and subscriptions from scanned text.
+     * Imports profiles and subscriptions from scanned text. Like the main screen and URL-scheme
+     * imports, this must retain the default group's existing rows and prepend the new batch.
+     * Replacement is reserved for subscription refreshes, never a user-initiated scan.
      *
      * @return the total number of imported profiles and subscriptions.
      */
     open suspend fun importBatchConfig(text: String): Int = withIO {
-        // (server = text, subid = "", append = false)
-        val (count, countSub) = AngConfigManager.importBatchConfig(text, "", false)
+        val (count, countSub) = AngConfigManager.importBatchConfig(
+            server = text,
+            subid = "",
+            append = true
+        )
         count + countSub
     }
 

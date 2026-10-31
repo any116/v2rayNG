@@ -878,11 +878,29 @@ interface ProfileDao {
     }
 
     /**
+     * Reserves one sparse range before the group for the entire import, not one range per batch
+     * (which would reverse batch order). Callers hold the import transaction while reserving and
+     * writing. Existing rows need no updates unless their minimum would underflow a Long.
+     */
+    private suspend fun importSortBase(subscriptionId: String, append: Boolean, profileCount: Int): Long {
+        if (!append || profileCount == 0) return 0L
+        val span = (profileCount.toLong() + 1L) * ProfileItem.SORT_STEP
+        var minimum = minSortOrder(subscriptionId)
+        if (minimum < Long.MIN_VALUE + span) {
+            renormalize(subscriptionId)
+            minimum = minSortOrder(subscriptionId)
+        }
+        return minimum - span
+    }
+
+    /**
      * Batch import (subscription update / paste import). Replaces saveServerProfiles +
      * ProfileReplacement + OrphanProfileCleaner.
      *
-     * When append is false the group's old rows are dropped first. If the selected profile is
-     * among them and the incoming set carries an identical configuration, the selection is
+     * When append is true, old rows are retained and incoming rows go to the head of the group
+     * in source order, matching manual profile creation. When false the group's old rows are
+     * dropped first. If the selected profile is among them and the incoming set carries an
+     * identical configuration, the selection is
      * repointed inside the same transaction and that guid is returned so the repository can
      * poke its snapshot. Replacement matching compares duplicateIdentity() objects directly
      * instead of hashing every incoming profile: both sides are already in memory, so SHA-256
@@ -925,7 +943,7 @@ interface ProfileDao {
             }
         }
 
-        val base = if (append) maxSortOrder(subscriptionId) else 0L
+        val base = importSortBase(subscriptionId, append, profiles.size)
         val groupOrder = groupSortOrderOf(subscriptionId) ?: Long.MAX_VALUE
         upsertAll(
             profiles.mapIndexed { index, profile ->
@@ -966,15 +984,20 @@ interface ProfileDao {
      * A subscription removed while parsing is not recreated as an orphan profile group.
      * The sequence adapter preserves the synchronous test and legacy callers; production imports
      * use [importGroupBatchesPrefetched] to decode a bounded number of batches ahead of the write.
+     *
+     * @param append Retain existing rows and prepend the import; false replaces the group.
+     * @param profileCount Exact staged row count, used to reserve a head range without buffering
+     * all profiles or traversing a single-use sequence twice. A count mismatch rolls back the import.
      */
     @Transaction
     suspend fun importGroupBatches(
         subscriptionId: String,
         batches: Sequence<List<ProfileImportRecord>>,
-        append: Boolean
+        append: Boolean,
+        profileCount: Int
     ): Int {
         val iterator = batches.iterator()
-        return importGroupBatchesInternal(subscriptionId, append) {
+        return importGroupBatchesInternal(subscriptionId, append, profileCount) {
             var nextBatch: List<ProfileImportRecord>? = null
             while (iterator.hasNext() && nextBatch == null) {
                 val batch = iterator.next()
@@ -984,13 +1007,14 @@ interface ProfileDao {
         }
     }
 
-    /** Replays a bounded producer channel without parsing its next batch under the write lock. */
+    /** Bounded channel adapter with the same ordering and count contract as [importGroupBatches]. */
     @Transaction
     suspend fun importGroupBatchesPrefetched(
         subscriptionId: String,
         batches: ReceiveChannel<List<ProfileImportRecord>>,
         append: Boolean,
-    ): Int = importGroupBatchesInternal(subscriptionId, append) {
+        profileCount: Int
+    ): Int = importGroupBatchesInternal(subscriptionId, append, profileCount) {
         val result = batches.receiveCatching()
         result.exceptionOrNull()?.let { throw it }
         result.getOrNull()
@@ -999,17 +1023,22 @@ interface ProfileDao {
     private suspend fun importGroupBatchesInternal(
         subscriptionId: String,
         append: Boolean,
-        nextBatch: suspend () -> List<ProfileImportRecord>?,
+        profileCount: Int,
+        nextBatch: suspend () -> List<ProfileImportRecord>?
     ): Int {
+        require(profileCount >= 0) { "Staged profile count must not be negative" }
         var batch = nextBatch()
         while (batch != null && batch.isEmpty()) batch = nextBatch()
-        if (batch == null) return 0
+        if (batch == null) {
+            check(profileCount == 0) { "Staged profile count does not match imported rows" }
+            return 0
+        }
         val groupOrder = groupSortOrderOf(subscriptionId) ?: return 0
         val selected = selectedGuid()
         val selectedProfile = if (!append && selected != null) findByGuid(selected) else null
         val identity = selectedProfile?.takeIf { it.subscriptionId == subscriptionId }?.duplicateIdentity()
         var replacement: String? = null
-        val base = if (append) maxSortOrder(subscriptionId) else 0L
+        val base = importSortBase(subscriptionId, append, profileCount)
         if (!append) {
             deleteGroupStats(subscriptionId)
             deleteGroupRaws(subscriptionId)
@@ -1019,6 +1048,7 @@ interface ProfileDao {
         var count = 0
         while (batch != null) {
             currentCoroutineContext().ensureActive()
+            check(batch.size <= profileCount - count) { "Staged profile count does not match imported rows" }
             val profiles = ArrayList<ProfileItem>(batch.size)
             val raws = ArrayList<ProfileRaw>()
             for (entry in batch) {
@@ -1042,6 +1072,7 @@ interface ProfileDao {
             batch = nextBatch()
             while (batch != null && batch.isEmpty()) batch = nextBatch()
         }
+        check(count == profileCount) { "Staged profile count does not match imported rows" }
         if (replacement != null) {
             writeSelectedGuid(replacement)
         } else if (selected != null && !profileExists(selected)) {

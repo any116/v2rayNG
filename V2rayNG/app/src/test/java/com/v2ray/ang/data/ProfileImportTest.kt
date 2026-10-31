@@ -1,5 +1,7 @@
 package com.v2ray.ang.data
 
+import com.v2ray.ang.AppConfig
+import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.ProfileRaw
 import com.v2ray.ang.data.entities.ServerAffiliationInfo
 import com.v2ray.ang.dto.ProfileImportRecord
@@ -48,7 +50,7 @@ internal class ProfileImportTest {
                 listOf(ProfileImportRecord(profile("n2").apply { password = "same" }))
             )
 
-            assertEquals(2, dao.importGroupBatches("subA", batches, append = false))
+            assertEquals(2, dao.importGroupBatches("subA", batches, append = false, profileCount = 2))
             val imported = dao.guidsInGroup("subA").map { dao.findByGuid(it)!! }
             assertEquals(listOf("n1", "n2"), imported.map { it.remarks })
             assertEquals("n2", dao.findByGuid(dao.selectedGuid()!!)!!.remarks)
@@ -70,7 +72,7 @@ internal class ProfileImportTest {
 
             assertEquals(
                 2,
-                dao.importGroupBatches("subA", (v2rayn + normal).chunked(1), append = false)
+                dao.importGroupBatches("subA", (v2rayn + normal).chunked(1), append = false, profileCount = 2)
             )
             assertEquals(
                 listOf("v2rayn", "normal"),
@@ -133,7 +135,7 @@ internal class ProfileImportTest {
             batches.send(listOf(ProfileImportRecord(profile("new"))))
             batches.close()
 
-            assertEquals(1, dao.importGroupBatchesPrefetched("subA", batches, append = false))
+            assertEquals(1, dao.importGroupBatchesPrefetched("subA", batches, append = false, profileCount = 1))
             assertEquals(listOf("new"), dao.guidsInGroup("subA").map { dao.findByGuid(it)!!.remarks })
         } finally {
             db.close()
@@ -153,7 +155,7 @@ internal class ProfileImportTest {
             batches.close(CancellationException("cancelled while prefetching"))
 
             try {
-                dao.importGroupBatchesPrefetched("subA", batches, append = false)
+                dao.importGroupBatchesPrefetched("subA", batches, append = false, profileCount = 1)
                 error("Expected cancellation")
             } catch (_: CancellationException) {
                 assertEquals(listOf("old"), dao.guidsInGroup("subA").map { dao.findByGuid(it)!!.remarks })
@@ -174,7 +176,10 @@ internal class ProfileImportTest {
             dao.putRaw(ProfileRaw("old", "old raw"))
             dao.upsertStats(listOf(ServerAffiliationInfo("old", testDelayMillis = 123L)))
 
-            assertEquals(0, dao.importGroupBatches("subA", emptySequence(), append = false))
+            assertEquals(
+                0,
+                dao.importGroupBatches("subA", emptySequence(), append = false, profileCount = 0)
+            )
             assertEquals("old raw", dao.raw("old"))
             assertEquals(123L, dao.stats("old")!!.testDelayMillis)
         } finally {
@@ -183,27 +188,188 @@ internal class ProfileImportTest {
     }
 
     @Test
-    fun appendBatchesContinueOrderWithoutDeletingExistingRawsOrSelection() = runTest {
+    fun appendBatchesPrependInSourceOrderWithoutChangingExistingData() = runTest {
         val db = inMemoryDatabase()
         try {
             val dao = db.profileDao()
             db.subscriptionDao().upsert(subscription("subA"))
-            dao.upsert(profile("old", subscriptionId = "subA").apply { sortOrder = 1024L })
+            val old = profile("old", subscriptionId = "subA").apply { sortOrder = 1024L }
+            dao.upsert(old)
             dao.putRaw(ProfileRaw("old", "old raw"))
+            dao.upsertStats(listOf(ServerAffiliationInfo("old", testDelayMillis = 123L)))
             dao.writeSelectedGuid("old")
+            val oldPayload = dao.findPayloadByGuid("old")
             val batches = sequenceOf(
                 listOf(ProfileImportRecord(profile("n1"), "new raw")),
                 listOf(ProfileImportRecord(profile("n2")))
-            )
+            ).constrainOnce()
 
-            assertEquals(2, dao.importGroupBatches("subA", batches, append = true))
+            assertEquals(2, dao.importGroupBatches("subA", batches, append = true, profileCount = 2))
             val imported = dao.guidsInGroup("subA").map { dao.findByGuid(it)!! }
-            assertEquals(listOf("old", "n1", "n2"), imported.map { it.remarks })
-            assertEquals(2048L, imported[1].sortOrder)
-            assertEquals(3072L, imported[2].sortOrder)
-            assertEquals("old", dao.findByGuid(dao.selectedGuid()!!)!!.remarks)
+            assertEquals(listOf("n1", "n2", "old"), imported.map { it.remarks })
+            assertEquals(listOf(-1024L, 0L, 1024L), imported.map { it.sortOrder })
+            assertEquals(oldPayload, dao.findPayloadByGuid("old"))
+            assertEquals("old", dao.selectedGuid())
             assertEquals("old raw", dao.raw("old"))
-            assertEquals("new raw", dao.raw(imported[1].guid))
+            assertEquals(123L, dao.stats("old")!!.testDelayMillis)
+            assertEquals("new raw", dao.raw(imported[0].guid))
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun largeImportReservesOneHeadRangeAcrossAllBatches() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            db.subscriptionDao().upsert(subscription("subA"))
+            dao.upsert(profile("old", subscriptionId = "subA").apply { sortOrder = -2048L })
+            val count = AppConfig.IMPORT_BATCH_SIZE * 2 + 1
+            val names = (1..count).map { "n$it" }
+            val batches = names.asSequence()
+                .map { ProfileImportRecord(profile(it)) }
+                .chunked(AppConfig.IMPORT_BATCH_SIZE)
+                .constrainOnce()
+
+            assertEquals(count, dao.importGroupBatches("subA", batches, append = true, profileCount = count))
+            val rows = dao.guidsInGroup("subA").map { dao.findMetadataByGuid(it)!! }
+            assertEquals(names + "old", rows.map { it.remarks })
+            assertEquals(-2048L - count.toLong() * ProfileItem.SORT_STEP, rows.first().sortOrder)
+            assertEquals(-2048L, rows.last().sortOrder)
+            rows.zipWithNext().forEach { (before, after) ->
+                assertEquals(ProfileItem.SORT_STEP, after.sortOrder - before.sortOrder)
+            }
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun consecutivePrefetchedImportsPrependEvenWithEmptyBatches() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            val groupId = AppConfig.DEFAULT_SUBSCRIPTION_ID
+            db.subscriptionDao().upsert(subscription(groupId))
+            dao.upsert(profile("old").apply { sortOrder = -2048L })
+            for (names in listOf(listOf("n1"), listOf("n2", "n3"))) {
+                val batches = Channel<List<ProfileImportRecord>>(4)
+                batches.send(emptyList())
+                for (name in names) batches.send(listOf(ProfileImportRecord(profile(name))))
+                batches.send(emptyList())
+                batches.close()
+
+                assertEquals(
+                    names.size,
+                    dao.importGroupBatchesPrefetched(groupId, batches, append = true, profileCount = names.size)
+                )
+            }
+
+            val rows = dao.guidsInGroup(groupId).map { dao.findMetadataByGuid(it)!! }
+            assertEquals(listOf("n2", "n3", "n1", "old"), rows.map { it.remarks })
+            assertEquals(listOf(-5120L, -4096L, -3072L, -2048L), rows.map { it.sortOrder })
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun emptyAppendDoesNotRenormalizeOrChangeSelection() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            db.subscriptionDao().upsert(subscription("subA"))
+            dao.upsert(profile("old", subscriptionId = "subA").apply { sortOrder = Long.MIN_VALUE })
+            dao.writeSelectedGuid("old")
+            val batches = Channel<List<ProfileImportRecord>>(1)
+            batches.send(emptyList())
+            batches.close()
+
+            assertEquals(0, dao.importGroupBatchesPrefetched("subA", batches, append = true, profileCount = 0))
+            assertEquals(Long.MIN_VALUE, dao.findMetadataByGuid("old")!!.sortOrder)
+            assertEquals("old", dao.selectedGuid())
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun prependRenormalizesBeforeSortOrderWouldUnderflow() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            db.subscriptionDao().upsert(subscription("subA"))
+            dao.upsertAll(
+                listOf(
+                    profile("old1", subscriptionId = "subA").apply { sortOrder = Long.MIN_VALUE },
+                    profile("old2", subscriptionId = "subA").apply { sortOrder = Long.MIN_VALUE + 1024L }
+                )
+            )
+            val batches = sequenceOf(listOf(ProfileImportRecord(profile("n1")), ProfileImportRecord(profile("n2"))))
+
+            assertEquals(2, dao.importGroupBatches("subA", batches, append = true, profileCount = 2))
+            val rows = dao.guidsInGroup("subA").map { dao.findMetadataByGuid(it)!! }
+            assertEquals(listOf("n1", "n2", "old1", "old2"), rows.map { it.remarks })
+            assertEquals(listOf(-1024L, 0L, 1024L, 2048L), rows.map { it.sortOrder })
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun cancelledPrependRollsBackInsertedRowsAndRenormalization() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            db.subscriptionDao().upsert(subscription("subA"))
+            dao.upsert(profile("old", subscriptionId = "subA").apply { sortOrder = Long.MIN_VALUE })
+            dao.putRaw(ProfileRaw("old", "old raw"))
+            dao.upsertStats(listOf(ServerAffiliationInfo("old", testDelayMillis = 123L)))
+            dao.writeSelectedGuid("old")
+            val batches = Channel<List<ProfileImportRecord>>(1)
+            batches.send(listOf(ProfileImportRecord(profile("new"), "new raw")))
+            batches.close(CancellationException("cancelled while prefetching"))
+
+            try {
+                dao.importGroupBatchesPrefetched("subA", batches, append = true, profileCount = 2)
+                error("Expected cancellation")
+            } catch (_: CancellationException) {
+                assertEquals(listOf("old"), dao.guidsInGroup("subA"))
+                assertEquals(Long.MIN_VALUE, dao.findMetadataByGuid("old")!!.sortOrder)
+                assertEquals("old raw", dao.raw("old"))
+                assertEquals(123L, dao.stats("old")!!.testDelayMillis)
+                assertEquals("old", dao.selectedGuid())
+                assertEquals(0, dao.deleteOrphanPayloads())
+                assertEquals(0, dao.deleteOrphanRaws())
+            }
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun incorrectStagedCountRollsBackPrepend() = runTest {
+        val db = inMemoryDatabase()
+        try {
+            val dao = db.profileDao()
+            db.subscriptionDao().upsert(subscription("subA"))
+            dao.upsert(profile("old", subscriptionId = "subA"))
+            for (count in listOf(1, 3)) {
+                val batches = sequenceOf(
+                    listOf(ProfileImportRecord(profile("n1"))),
+                    listOf(ProfileImportRecord(profile("n2")))
+                )
+                var failure: IllegalStateException? = null
+                try {
+                    dao.importGroupBatches("subA", batches, append = true, profileCount = count)
+                } catch (error: IllegalStateException) {
+                    failure = error
+                }
+                assertNotNull(failure)
+                assertEquals(listOf("old"), dao.guidsInGroup("subA"))
+                assertEquals(0L, dao.findMetadataByGuid("old")!!.sortOrder)
+            }
         } finally {
             db.close()
         }
@@ -223,7 +389,7 @@ internal class ProfileImportTest {
             }
 
             try {
-                dao.importGroupBatches("subA", batches, append = false)
+                dao.importGroupBatches("subA", batches, append = false, profileCount = 2)
                 error("Expected cancellation")
             } catch (_: CancellationException) {
                 assertEquals(listOf("old"), dao.guidsInGroup("subA").map { dao.findByGuid(it)!!.remarks })
@@ -250,7 +416,7 @@ internal class ProfileImportTest {
             }
 
             try {
-                dao.importGroupBatches("subA", batches, append = false)
+                dao.importGroupBatches("subA", batches, append = false, profileCount = 2)
                 error("Expected the staging failure")
             } catch (_: IllegalStateException) {
                 assertEquals(listOf("old"), dao.guidsInGroup("subA").map { dao.findByGuid(it)!!.remarks })
@@ -280,10 +446,14 @@ internal class ProfileImportTest {
         val db = inMemoryDatabase()
         try {
             val dao = db.profileDao()
-            val batches = sequenceOf(listOf(ProfileImportRecord(profile("new"))))
-
-            assertEquals(0, dao.importGroupBatches("deleted-sub", batches, append = false))
-            assertEquals(null, dao.findByRemarks("new"))
+            for (append in listOf(false, true)) {
+                val batches = sequenceOf(listOf(ProfileImportRecord(profile("new"))))
+                assertEquals(
+                    0,
+                    dao.importGroupBatches("deleted-sub", batches, append = append, profileCount = 1)
+                )
+                assertNull(dao.findByRemarks("new"))
+            }
         } finally {
             db.close()
         }
