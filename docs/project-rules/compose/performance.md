@@ -176,15 +176,20 @@ LazyColumn(state = scrollStates.list(groupId), contentPadding = contentPadding) 
 - `MainPushDrawer` 只在前景 `graphicsLayer {}` 读取逐帧进度，驱动平移、轻微缩放和圆角；
   不动画修改 width / height / padding，不把进度传进 `MainPagerArgs`，不重建分页流和滚动 holder。
 - `MainPushDrawerState` 用 Foundation `DraggableState` 的互斥拖动通道管理一个归一化位置；
-  点击动画、手势和预测返回共享此通道，触摸可中断普通动画，导航收起阶段禁止手势打断。
+  点击动画、手势和预测返回共享此通道，触摸可中断普通动画。菜单导航不播放关闭动画，
+  仅取消未结束的 settle 并落到展开端点后立即 dispatch，保留 Saver 的展开目标供返回时恢复。
   开合目标通过 Saver 保存，旋转按新窗口约束计算位移，不保存像素坐标或中间动画帧。
-- 焦点、返回处理和主页点击阻挡层只订阅 `derivedStateOf` 的可见边界。主页保持挂载，
-  侧栏关闭后没有动画循环；不做截图、模糊或背景采样。
+- 焦点、返回处理和主页点击阻挡层只订阅 `derivedStateOf` 的可见边界；生命周期和输入模式
+  也只在低频边界处理。触摸不强制聚焦，非 RESUMED 的 MAIN 不抢焦点、手势和返回。
+  主页保持挂载，侧栏关闭后没有动画循环；不做截图、模糊或背景采样。
 - 手势观察位于祖先节点，不用透明边缘覆盖层截断列表命中。关闭时只认起始边缘的向内横拖，
   超过 slop 后才消费；竖向滚动和非边缘 Pager 滑动保留。搜索/弹窗期间禁用侧滑。
 - `MainTopBar` 的菜单坐标句柄不是 snapshot state；弹层关闭时只记录 LayoutCoordinates，
   点击展开时读取 bounds，避免主页移动时每帧回写菜单锚点状态。
-- 菜单操作必须先完成收起再 dispatch，重复点击丢弃而非排队；收起取消时不得导航。
+- 菜单选择保留展开状态并立即导航，不排队重复请求。应用内导航保护在 MAIN 再次 ON_RESUME
+  时解除；外部操作不依赖这个生命周期信号解锁，避免打开链接失败后菜单永久不可用。
+- 验收还需检查：触摸开合后静置时菜单按钮/首项不残留焦点态灰底；键盘仍有焦点提示；
+  菜单进入子页不先关闭，返回时侧栏仍展开且可再次选择。
 - 验收应覆盖长列表/双列/测速期间连续开合、拖动中反向、旋转、预测返回取消、返回子页、
   RTL 与键盘/TalkBack。记录 MainContent / GroupPagerPage / ServerRow 的重组计数和帧耗时，
   区分侧栏引起的变化与正常业务更新；静态检查和 JVM 测试不能替代真机性能结果。

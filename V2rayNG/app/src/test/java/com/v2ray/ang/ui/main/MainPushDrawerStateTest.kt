@@ -122,27 +122,54 @@ class MainPushDrawerStateTest {
     }
 
     @Test
-    fun navigationClosesFirstAndCannotBeInterruptedByAnotherOpenRequest() = runTest {
-        withContext(TestFrameClock()) {
-            val state = MainPushDrawerState(true, tween(100))
-            var dispatched = false
-            val navigation = launch {
-                state.closeThen {
-                    assertEquals(0f, state.progress)
-                    dispatched = true
-                }
-            }
-            runCurrent()
-            assertFalse(state.canStartGesture())
-            state.open()
-            assertFalse(dispatched)
-            navigation.join()
-            assertTrue(dispatched)
-            assertFalse(state.isVisible)
-            assertFalse(state.restoreHomeFocusOnClose)
-            assertTrue(state.canStartGesture())
-            state.open()
-            assertTrue(state.restoreHomeFocusOnClose)
+    fun menuNavigationDispatchesWithoutAFrameClockAndKeepsDrawerOpen() = runTest {
+        val state = MainPushDrawerState(true, tween(100))
+        var dispatched = false
+        // No frame clock: navigation must not wait for a close or open animation.
+        state.navigate {
+            assertEquals(1f, state.progress)
+            dispatched = true
         }
+        assertTrue(dispatched)
+        assertTrue(state.targetOpen)
+        assertTrue(state.isVisible)
+        assertFalse(state.canStartGesture())
+        state.close()
+        assertEquals(1f, state.progress)
+    }
+
+    @Test
+    fun returningToHomeAllowsAnotherSelectionWithoutClosingDrawer() = runTest {
+        val state = MainPushDrawerState(true, snap())
+        val actions = mutableListOf<Int>()
+        state.navigate { actions += 1 }
+        state.navigate { actions += 2 }
+        assertEquals(listOf(1), actions)
+        state.onDestinationResumed()
+        assertTrue(state.canStartGesture())
+        assertEquals(1f, state.progress)
+        assertTrue(state.targetOpen)
+        state.navigate { actions += 3 }
+        assertEquals(listOf(1, 3), actions)
+        state.onDestinationResumed()
+        withContext(TestFrameClock()) { state.close() }
+        assertFalse(state.isVisible)
+    }
+
+    @Test
+    fun selectingDuringCloseCancelsTheCloseAndSavesAnOpenTarget() = runTest {
+        val state = MainPushDrawerState(true, tween(200, easing = LinearEasing))
+        val closing = launch(TestFrameClock()) { state.close() }
+        advanceTimeBy(80)
+        runCurrent()
+        assertFalse(state.targetOpen)
+        assertTrue(state.progress > 0f && state.progress < 1f)
+        var dispatched = false
+        state.navigate { dispatched = true }
+        closing.join()
+        assertTrue(closing.isCancelled)
+        assertTrue(dispatched)
+        assertEquals(1f, state.progress)
+        assertTrue(state.targetOpen)
     }
 }

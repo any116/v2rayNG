@@ -38,8 +38,6 @@ internal class MainPushDrawerState(
     private var isAnimating by mutableStateOf(false)
     var isBackInProgress by mutableStateOf(false)
         private set
-    var restoreHomeFocusOnClose by mutableStateOf(true)
-        private set
 
     // Read through derivedStateOf at interaction boundaries, never directly in MainScreen.
     val isVisible: Boolean
@@ -52,39 +50,36 @@ internal class MainPushDrawerState(
         animationSpec = spec
     }
 
-    fun canStartGesture(): Boolean = !actions.isRunning && !isBackInProgress
+    fun canStartGesture(): Boolean = !actions.isPending && !isBackInProgress
 
     suspend fun open() {
-        if (canStartGesture()) {
-            restoreHomeFocusOnClose = true
-            animateTo(true)
-        }
+        if (canStartGesture()) animateTo(true)
     }
 
     suspend fun close() {
-        if (canStartGesture()) {
-            restoreHomeFocusOnClose = true
-            animateTo(false)
+        if (canStartGesture()) animateTo(false)
+    }
+
+    /** Retain an open drawer on the back stack without waiting for any animation before dispatch. */
+    suspend fun navigate(action: () -> Unit) {
+        if (isBackInProgress) return
+        actions.run {
+            dragState.drag(MutatePriority.PreventUserInput) {
+                // Cancel an in-flight settle and save the open endpoint, even for a fast menu tap.
+                // This needs no animation frame; only NavHost animates the destination change.
+                targetOpen = true
+                dragBy(1f - progress)
+            }
+            action()
         }
     }
 
-    /** A cancelled/disposed close must not dispatch a stale navigation command. */
-    suspend fun closeThen(action: () -> Unit) {
-        if (isBackInProgress) return
-        actions.run(
-            close = {
-                // Main can remain composed during the destination exit transition. Do not let its
-                // close effect steal keyboard focus from the new destination after dispatch.
-                restoreHomeFocusOnClose = false
-                animateTo(false, priority = MutatePriority.PreventUserInput)
-            },
-            action = action
-        )
+    fun onDestinationResumed() {
+        actions.onDestinationResumed()
     }
 
     suspend fun drag(block: suspend DragScope.() -> Unit) {
         dragState.drag(MutatePriority.UserInput) {
-            restoreHomeFocusOnClose = true
             isDragging = true
             try {
                 block()
@@ -109,7 +104,6 @@ internal class MainPushDrawerState(
         var committed = false
         try {
             dragState.drag(MutatePriority.PreventUserInput) {
-                restoreHomeFocusOnClose = true
                 isBackInProgress = true
                 val start = progress
                 try {
@@ -132,12 +126,8 @@ internal class MainPushDrawerState(
         if (canStartGesture()) animateTo(open)
     }
 
-    private suspend fun animateTo(
-        open: Boolean,
-        velocity: Float = 0f,
-        priority: MutatePriority = MutatePriority.Default
-    ) {
-        dragState.drag(priority) { animateInDrag(open, velocity) }
+    private suspend fun animateTo(open: Boolean, velocity: Float = 0f) {
+        dragState.drag(MutatePriority.Default) { animateInDrag(open, velocity) }
     }
 
     private suspend fun DragScope.animateInDrag(open: Boolean, velocity: Float = 0f) {

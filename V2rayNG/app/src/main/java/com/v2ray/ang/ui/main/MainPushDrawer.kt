@@ -30,10 +30,12 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -45,6 +47,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.LocalPredictiveBackProgress
@@ -73,6 +78,11 @@ internal fun MainPushDrawer(
 ) {
     val scope = rememberCoroutineScope()
     val visible by remember(state) { derivedStateOf { state.isVisible } }
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val isResumed = lifecycleState == Lifecycle.State.RESUMED
+    val drawerInteractive = visible && isResumed
+    val homeInteractive = !visible && isResumed
+    val inputMode = LocalInputModeManager.current.inputMode
     val density = LocalDensity.current
     val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val maxWidth = with(density) { DrawerMaxWidth.toPx() }
@@ -85,31 +95,40 @@ internal fun MainPushDrawer(
     val close = remember(state, scope) { { scope.launch { state.close() }; Unit } }
     val closeLabel = stringResource(R.string.navigation_drawer_close)
     val paneLabel = stringResource(R.string.navigation_drawer_title)
-    var restoreHomeFocus by remember { mutableStateOf(false) }
+    var wasVisible by remember { mutableStateOf(false) }
 
-    // Do not steal initial focus on cold start. A completed drawer interaction restores home focus.
-    LaunchedEffect(visible) {
-        if (visible) {
-            restoreHomeFocus = true
-            focusManager.clearFocus(force = true)
-            keyboard?.hide()
-            drawerFocus.requestFocus()
-        } else if (restoreHomeFocus) {
-            if (state.restoreHomeFocusOnClose) {
+    // Requesting keyboard focus after a touch leaves Material's focus state layer on menu buttons.
+    // Also leave focus to the new destination while this retained home is below RESUMED.
+    LaunchedEffect(visible, isResumed, inputMode) {
+        when (mainDrawerFocusAction(visible, wasVisible, isResumed, inputMode == InputMode.Keyboard)) {
+            MainDrawerFocusAction.NONE -> Unit
+            MainDrawerFocusAction.CLEAR -> focusManager.clearFocus(force = true)
+            MainDrawerFocusAction.DRAWER -> {
+                focusManager.clearFocus(force = true)
+                drawerFocus.requestFocus()
+            }
+            MainDrawerFocusAction.HOME -> {
                 focusManager.clearFocus(force = true)
                 homeFocus.requestFocus()
             }
-            restoreHomeFocus = false
+        }
+        if (isResumed) {
+            if (visible) keyboard?.hide()
+            wasVisible = visible
         }
     }
-    MainDrawerBackHandler(state)
+    MainDrawerBackHandler(state, isResumed)
 
     Box(
         modifier
             .fillMaxSize()
             .clipToBounds()
             .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .mainDrawerGestures(state, scope, isRtl, edgeWidth, maxWidth, velocityThreshold, gesturesEnabled)
+            .then(if (isResumed) Modifier else Modifier.clearAndSetSemantics { })
+            .mainDrawerGestures(
+                state, scope, isRtl, edgeWidth, maxWidth, velocityThreshold,
+                enabled = gesturesEnabled && isResumed
+            )
     ) {
         Box(
             Modifier
@@ -120,11 +139,11 @@ internal fun MainPushDrawer(
                     layout(width, placeable.height) { placeable.placeRelative(0, 0) }
                 }
                 .focusRequester(drawerFocus)
-                .focusProperties { onEnter = { if (!visible) cancelFocusChange() } }
+                .focusProperties { onEnter = { if (!drawerInteractive) cancelFocusChange() } }
                 .focusGroup()
-                .focusProperties { canFocus = visible }
+                .focusProperties { if (!drawerInteractive) canFocus = false }
                 .then(
-                    if (visible) Modifier.semantics {
+                    if (drawerInteractive) Modifier.semantics {
                         paneTitle = paneLabel
                         dismiss { close(); true }
                     } else Modifier.clearAndSetSemantics { }
@@ -151,11 +170,11 @@ internal fun MainPushDrawer(
                 Modifier
                     .fillMaxSize()
                     .focusRequester(homeFocus)
-                    .focusProperties { onEnter = { if (visible) cancelFocusChange() } }
+                    .focusProperties { onEnter = { if (!homeInteractive) cancelFocusChange() } }
                     .focusRestorer()
                     .focusGroup()
-                    .focusProperties { canFocus = !visible }
-                    .then(if (visible) Modifier.clearAndSetSemantics { } else Modifier)
+                    .focusProperties { if (!homeInteractive) canFocus = false }
+                    .then(if (homeInteractive) Modifier else Modifier.clearAndSetSemantics { })
             ) {
                 content()
             }
@@ -167,6 +186,7 @@ internal fun MainPushDrawer(
                         .clickable(
                             interactionSource = null,
                             indication = null,
+                            enabled = isResumed,
                             onClickLabel = closeLabel,
                             onClick = close
                         )
@@ -178,9 +198,10 @@ internal fun MainPushDrawer(
 }
 
 @Composable
-private fun MainDrawerBackHandler(state: MainPushDrawerState) {
+private fun MainDrawerBackHandler(state: MainPushDrawerState, isResumed: Boolean) {
     val scope = rememberCoroutineScope()
-    val enabled by remember(state) { derivedStateOf { state.isVisible } }
+    val visible by remember(state) { derivedStateOf { state.isVisible } }
+    val enabled = visible && isResumed
     val back = LocalPredictiveBackProgress.current
     val predictive = back?.enabled == true
     BackHandler(enabled = enabled && !predictive) { scope.launch { state.close() } }

@@ -57,5 +57,8 @@
   并用 `BackHandler` + `PopupProperties(dismissOnBackPress = true)` 处理返回。
 - 弹窗打开时焦点应落在主输入框；关闭后 `focusManager.clearFocus()`。
 - 外链、许可详情等长文本必须可滚动、可选择复制，并支持大字体。
+- 主屏侧栏的输入焦点跟随输入模式：触摸开合只 clearFocus，不人为 requestFocus 到菜单按钮或首项；
+  键盘模式仍恢复焦点并保留焦点态，不能用全局禁用 ripple 掩盖焦点错误。只在 MAIN destination
+  为 RESUMED 时处理焦点和侧栏返回；子页转场期间隐藏旧主页的交互语义，不能抢子页输入。
 - TV / 手柄场景：`MainActivity` 已处理 `KEYCODE_BUTTON_B`，新增全屏交互时注意
   可聚焦元素要有可见的焦点态。

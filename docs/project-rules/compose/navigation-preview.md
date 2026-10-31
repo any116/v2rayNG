@@ -55,9 +55,13 @@ sealed interface AppRoute : BaseRoute {
 需要 app-owned 返回逻辑（搜索、表单结果、页面内子状态）的页面才使用
 `AppBackHandler`；普通 destination 交给 Navigation Compose 的 back dispatcher。
 主屏侧栏是局部手势特例：`MainDrawerBackHandler` 直接消费预测返回进度，以驱动同一个
-`MainPushDrawerState`，只在侧栏可见时启用。提交关闭、取消回到原目标，结束后立即清理
-`LocalPredictiveBackProgress` 的降载标志；关闭时不拦截 Activity 的原有返回。
-菜单导航先等待侧栏收起，再走原来的 `MainAction.Navigate`，不与 NavHost 转场并行动画。
+`MainPushDrawerState`，只在侧栏可见且 MAIN destination 为 RESUMED 时启用。
+提交关闭、取消回到原目标，结束后立即清理 `LocalPredictiveBackProgress` 的降载标志；
+关闭或被子页覆盖时不拦截返回。
+菜单导航立即走原来的 `MainAction.Navigate`，不先收起侧栏、不等待动画；展开目标继续由
+UI Saver 保存，返回主页后仍显示已展开侧栏。应用内导航请求防重复派发，MAIN 的 ON_RESUME
+解除该保护；外部链接等不能保证触发页面切换的操作不进入此等待。
+保留在后台的 MAIN 不移动焦点、不接受侧栏手势，不与新 destination 抢输入或返回。
 
 ## 3. 返回键
 

@@ -105,6 +105,8 @@ internal val FieldVerticalPad = 4.dp
   开启时图层缩放至 0.96，不改变布局尺寸。侧栏宽度取窗口 75% 且上限 360.dp，
   由外层 layout 根据约束计算；菜单自身不再乘宽度比例，并使用 safeDrawing insets。
   开合采用 `motionScheme.defaultSpatialSpec`，所有几何变换共享进度，不增加模糊或动态大阴影。
+  触摸开合只清理输入焦点，不强制聚焦首个菜单项或主页菜单按钮，避免 Material 焦点态灰色层常驻；
+  仅在键盘输入模式且 MAIN 为 RESUMED 时主动恢复焦点，保留真实键盘焦点提示。
 - 拖拽反馈用 `HapticFeedback`（`Modifier.dragHandle()` 已封装）。
 
 ## 8. Edge-to-edge 与 insets

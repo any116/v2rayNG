@@ -62,32 +62,53 @@ class MainDrawerMotionTest {
     }
 
     @Test
-    fun actionWaitsForCloseAndRepeatedClicksAreIgnored() = runTest {
-        val gate = MainDrawerActionGate()
-        val closed = CompletableDeferred<Unit>()
-        val actions = mutableListOf<Int>()
-        val first = launch { gate.run(close = { closed.await() }, action = { actions += 1 }) }
-        runCurrent()
-        gate.run(close = { error("Duplicate close") }, action = { actions += 2 })
-        assertTrue(actions.isEmpty())
-        assertTrue(gate.isRunning)
-        closed.complete(Unit)
-        first.join()
-        assertEquals(listOf(1), actions)
-        assertFalse(gate.isRunning)
+    fun touchOpenAndCloseClearFocusWithoutCreatingAPersistentStateLayer() {
+        assertEquals(MainDrawerFocusAction.CLEAR, mainDrawerFocusAction(true, false, true, false))
+        assertEquals(MainDrawerFocusAction.CLEAR, mainDrawerFocusAction(false, true, true, false))
     }
 
     @Test
-    fun cancelledCloseDoesNotNavigateAndReleasesTheGate() = runTest {
+    fun closedColdStartDoesNotStealFocusFromRestoredSearch() {
+        assertEquals(MainDrawerFocusAction.NONE, mainDrawerFocusAction(false, false, true, false))
+        assertEquals(MainDrawerFocusAction.NONE, mainDrawerFocusAction(false, false, true, true))
+    }
+
+    @Test
+    fun keyboardInputStillMovesFocusToDrawerAndBack() {
+        assertEquals(MainDrawerFocusAction.DRAWER, mainDrawerFocusAction(true, false, true, true))
+        assertEquals(MainDrawerFocusAction.HOME, mainDrawerFocusAction(false, true, true, true))
+    }
+
+    @Test
+    fun backgroundHomeNeverStealsFocusDuringDestinationTransitions() {
+        assertEquals(MainDrawerFocusAction.NONE, mainDrawerFocusAction(true, true, false, true))
+        assertEquals(MainDrawerFocusAction.NONE, mainDrawerFocusAction(false, true, false, false))
+    }
+
+    @Test
+    fun actionDispatchesImmediatelyAndDuplicateClicksWaitForResume() = runTest {
         val gate = MainDrawerActionGate()
-        val closed = CompletableDeferred<Unit>()
         val actions = mutableListOf<Int>()
-        val first = launch { gate.run(close = { closed.await() }, action = { actions += 1 }) }
+        gate.run { actions += 1 }
+        gate.run { actions += 2 }
+        assertEquals(listOf(1), actions)
+        assertTrue(gate.isPending)
+        gate.onDestinationResumed()
+        gate.run { actions += 3 }
+        assertEquals(listOf(1, 3), actions)
+    }
+
+    @Test
+    fun cancelledDispatchReleasesTheGate() = runTest {
+        val gate = MainDrawerActionGate()
+        val ready = CompletableDeferred<Unit>()
+        val actions = mutableListOf<Int>()
+        val first = launch { gate.run { ready.await(); actions += 1 } }
         runCurrent()
         first.cancelAndJoin()
         assertTrue(actions.isEmpty())
-        assertFalse(gate.isRunning)
-        gate.run(close = {}, action = { actions += 2 })
+        assertFalse(gate.isPending)
+        gate.run { actions += 2 }
         assertEquals(listOf(2), actions)
     }
 
@@ -95,13 +116,13 @@ class MainDrawerMotionTest {
     fun failedActionAlsoReleasesTheGate() = runTest {
         val gate = MainDrawerActionGate()
         try {
-            gate.run(close = {}, action = { error("Navigation failed") })
+            gate.run { error("Navigation failed") }
         } catch (_: IllegalStateException) {
             // A failure is propagated, but must not permanently disable the menu.
         }
-        assertFalse(gate.isRunning)
+        assertFalse(gate.isPending)
         var dispatched = false
-        gate.run(close = {}, action = { dispatched = true })
+        gate.run { dispatched = true }
         assertTrue(dispatched)
     }
 }

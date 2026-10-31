@@ -60,14 +60,17 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     val predictiveBackState = LocalPredictiveBackProgress.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, predictiveBackState) {
+    val drawerState = rememberMainPushDrawerState()
+    DisposableEffect(lifecycleOwner, predictiveBackState, drawerState) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) predictiveBackState?.onBackFinished()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                predictiveBackState?.onBackFinished()
+                drawerState.onDestinationResumed()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val drawerState = rememberMainPushDrawerState()
     val dispatch = remember(viewModel) { viewModel::onAction }
     val search = rememberSearchFieldController(
         initialQuery = "",
@@ -117,7 +120,16 @@ fun MainScreen(
         drawerContent = {
             MainDrawerContent(
                 onAction = { action ->
-                    scope.launch { drawerState.closeThen { dispatch(action) } }
+                    if (lifecycleOwner.lifecycle.currentState == Lifecycle.State.RESUMED &&
+                        drawerState.canStartGesture()
+                    ) {
+                        if (action is MainAction.Navigate) {
+                            scope.launch { drawerState.navigate { dispatch(action) } }
+                        } else {
+                            // External actions may not pause Main (e.g. no URL handler); do not lock them.
+                            dispatch(action)
+                        }
+                    }
                 }
             )
         }
