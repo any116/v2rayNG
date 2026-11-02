@@ -62,7 +62,7 @@ private val DrawerEdgeWidth = 24.dp
 private val DrawerFlingVelocity = 125.dp
 // This is a full-page frame, deliberately rounder than the small components inside it.
 private val HomeCornerRadius = 32.dp
-private const val HomeScaleReduction = 0.04f
+private const val HomeScaleReduction = 0.08f
 
 /**
  * Keeps BaseScreen mounted at full size. Only the foreground layer reads frame-by-frame progress;
@@ -123,7 +123,7 @@ internal fun MainPushDrawer(
         modifier
             .fillMaxSize()
             .clipToBounds()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .background(MaterialTheme.colorScheme.surfaceContainer)
             .then(if (isResumed) Modifier else Modifier.clearAndSetSemantics { })
             .mainDrawerGestures(
                 state, scope, isRtl, edgeWidth, maxWidth, velocityThreshold,
@@ -156,11 +156,13 @@ internal fun MainPushDrawer(
                 .fillMaxSize()
                 .graphicsLayer {
                     val phase = state.progress
+                    val homeScale = 1f - HomeScaleReduction * phase
                     translationX = mainDrawerWidth(size.width, maxWidth) * phase * if (isRtl) -1f else 1f
                     transformOrigin = TransformOrigin(if (isRtl) 1f else 0f, 0.5f)
-                    scaleX = 1f - HomeScaleReduction * phase
-                    scaleY = scaleX
-                    shape = RoundedCornerShape(HomeCornerRadius * phase)
+                    scaleX = homeScale
+                    scaleY = homeScale
+                    // Compensate for the layer scale so the visible corner radius stays stable.
+                    shape = RoundedCornerShape(HomeCornerRadius * phase / homeScale)
                     clip = phase > 0f
                 }
                 // Like a non-clickable Surface: gaps in home still occlude hidden menu hit targets.
@@ -232,7 +234,7 @@ private fun MainPushDrawerClosedPreview() = MainPushDrawerPreview(open = false)
 private fun MainPushDrawerPreview(open: Boolean) = AppTheme {
     val state = rememberMainPushDrawerState(initialOpen = open)
     MainPushDrawer(state, drawerContent = { MainDrawerContent(onAction = {}) }) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(HomeCornerRadius)) {
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(HomeCornerRadius)) {
             Text(stringResource(R.string.title_server), style = MaterialTheme.typography.headlineSmall)
             Text(stringResource(R.string.connection_not_connected))
         }

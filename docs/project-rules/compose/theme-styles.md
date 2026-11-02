@@ -101,8 +101,8 @@ internal val FieldVerticalPad = 4.dp
   缩放/旋转/位移使用 spatial；不要在 Composable 内硬编码 `tween` 或 `spring`。
 - 列表项**不要**加 `animateItem()` 之外的入场动画；大列表逐项动画会显著掉帧，
   与 Paging 的占位行也不兼容。
-- 主屏侧栏用 `surfaceContainerLow` 与底层背景融合；主页整页框为 32.dp 圆角特例，
-  开启时图层缩放至 0.96，不改变布局尺寸。侧栏宽度取窗口 75% 且上限 360.dp，
+- 主屏抽屉容器统一使用 `surfaceContainer`，侧栏继承该背景以保持与圆角外露区域一致；主页整页框为 32.dp 圆角特例，
+  开启时图层缩放至 0.92，圆角保持约 32.dp 的视觉半径，不改变布局尺寸。侧栏宽度取窗口 75% 且上限 360.dp，
   由外层 layout 根据约束计算；菜单自身不再乘宽度比例，并使用 safeDrawing insets。
   开合采用 `motionScheme.defaultSpatialSpec`，所有几何变换共享进度，不增加模糊或动态大阴影。
   触摸开合只清理输入焦点，不强制聚焦首个菜单项或主页菜单按钮，避免 Material 焦点态灰色层常驻；

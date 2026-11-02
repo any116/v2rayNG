@@ -3,7 +3,6 @@ package com.v2ray.ang.ui.main
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -74,7 +73,6 @@ fun MainDrawerContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         Column(

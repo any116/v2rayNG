@@ -171,7 +171,7 @@ fun MainScreen(
                 Box(
                     Modifier
                         .matchParentSize()
-                        .background(MaterialTheme.colorScheme.background)
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     if (searchReady) {
                         MainContent(

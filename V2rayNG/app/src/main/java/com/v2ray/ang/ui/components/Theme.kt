@@ -49,10 +49,10 @@ private val LightColor = lightColorScheme(
     errorContainer = Color(0xFFFFDAD6), // Light Red
     onError = Color(0xFFFFFFFF), // White
     onErrorContainer = Color(0xFF410002), // Dark Red
-    background = Color(0xFFFFFFFF), // White
-    onBackground = Color(0xFF1C1B1F), // Near Black
-    surface = Color(0xFFFFFFFF), // White
-    onSurface = Color(0xFF1C1B1F), // Near Black
+    background = Color(0xFFFEF7FF), // Material 3 surface tone 98
+    onBackground = Color(0xFF1D1B20), // Material 3 on-surface
+    surface = Color(0xFFFEF7FF), // Material 3 surface tone 98
+    onSurface = Color(0xFF1D1B20), // Material 3 on-surface
     surfaceVariant = Color(0xFFE7E0EC), // Light Purple Gray
     onSurfaceVariant = Color(0xFF49454F), // Dark Gray
     outline = Color(0xFF79747E), // Medium Gray
@@ -62,11 +62,11 @@ private val LightColor = lightColorScheme(
     inversePrimary = Color(0xFFC0C0C0), // Silver Gray
     scrim = Color(0xFF000000), // Black
     surfaceTint = Color(0xFF000000), // Black
-    surfaceContainerLowest = Color(0xFFFFFFFF), // White
-    surfaceContainerLow = Color(0xFFF7F7F7), // Very Light Gray
-    surfaceContainer = Color(0xFFF1F1F1), // Light Gray
-    surfaceContainerHigh = Color(0xFFEBEBEB), // Light Gray
-    surfaceContainerHighest = Color(0xFFE5E5E5) // Light Gray
+    surfaceContainerLowest = Color(0xFFFFFFFF), // Material 3 surface tone 100
+    surfaceContainerLow = Color(0xFFF7F2FA), // Material 3 surface tone 96
+    surfaceContainer = Color(0xFFF3EDF7), // Material 3 surface tone 94
+    surfaceContainerHigh = Color(0xFFECE6F0), // Material 3 surface tone 92
+    surfaceContainerHighest = Color(0xFFE6E0E9) // Material 3 surface tone 90
 )
 
 // Dark color scheme with color comments
@@ -87,24 +87,24 @@ private val DarkColor = darkColorScheme(
     errorContainer = Color(0xFF93000A), // Dark Red
     onError = Color(0xFF690005), // Deep Red
     onErrorContainer = Color(0xFFFFDAD6), // Light Red
-    background = Color(0xFF1C1B1F), // Near Black
-    onBackground = Color(0xFFE6E1E5), // Light Gray
-    surface = Color(0xFF1C1B1F), // Near Black
-    onSurface = Color(0xFFE6E1E5), // Light Gray
+    background = Color(0xFF141218), // Material 3 surface tone 6
+    onBackground = Color(0xFFE6E0E9), // Material 3 on-surface
+    surface = Color(0xFF141218), // Material 3 surface tone 6
+    onSurface = Color(0xFFE6E0E9), // Material 3 on-surface
     surfaceVariant = Color(0xFF49454F), // Dark Gray
     onSurfaceVariant = Color(0xFFCAC4D0), // Light Gray
     outline = Color(0xFF938F99), // Grayish Purple
     outlineVariant = Color(0xFF49454F), // Dark Gray
     inverseSurface = Color(0xFFE6E1E5), // Light Gray
-    inverseOnSurface = Color(0xFF1C1B1F), // Near Black
+    inverseOnSurface = Color(0xFF141218), // Material 3 surface tone 6
     inversePrimary = Color(0xFF000000), // Black
     scrim = Color(0xFF000000), // Black
     surfaceTint = Color(0xFFC0C0C0), // Silver Gray
-    surfaceContainerLowest = Color(0xFF0F0F12), // Near Black
-    surfaceContainerLow = Color(0xFF1A191D), // Dark Gray
-    surfaceContainer = Color(0xFF1E1D21), // Dark Gray
-    surfaceContainerHigh = Color(0xFF282729), // Dark Gray
-    surfaceContainerHighest = Color(0xFF333234) // Dark Gray
+    surfaceContainerLowest = Color(0xFF0F0D13), // Material 3 surface tone 4
+    surfaceContainerLow = Color(0xFF1D1B20), // Material 3 surface tone 10
+    surfaceContainer = Color(0xFF211F26), // Material 3 surface tone 12
+    surfaceContainerHigh = Color(0xFF2B2930), // Material 3 surface tone 17
+    surfaceContainerHighest = Color(0xFF36343B) // Material 3 surface tone 22
 )
 
 /**
