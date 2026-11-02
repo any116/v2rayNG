@@ -59,10 +59,6 @@
         <!--Hide this option until core support it       <item>guna</item>-->
     </string-array>
 
-    <string-array name="streamsecuritys" translatable="false">
-        <item />
-        <item>tls</item>
-    </string-array>
     <string-array name="streamsecurityxs" translatable="false">
         <item />
         <item>tls</item>
@@ -197,11 +193,6 @@
         <item>2</item>
     </string-array>
 
-    <string-array name="outbound_tag" translatable="false">
-        <item>proxy</item>
-        <item>direct</item>
-        <item>block</item>
-    </string-array>
 
     <string-array name="xhttp_mode" translatable="false">
         <item>auto</item>
