@@ -309,7 +309,11 @@ class MainViewModel @Inject constructor(
     private fun observeGroupRemovals() = launch(onError = {}) {
         subRepo.groupRemoved.collect { removed ->
             if (state.selectedGroupId != removed) return@collect
-            val next = state.groups.firstOrNull { it.id != removed }?.id ?: ""
+            // Removing the active subscription should return to All when that tab is visible,
+            // regardless of the order in which the current group snapshot lists the tabs.
+            val next = state.groups.firstOrNull { it.id.isEmpty() }?.id
+                ?: state.groups.firstOrNull { it.id != removed }?.id
+                ?: ""
             setState { copy(selectedGroupId = next) }
             persistSelectedGroup(next)
         }

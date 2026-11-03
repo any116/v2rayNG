@@ -142,6 +142,21 @@ class MainGroupSelectionViewModelTest {
     }
 
     @Test
+    fun removingSelectedGroupPrefersAllEvenWhenItIsNotFirst() = runTest(dispatcher) {
+        groups.value = listOf(group("a"), group("b"), group(""))
+        val vm = viewModel()
+        vm.awaitReady()
+        runCurrent()
+
+        vm.onAction(MainAction.SelectGroup("b"))
+        runCurrent()
+        removals.emit("b")
+        runCurrent()
+
+        assertEquals("", vm.uiState.value.selectedGroupId)
+    }
+
+    @Test
     fun transientGroupListGapKeepsTheSavedSelection() = runTest(dispatcher) {
         savedGroupId = "b"
         val vm = viewModel()
