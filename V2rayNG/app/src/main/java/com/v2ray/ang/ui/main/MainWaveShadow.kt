@@ -78,8 +78,8 @@ internal fun Modifier.mainWaveShadow(
     suppressAnimations: Boolean
 ): Modifier {
     val motion = MaterialTheme.motionScheme
-    val spatialSpec = motion.fastSpatialSpec<Float>()
-    val effectsSpec = motion.fastEffectsSpec<Float>()
+    val spatialSpec = motion.defaultSpatialSpec<Float>()
+    val effectsSpec = motion.defaultEffectsSpec<Float>()
     val spatialProgress = remember { Animatable(1f) }
     val effectsProgress = remember { Animatable(1f) }
     val trigger = state.trigger
