@@ -33,6 +33,7 @@ import com.v2ray.ang.ui.components.FormPagedDropdownField
 import com.v2ray.ang.ui.components.FormTextField
 import com.v2ray.ang.ui.components.ReorderableListItem
 import com.v2ray.ang.ui.components.SettingsSwitchItem
+import com.v2ray.ang.ui.components.reorderableDragModifier
 import com.v2ray.ang.ui.components.verticalScrollbar
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -166,8 +167,8 @@ internal fun ProxyChainForm(
         }
         itemsIndexed(items = editor.chainMembers, key = { _, member -> member.id }) { index, member ->
             ReorderableItem(reorderState, key = member.id) { isDragging ->
+                val reorderModifier = reorderableDragModifier(this)
                 ReorderableListItem(
-                    scope = this,
                     isDragging = isDragging,
                     modifier = Modifier.padding(horizontal = ServerDimens.ContentHorizontal)
                 ) {
@@ -175,7 +176,9 @@ internal fun ProxyChainForm(
                         ordinal = index + 1,
                         member = member,
                         slice = chainSlice(member.id),
-                        onRemove = { onRemoveChainMember(member.id) }
+                        onRemove = { onRemoveChainMember(member.id) },
+                        modifier = Modifier.weight(1f),
+                        reorderModifier = reorderModifier,
                     )
                 }
             }
@@ -189,7 +192,8 @@ private fun ChainMemberRow(
     member: ServerChainMemberState,
     slice: ChainMemberSlice,
     onRemove: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reorderModifier: Modifier = Modifier
 ) {
     val candidates = slice.candidates.collectAsLazyPagingItems()
     val query by slice.query.collectAsStateWithLifecycle()
@@ -215,7 +219,7 @@ private fun ChainMemberRow(
             onQueryChange = slice.onQueryChange,
             modifier = Modifier.weight(1f)
         )
-        IconButton(onClick = onRemove) {
+        IconButton(onClick = onRemove, modifier = reorderModifier) {
             Icon(
                 painterResource(R.drawable.ic_delete_24dp),
                 contentDescription = stringResource(R.string.action_delete)

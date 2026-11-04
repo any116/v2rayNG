@@ -1,6 +1,8 @@
 package com.v2ray.ang.ui.main
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -49,6 +53,7 @@ import com.v2ray.ang.ui.components.ItemDivider
 import com.v2ray.ang.ui.components.LocalAppColors
 import com.v2ray.ang.ui.components.ReorderableGridItem
 import com.v2ray.ang.ui.components.ReorderableListItem
+import com.v2ray.ang.ui.components.reorderableDragModifier
 import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.first
 import sh.calvin.reorderable.ReorderableItem
@@ -133,17 +138,27 @@ fun GroupPagerPage(
                 if (row == null) {
                     ServerRowPlaceholder()
                 } else {
-                    val content: @Composable () -> Unit = {
+                    val content: @Composable (Modifier) -> Unit = { reorderModifier ->
                         Column {
-                            ServerRow(row, row.guid == selectedGuid, showBadge, true, callbacks)
+                            ServerRow(
+                                row = row,
+                                isSelected = row.guid == selectedGuid,
+                                showSubscriptionBadge = showBadge,
+                                doubleColumnDisplay = true,
+                                callbacks = callbacks,
+                                reorderModifier = reorderModifier,
+                            )
                             ItemDivider()
                         }
                     }
                     if (reorderable != null) {
                         ReorderableItem(reorderable, key = row.guid) { isDragging ->
-                            ReorderableGridItem(scope = this, isDragging = isDragging) { content() }
+                            val reorderModifier = reorderableDragModifier(this)
+                            ReorderableGridItem(isDragging = isDragging) {
+                                Column(Modifier.weight(1f)) { content(reorderModifier) }
+                            }
                         }
-                    } else content()
+                    } else content(Modifier)
                 }
             }
         }
@@ -177,17 +192,27 @@ fun GroupPagerPage(
                 if (row == null) {
                     ServerRowPlaceholder()
                 } else {
-                    val content: @Composable () -> Unit = {
+                    val content: @Composable (Modifier) -> Unit = { reorderModifier ->
                         Column {
-                            ServerRow(row, row.guid == selectedGuid, showBadge, false, callbacks)
+                            ServerRow(
+                                row = row,
+                                isSelected = row.guid == selectedGuid,
+                                showSubscriptionBadge = showBadge,
+                                doubleColumnDisplay = false,
+                                callbacks = callbacks,
+                                reorderModifier = reorderModifier,
+                            )
                             ItemDivider()
                         }
                     }
                     if (reorderable != null) {
                         ReorderableItem(reorderable, key = row.guid) { isDragging ->
-                            ReorderableListItem(scope = this, isDragging = isDragging) { content() }
+                            val reorderModifier = reorderableDragModifier(this)
+                            ReorderableListItem(isDragging = isDragging) {
+                                Column(Modifier.weight(1f)) { content(reorderModifier) }
+                            }
                         }
-                    } else content()
+                    } else content(Modifier)
                 }
             }
         }
@@ -202,6 +227,41 @@ class ServerRowCallbacks(
     val onMore: (String, EConfigType) -> Unit,
     val onRemove: (String) -> Unit
 )
+
+private class LongPressClickGuard {
+    private var longPressed = false
+
+    fun begin() {
+        longPressed = false
+    }
+
+    fun markLongPressed() {
+        longPressed = true
+    }
+
+    fun consumeLongPress(): Boolean {
+        if (!longPressed) return false
+        longPressed = false
+        return true
+    }
+}
+
+private fun Modifier.trackLongPress(guard: LongPressClickGuard): Modifier = pointerInput(guard) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        guard.begin()
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+            if (!change.pressed) {
+                if (change.uptimeMillis - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis) {
+                    guard.markLongPressed()
+                }
+                break
+            }
+        }
+    }
+}
 
 /**
  * Mirrors the ServerRow skeleton so the scrollbar does not jump while a page loads:
@@ -239,16 +299,21 @@ private fun ServerRow(
     showSubscriptionBadge: Boolean,
     doubleColumnDisplay: Boolean,
     callbacks: ServerRowCallbacks,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reorderModifier: Modifier = Modifier
 ) {
+    val clickGuard = remember { LongPressClickGuard() }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
+            .trackLongPress(clickGuard)
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,
-                onClick = { callbacks.onSelect(row.guid) }
+                onClick = {
+                    if (!clickGuard.consumeLongPress()) callbacks.onSelect(row.guid)
+                }
             )
     ) {
         Box(Modifier.width(SelectionGutterWidth).fillMaxHeight()) {
@@ -279,7 +344,10 @@ private fun ServerRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (doubleColumnDisplay) {
-                    IconButton({ callbacks.onMore(row.guid, row.configType) }, Modifier.size(RowIconButtonSize)) {
+                    IconButton(
+                        onClick = { callbacks.onMore(row.guid, row.configType) },
+                        modifier = Modifier.size(RowIconButtonSize).then(reorderModifier)
+                    ) {
                         Icon(
                             painterResource(R.drawable.ic_more_vert_24dp),
                             stringResource(R.string.acc_more),
@@ -287,21 +355,30 @@ private fun ServerRow(
                         )
                     }
                 } else {
-                    IconButton({ callbacks.onShare(row.guid, row.configType) }, Modifier.size(RowIconButtonSize)) {
+                    IconButton(
+                        onClick = { callbacks.onShare(row.guid, row.configType) },
+                        modifier = Modifier.size(RowIconButtonSize).then(reorderModifier)
+                    ) {
                         Icon(
                             painterResource(R.drawable.ic_share_24dp),
                             stringResource(R.string.title_configuration_share),
                             Modifier.size(RowIconSize)
                         )
                     }
-                    IconButton({ callbacks.onEdit(row.guid, row.configType) }, Modifier.size(RowIconButtonSize)) {
+                    IconButton(
+                        onClick = { callbacks.onEdit(row.guid, row.configType) },
+                        modifier = Modifier.size(RowIconButtonSize).then(reorderModifier)
+                    ) {
                         Icon(
                             painterResource(R.drawable.ic_edit_24dp),
                             stringResource(R.string.acc_edit),
                             Modifier.size(RowIconSize)
                         )
                     }
-                    IconButton({ callbacks.onRemove(row.guid) }, Modifier.size(RowIconButtonSize)) {
+                    IconButton(
+                        onClick = { callbacks.onRemove(row.guid) },
+                        modifier = Modifier.size(RowIconButtonSize).then(reorderModifier)
+                    ) {
                         Icon(
                             painterResource(R.drawable.ic_delete_24dp),
                             stringResource(R.string.acc_delete),

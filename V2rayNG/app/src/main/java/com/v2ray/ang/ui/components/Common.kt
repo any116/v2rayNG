@@ -288,19 +288,24 @@ fun VersionInfoBlock(
     }
 }
 
+/**
+ * Adds long-press reordering to an existing action area without covering the list body, so the
+ * body's long press and vertical scroll gestures remain available.
+ */
 @Composable
-private fun ReorderableCollectionItemScope.dragHandle(): Modifier {
+fun reorderableDragModifier(scope: ReorderableCollectionItemScope): Modifier {
     val haptics = LocalHapticFeedback.current
-    return Modifier.longPressDraggableHandle(
-        onDragStarted = {
-            haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-        }
-    )
+    return with(scope) {
+        Modifier.longPressDraggableHandle(
+            onDragStarted = {
+                haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+            }
+        )
+    }
 }
 
 @Composable
 fun ReorderableListItem(
-    scope: ReorderableCollectionItemScope,
     isDragging: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit
@@ -311,9 +316,7 @@ fun ReorderableListItem(
     )
     Surface(modifier = modifier.fillMaxWidth(), shadowElevation = elevation) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(with(scope) { dragHandle() }),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             content = content
         )
@@ -322,22 +325,23 @@ fun ReorderableListItem(
 
 @Composable
 fun ReorderableGridItem(
-    scope: ReorderableCollectionItemScope,
     isDragging: Boolean,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable RowScope.() -> Unit
 ) {
     val elevation by animateDpAsState(
         targetValue = if (isDragging) DragElevation else 0.dp,
         label = "ReorderableElevation"
     )
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(with(scope) { dragHandle() }),
+        modifier = modifier.fillMaxWidth(),
         shadowElevation = elevation
     ) {
-        content()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
     }
 }
 

@@ -41,6 +41,7 @@ import com.v2ray.ang.ui.components.ReorderableListItem
 import com.v2ray.ang.ui.components.SettingsListItem
 import com.v2ray.ang.ui.components.StringOptions
 import com.v2ray.ang.ui.components.colorConfigType
+import com.v2ray.ang.ui.components.reorderableDragModifier
 import com.v2ray.ang.ui.components.verticalScrollbar
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -111,11 +112,14 @@ fun RoutingRuleList(
             contentType = { CONTENT_TYPE_RULE },
         ) { rule ->
             ReorderableItem(reorderableState, key = rule.id) { isDragging ->
-                ReorderableListItem(scope = this, isDragging = isDragging) {
+                val reorderModifier = reorderableDragModifier(this)
+                ReorderableListItem(isDragging = isDragging) {
                     RoutingRuleRowItem(
                         rule = rule,
                         callbacks = callbacks,
                         switchColors = switchColors,
+                        modifier = Modifier.weight(1f),
+                        reorderModifier = reorderModifier,
                     )
                 }
                 ItemDivider()
@@ -129,7 +133,8 @@ private fun RoutingRuleRowItem(
     rule: RoutingRuleRow,
     callbacks: RoutingRowCallbacks,
     switchColors: SwitchColors,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reorderModifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
@@ -179,7 +184,9 @@ private fun RoutingRuleRowItem(
 
         Column(
             horizontalAlignment = Alignment.End,
-            modifier = Modifier.padding(start = RowActionGap),
+            modifier = Modifier
+                .padding(start = RowActionGap)
+                .then(reorderModifier),
         ) {
             IconButton(onClick = { callbacks.edit(rule.id) }) {
                 Icon(

@@ -38,6 +38,7 @@ import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.ItemDivider
 import com.v2ray.ang.ui.components.NavigationBarsBottomPadding
 import com.v2ray.ang.ui.components.ReorderableListItem
+import com.v2ray.ang.ui.components.reorderableDragModifier
 import com.v2ray.ang.ui.components.verticalScrollbar
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
@@ -168,11 +169,13 @@ fun SubSettingContent(
             contentType = { CONTENT_TYPE_SUB }
         ) { subRow ->
             ReorderableItem(reorderableState, key = subRow.guid) { isDragging ->
-                ReorderableListItem(scope = this, isDragging = isDragging) {
+                val reorderModifier = reorderableDragModifier(this)
+                ReorderableListItem(isDragging = isDragging) {
                     SubscriptionRow(
                         subRow = subRow,
                         callbacks = callbacks,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        reorderModifier = reorderModifier,
                     )
                 }
                 ItemDivider()
@@ -185,7 +188,8 @@ fun SubSettingContent(
 private fun SubscriptionRow(
     subRow: SubRow,
     callbacks: SubRowCallbacks,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    reorderModifier: Modifier = Modifier
 ) {
     val guid = subRow.guid
     val url = subRow.url
@@ -222,7 +226,9 @@ private fun SubscriptionRow(
 
         Column(
             horizontalAlignment = Alignment.End,
-            modifier = Modifier.padding(start = RowActionsStartPad)
+            modifier = Modifier
+                .padding(start = RowActionsStartPad)
+                .then(reorderModifier)
         ) {
             Row {
                 if (subRow.hasUrl) {
