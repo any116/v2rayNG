@@ -39,8 +39,12 @@ Room 的跨进程一致性靠 `DatabaseModule` 的 `enableMultiInstanceInvalidat
 
 ## 3. Service 规范
 
-- 前台服务的通知统一走 `helper/NotificationHelper`，渠道定义在
-  `enums/NotificationChannelType`（`NotificationManager` 负责渠道与内核状态文案）。
+- 内核前台通知由 `handler/NotificationManager` 管理生命周期，`handler/CoreNotification`
+  每次从不可变数据新建完整通知；测速/订阅等任务通知走 `helper/NotificationHelper`，
+  其渠道定义在 `enums/NotificationChannelType`。
+  内核通知的两个 action 必须独立于网速文本；配置变化、亮屏和解锁都由 `:daemon` 主动刷新，
+  不依赖 UI 或网速采样。状态与发布/移除串行化，停止后丢弃旧采样；详见
+  [`core-notification-lifecycle.md`](core-notification-lifecycle.md)。
 - Service 不 import `ui/`、不 import `data/repository/`；需要数据直接用 `handler/`
   或 `PlatformDependencies.<dao>()`。
 - 启停内核的唯一入口是 `core/LauncherManager`（`startService` / `stopService` /

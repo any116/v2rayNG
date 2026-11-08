@@ -245,6 +245,7 @@ UI 侧的接收点只有一个：`MainRepository` 内部的 `BroadcastReceiver` 
 | 写协程、Flow、分页、去抖、并发 | `coroutine-flow-rules.md` |
 | 加依赖、动 `di/`、加 ViewModel / Worker | `hilt-rules.md` |
 | 动 Service / Receiver / Worker / 广播 | `service-ipc-rules.md` |
+| 改内核前台通知、夜间模式/息屏后的通知恢复 | `core-notification-lifecycle.md` |
 | 改测速 / 延迟测试 | `connection-test-lifecycle.md` |
 | 改 Logcat 读取、缓存、清理、分享或页面生命周期 | `logcat-lifecycle.md` |
 | 写 Composable、改主题与尺寸 | `compose/structure.md`、`compose/theme-styles.md` |

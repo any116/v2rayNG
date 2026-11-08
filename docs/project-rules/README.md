@@ -12,6 +12,7 @@
 | [`coroutine-flow-rules.md`](coroutine-flow-rules.md) | `launch` 包装、Scope、Job 管理、Flow 位置、Paging 3 数据链、去抖与串行化 | 写任何协程、Flow 或分页时 |
 | [`hilt-rules.md`](hilt-rules.md) | Hilt 模块、Scope、`@Inject` 约束、EntryPoint、Worker 注入 | 加依赖、动 `di/`、加 ViewModel/Worker 时 |
 | [`service-ipc-rules.md`](service-ipc-rules.md) | 多进程、广播、`MSG_*` 常量、Worker、Receiver、Glance 组件、通知 | 动 `service/`、`receiver/`、`core/` 时 |
+| [`core-notification-lifecycle.md`](core-notification-lifecycle.md) | 内核通知按钮、配置/息屏恢复、采样与停止竞态、验收矩阵 | 改内核前台通知或其生命周期回调时 |
 | [`connection-test-lifecycle.md`](connection-test-lifecycle.md) | 连接测试 `requestId` 生命周期与失效点 | 改测速 / 延迟测试时 |
 | [`compose/structure.md`](compose/structure.md) | 目录/文件/函数命名、参数契约、脚手架用法 | 写任何 Composable 时 |
 | [`compose/state-events.md`](compose/state-events.md) | UiState/Action/Event 建模、Dialog 宿主、表单与结果回传 | 设计一屏的状态时 |

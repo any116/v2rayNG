@@ -564,8 +564,10 @@ object CoreServiceManager {
                     NotificationManager.stopSpeedNotification()
                 }
 
-                Intent.ACTION_SCREEN_ON -> {
-                    LogUtil.i(AppConfig.TAG, "StartCore-Manager: Screen on")
+                Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
+                    LogUtil.i(AppConfig.TAG, "StartCore-Manager: Screen on or unlocked")
+                    // Restore controls without waiting for traffic, even when speed display is disabled.
+                    NotificationManager.refreshNotification()
                     NotificationManager.startSpeedNotification()
                 }
             }
