@@ -1,6 +1,8 @@
 package com.v2ray.ang.ui.main
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -203,6 +207,34 @@ class ServerRowCallbacks(
     val onRemove: (String) -> Unit
 )
 
+private class LongPressClickGuard {
+    var suppressSelection = false
+}
+
+/** Observes the release without consuming events, leaving drag reordering and child buttons intact. */
+private fun Modifier.trackLongPress(guard: LongPressClickGuard): Modifier = pointerInput(guard) {
+    awaitEachGesture {
+        guard.suppressSelection = false
+        try {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) {
+                    guard.suppressSelection =
+                        change.uptimeMillis - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis
+                    // selectable handles release during Main; keep the guard until Final.
+                    awaitPointerEvent(PointerEventPass.Final)
+                    break
+                }
+            }
+        } finally {
+            // A drag or cancellation may not click; never suppress a later keyboard/accessibility click.
+            guard.suppressSelection = false
+        }
+    }
+}
+
 /**
  * Mirrors the ServerRow skeleton so the scrollbar does not jump while a page loads:
  * icon-button row height plus three text lines at the same styles.
@@ -241,14 +273,18 @@ private fun ServerRow(
     callbacks: ServerRowCallbacks,
     modifier: Modifier = Modifier
 ) {
+    val clickGuard = remember { LongPressClickGuard() }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(IntrinsicSize.Min)
+            .trackLongPress(clickGuard)
             .selectable(
                 selected = isSelected,
                 role = Role.RadioButton,
-                onClick = { callbacks.onSelect(row.guid) }
+                onClick = {
+                    if (!clickGuard.suppressSelection) callbacks.onSelect(row.guid)
+                }
             )
     ) {
         Box(Modifier.width(SelectionGutterWidth).fillMaxHeight()) {
