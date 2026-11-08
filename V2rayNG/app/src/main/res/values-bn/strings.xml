@@ -103,7 +103,10 @@
     <string name="toast_malformed_json">কনফিগারেশন ফরম্যাট সঠিক নয়।</string>
     <string name="server_lab_request_host6">হোস্ট (SNI) (ঐচ্ছিক)</string>
     <string name="toast_action_not_allowed">অ্যাকশন অনুমোদিত নয়</string>
+    <string name="server_obfs_type">Obfs ধরন</string>
     <string name="server_obfs_password">Obfs পাসওয়ার্ড</string>
+    <string name="server_min_packet_size">প্যাকেটের সর্বনিম্ন আকার (বাইট, ডিফল্ট 512)</string>
+    <string name="server_max_packet_size">প্যাকেটের সর্বোচ্চ আকার (বাইট, ডিফল্ট 1200)</string>
     <string name="server_lab_port_hop">পোর্ট হপিং (পোর্টের মান প্রতিস্থাপন করবে)</string>
     <string name="server_lab_port_hop_interval">পোর্ট পরিবর্তনের বিরতি (সেকেন্ড)</string>
     <string name="server_lab_bandwidth_down">ডাউনলোড ব্যান্ডউইডথ (সমর্থিত একক: k/m/g/t)</string>

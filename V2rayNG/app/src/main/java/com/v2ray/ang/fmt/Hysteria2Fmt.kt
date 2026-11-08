@@ -26,7 +26,6 @@ object Hysteria2Fmt : FmtBase() {
         config.serverPort = uri.port.toString()
         config.password = uri.userInfo
         config.security = AppConfig.TLS
-        config.network = NetworkType.HYSTERIA.type
 
         if (!uri.rawQuery.isNullOrEmpty()) {
             val queryParam = getQueryParam(uri)
@@ -34,12 +33,21 @@ object Hysteria2Fmt : FmtBase() {
             getItemFormQuery(config, queryParam)
 
             config.security = queryParam["security"] ?: AppConfig.TLS
+            config.obfs = queryParam["obfs"]?.trim()?.lowercase()?.nullIfBlank()
+                ?.takeUnless { it == AppConfig.HYSTERIA2_OBFS_NONE }
             config.obfsPassword = queryParam["obfs-password"]
+            config.minPacketSize = queryParam["minPacketSize"]?.toIntOrNull()
+            config.maxPacketSize = queryParam["maxPacketSize"]?.toIntOrNull()
+            if (config.obfs == AppConfig.HYSTERIA2_OBFS_GECKO) {
+                config.minPacketSize = config.minPacketSize ?: AppConfig.HYSTERIA2_GECKO_MIN_PACKET_SIZE
+                config.maxPacketSize = config.maxPacketSize ?: AppConfig.HYSTERIA2_GECKO_MAX_PACKET_SIZE
+            }
             config.portHopping = queryParam["mport"]
             config.pinnedCA256 = queryParam["pinSHA256"]
-
         }
 
+        // The generic query parser defaults to TCP, but Hysteria2 always uses its QUIC transport.
+        config.network = NetworkType.HYSTERIA.type
         return config
     }
 
@@ -57,9 +65,15 @@ object Hysteria2Fmt : FmtBase() {
         config.alpn?.nullIfBlank()?.let { dicQuery["alpn"] = it }
         config.insecure.let { dicQuery["insecure"] = if (it == true) "1" else "0" }
 
-        if (config.obfsPassword.isNotNullEmpty()) {
-            dicQuery["obfs"] = "salamander"
-            dicQuery["obfs-password"] = config.obfsPassword.orEmpty()
+        val obfs = config.obfs?.trim()?.lowercase()?.nullIfBlank()
+            ?.takeUnless { it == AppConfig.HYSTERIA2_OBFS_NONE }
+        if (obfs != null) {
+            dicQuery["obfs"] = obfs
+            config.obfsPassword?.takeIf { it.isNotEmpty() }?.let { dicQuery["obfs-password"] = it }
+            if (obfs == AppConfig.HYSTERIA2_OBFS_GECKO) {
+                config.minPacketSize?.let { dicQuery["minPacketSize"] = it.toString() }
+                config.maxPacketSize?.let { dicQuery["maxPacketSize"] = it.toString() }
+            }
         }
         if (config.portHopping.isNotNullEmpty()) {
             dicQuery["mport"] = config.portHopping.orEmpty()

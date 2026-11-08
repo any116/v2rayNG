@@ -55,5 +55,19 @@ class V2rayNFmtTest {
         assertEquals(null, accumulator.profile(group, "subA").policyGroupFilter)
     }
 
+    @Test
+    fun legacySalamanderShareSelectsObfsExplicitly() {
+        val profile = item("""
+            {"ConfigType":7,"Address":"example.com","Port":443,
+             "ProtoExtraObj":{"SalamanderPass":"secret"}}
+        """).toProfileItem()
+
+        assertEquals("salamander", profile.obfs)
+        assertEquals("secret", profile.obfsPassword)
+        assertEquals(null, profile.minPacketSize)
+        assertEquals(null, profile.maxPacketSize)
+        assertTrue(Hysteria2Fmt.toUri(profile).contains("obfs=salamander"))
+    }
+
     private fun item(json: String): V2rayNShareItem = JsonUtil.fromJson(json, V2rayNShareItem::class.java)!!
 }

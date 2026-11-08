@@ -296,6 +296,7 @@ data class V2rayConfig(
                 ) {
                     data class MaskSettingsBean(
                         val password: String? = null,
+                        val packetSize: String? = null,
                         val header: String? = null,
                         val value: String? = null,
                         // udphop

@@ -2,6 +2,9 @@ package com.v2ray.ang.ui.server
 
 import androidx.compose.runtime.Immutable
 import com.v2ray.ang.AppConfig.DEFAULT_PORT
+import com.v2ray.ang.AppConfig.HYSTERIA2_GECKO_MAX_PACKET_SIZE
+import com.v2ray.ang.AppConfig.HYSTERIA2_GECKO_MIN_PACKET_SIZE
+import com.v2ray.ang.AppConfig.HYSTERIA2_OBFS_NONE
 import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.AppConfig.WIREGUARD_LOCAL_ADDRESS_V4
@@ -47,7 +50,10 @@ data class ServerForm(
     val localAddress: String = WIREGUARD_LOCAL_ADDRESS_V4,
     val mtu: String = WIREGUARD_LOCAL_MTU,
     val remoteDNS: String = "",
+    val obfs: String = HYSTERIA2_OBFS_NONE,
     val obfsPassword: String = "",
+    val minPacketSize: String = HYSTERIA2_GECKO_MIN_PACKET_SIZE.toString(),
+    val maxPacketSize: String = HYSTERIA2_GECKO_MAX_PACKET_SIZE.toString(),
     val portHopping: String = "",
     val portHoppingInterval: String = "",
     val bandwidthDown: String = "",
@@ -130,7 +136,14 @@ data class ServerForm(
             localAddress = if (isWireguard) localAddress else null,
             mtu = if (isWireguard) mtu.toIntOrNull() else null,
             remoteDNS = if (isWireguard || isMasque) remoteDNS.nullIfBlank() else null,
+            obfs = if (isHysteria2) {
+                obfs.trim().lowercase().nullIfBlank()?.takeUnless { it == HYSTERIA2_OBFS_NONE }
+            } else {
+                null
+            },
             obfsPassword = if (isHysteria2) obfsPassword else null,
+            minPacketSize = if (isHysteria2) minPacketSize.toIntOrNull() else null,
+            maxPacketSize = if (isHysteria2) maxPacketSize.toIntOrNull() else null,
             portHopping = if (isHysteria2) portHopping else null,
             portHoppingInterval = if (isHysteria2) portHoppingInterval else null,
             bandwidthDown = if (isHysteria2) bandwidthDown else null,
@@ -206,7 +219,10 @@ data class ServerForm(
                 localAddress = profile.localAddress ?: WIREGUARD_LOCAL_ADDRESS_V4,
                 mtu = profile.mtu?.toString() ?: WIREGUARD_LOCAL_MTU,
                 remoteDNS = profile.remoteDNS.orEmpty(),
+                obfs = profile.obfs?.trim()?.lowercase()?.nullIfBlank() ?: HYSTERIA2_OBFS_NONE,
                 obfsPassword = profile.obfsPassword.orEmpty(),
+                minPacketSize = (profile.minPacketSize ?: HYSTERIA2_GECKO_MIN_PACKET_SIZE).toString(),
+                maxPacketSize = (profile.maxPacketSize ?: HYSTERIA2_GECKO_MAX_PACKET_SIZE).toString(),
                 portHopping = profile.portHopping.orEmpty(),
                 portHoppingInterval = profile.portHoppingInterval.orEmpty(),
                 bandwidthDown = profile.bandwidthDown.orEmpty(),
@@ -278,7 +294,10 @@ enum class ServerField(
     LOCAL_ADDRESS({ it.localAddress }, { f, v -> f.copy(localAddress = v) }),
     MTU({ it.mtu }, { f, v -> f.copy(mtu = v) }),
     REMOTE_DNS({ it.remoteDNS }, { f, v -> f.copy(remoteDNS = v) }),
+    OBFS({ it.obfs }, { f, v -> f.copy(obfs = v) }),
     OBFS_PASSWORD({ it.obfsPassword }, { f, v -> f.copy(obfsPassword = v) }),
+    MIN_PACKET_SIZE({ it.minPacketSize }, { f, v -> f.copy(minPacketSize = v) }),
+    MAX_PACKET_SIZE({ it.maxPacketSize }, { f, v -> f.copy(maxPacketSize = v) }),
     PORT_HOPPING({ it.portHopping }, { f, v -> f.copy(portHopping = v) }),
     PORT_HOPPING_INTERVAL({ it.portHoppingInterval }, { f, v -> f.copy(portHoppingInterval = v) }),
     BANDWIDTH_DOWN({ it.bandwidthDown }, { f, v -> f.copy(bandwidthDown = v) }),

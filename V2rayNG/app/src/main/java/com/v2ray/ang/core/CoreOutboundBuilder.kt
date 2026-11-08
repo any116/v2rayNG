@@ -618,12 +618,24 @@ object CoreOutboundBuilder {
                         )
                     )
                 }
-                if (profileItem.obfsPassword.isNotNullEmpty()) {
+                val obfs = profileItem.obfs?.trim()?.lowercase()
+                if ((obfs == AppConfig.HYSTERIA2_OBFS_SALAMANDER || obfs == AppConfig.HYSTERIA2_OBFS_GECKO) &&
+                    profileItem.obfsPassword.isNotNullEmpty()
+                ) {
+                    // Xray implements Gecko as Salamander with a packet padding range.
+                    val packetSize = if (obfs == AppConfig.HYSTERIA2_OBFS_GECKO) {
+                        val min = profileItem.minPacketSize ?: AppConfig.HYSTERIA2_GECKO_MIN_PACKET_SIZE
+                        val max = profileItem.maxPacketSize ?: AppConfig.HYSTERIA2_GECKO_MAX_PACKET_SIZE
+                        "$min-$max"
+                    } else {
+                        null
+                    }
                     udpMasks.add(
                         OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean(
-                            type = "salamander",
+                            type = AppConfig.HYSTERIA2_OBFS_SALAMANDER,
                             settings = OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean.MaskSettingsBean(
-                                password = profileItem.obfsPassword.orEmpty()
+                                password = profileItem.obfsPassword.orEmpty(),
+                                packetSize = packetSize
                             )
                         )
                     )

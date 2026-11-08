@@ -3,6 +3,8 @@ package com.v2ray.ang.ui.server
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.text.TextRange
+import com.v2ray.ang.data.entities.ProfileItem
+import com.v2ray.ang.enums.EConfigType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotSame
@@ -63,6 +65,55 @@ class ServerEditorStateTest {
 
         assertEquals(editor.snapshot(), restored.snapshot())
         assertTrue(restored.masqueWarpEnabled)
+    }
+
+    @Test
+    fun geckoFieldsSurviveEditorRestorationAndProfileSaving() {
+        val initial = ProfileItem(configType = EConfigType.HYSTERIA2).apply {
+            obfs = "gecko"
+            obfsPassword = "secret"
+            minPacketSize = 600
+            maxPacketSize = 1100
+        }
+        val editor = ServerEditorState()
+        editor.initialize(ServerForm.from(initial), "")
+        editor[ServerField.MIN_PACKET_SIZE].setTextAndPlaceCursorAtEnd("700")
+        editor[ServerField.MAX_PACKET_SIZE].setTextAndPlaceCursorAtEnd("1000")
+        val saved = checkNotNull(with(ServerEditorState.Saver) { saverScope.save(editor) })
+        val restored = checkNotNull(ServerEditorState.Saver.restore(serializedCopy(saved)))
+        val profile = restored.snapshot().form.toProfileItem(initial, EConfigType.HYSTERIA2)
+
+        assertEquals(editor.snapshot(), restored.snapshot())
+        assertEquals("gecko", profile.obfs)
+        assertEquals("secret", profile.obfsPassword)
+        assertEquals(700, profile.minPacketSize)
+        assertEquals(1000, profile.maxPacketSize)
+    }
+
+    @Test
+    fun geckoEditorSuppliesDefaultsAndPreservesHiddenDraftFields() {
+        val initial = ProfileItem(configType = EConfigType.HYSTERIA2).apply { obfs = "gecko" }
+        val editor = ServerEditorState()
+        editor.initialize(ServerForm.from(initial), "")
+        assertEquals("512", editor.text(ServerField.MIN_PACKET_SIZE))
+        assertEquals("1200", editor.text(ServerField.MAX_PACKET_SIZE))
+
+        editor[ServerField.OBFS_PASSWORD].setTextAndPlaceCursorAtEnd("secret")
+        editor[ServerField.MIN_PACKET_SIZE].setTextAndPlaceCursorAtEnd("600")
+        editor[ServerField.OBFS].setTextAndPlaceCursorAtEnd("none")
+        val saved = checkNotNull(with(ServerEditorState.Saver) { saverScope.save(editor) })
+        val restored = checkNotNull(ServerEditorState.Saver.restore(serializedCopy(saved)))
+        val disabled = restored.snapshot().form.toProfileItem(initial, EConfigType.HYSTERIA2)
+
+        assertNull(disabled.obfs)
+        assertEquals("none", restored.text(ServerField.OBFS))
+        assertEquals("secret", restored.text(ServerField.OBFS_PASSWORD))
+        assertEquals("600", restored.text(ServerField.MIN_PACKET_SIZE))
+        restored[ServerField.OBFS].setTextAndPlaceCursorAtEnd("gecko")
+        val enabled = restored.snapshot().form.toProfileItem(initial, EConfigType.HYSTERIA2)
+        assertEquals("gecko", enabled.obfs)
+        assertEquals(600, enabled.minPacketSize)
+        assertEquals(1200, enabled.maxPacketSize)
     }
 
     @Test

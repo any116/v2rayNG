@@ -290,6 +290,11 @@ object AppConfig {
     const val DEFAULT_SECURITY = "auto"
     const val DEFAULT_LEVEL = 8
     const val DEFAULT_NETWORK = "tcp"
+    const val HYSTERIA2_OBFS_NONE = "none"
+    const val HYSTERIA2_OBFS_SALAMANDER = "salamander"
+    const val HYSTERIA2_OBFS_GECKO = "gecko"
+    const val HYSTERIA2_GECKO_MIN_PACKET_SIZE = 512
+    const val HYSTERIA2_GECKO_MAX_PACKET_SIZE = 1200
     const val MASQUE_DEFAULT_PATH = "/.well-known/masque/ip/*/*/"
     const val MASQUE_WARP_SNI = "consumer-masque.cloudflareclient.com"
     const val XDRIVE_SERVICE_LOCAL = "local"

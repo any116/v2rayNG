@@ -92,7 +92,10 @@ data class ProfileItem(
     var reserved: String? = null,
     var mtu: Int? = null,
 
+    var obfs: String? = null,
     var obfsPassword: String? = null,
+    var minPacketSize: Int? = null,
+    var maxPacketSize: Int? = null,
     var portHopping: String? = null,
     var portHoppingInterval: String? = null,
     @Deprecated("Use pinnedCA256")

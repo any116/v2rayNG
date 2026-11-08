@@ -164,6 +164,30 @@ internal class ProfileStorageTest {
     }
 
     @Test
+    fun geckoFieldsRoundTripAndCanBeClearedFromThePayload() {
+        val original = profile("gecko", type = EConfigType.HYSTERIA2).apply {
+            obfs = "gecko"
+            obfsPassword = "secret"
+            minPacketSize = 600
+            maxPacketSize = 1100
+        }
+        val payload = original.toPayloadItem()
+        val restored = original.toMetadataItem().merge(payload)
+
+        assertEquals(original.obfs, restored.obfs)
+        assertEquals(original.obfsPassword, restored.obfsPassword)
+        assertEquals(original.minPacketSize, restored.minPacketSize)
+        assertEquals(original.maxPacketSize, restored.maxPacketSize)
+
+        val cleared = original.copy(obfs = null, minPacketSize = null, maxPacketSize = null)
+        val updated = cleared.toPayloadItem(previousContent = payload.content)
+        val reloaded = cleared.toMetadataItem().merge(updated)
+        assertNull(reloaded.obfs)
+        assertNull(reloaded.minPacketSize)
+        assertNull(reloaded.maxPacketSize)
+    }
+
+    @Test
     fun knownFieldsCoversEverySerializableProfileProperty() {
         val declared = ProfileItem::class.java.declaredFields
             .filterNot { it.isSynthetic || Modifier.isStatic(it.modifiers) || Modifier.isTransient(it.modifiers) }

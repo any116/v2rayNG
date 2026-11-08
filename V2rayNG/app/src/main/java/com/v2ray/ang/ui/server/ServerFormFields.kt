@@ -170,6 +170,7 @@ internal data class FieldOptions(
     val browserDialer: StringOptions,
     val vmessSecurities: StringOptions,
     val ssSecurities: StringOptions,
+    val hysteria2ObfsTypes: StringOptions,
     val flows: StringOptions,
     val xdriveServices: StringOptions,
     val policyGroupTypes: StringOptions
@@ -188,6 +189,7 @@ internal fun rememberFieldOptions(): FieldOptions = FieldOptions(
     browserDialer = rememberStringOptions(R.array.browser_dialer_mode_value),
     vmessSecurities = rememberStringOptions(R.array.securitys),
     ssSecurities = rememberStringOptions(R.array.ss_securitys),
+    hysteria2ObfsTypes = rememberStringOptions(R.array.hysteria2_obfs_types),
     flows = rememberStringOptions(R.array.flows),
     xdriveServices = rememberStringOptions(R.array.xdrive_services),
     policyGroupTypes = rememberStringOptions(R.array.policy_group_type)

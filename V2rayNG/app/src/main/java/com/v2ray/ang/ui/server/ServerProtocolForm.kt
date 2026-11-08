@@ -17,6 +17,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
+import com.v2ray.ang.AppConfig.HYSTERIA2_OBFS_GECKO
+import com.v2ray.ang.AppConfig.HYSTERIA2_OBFS_NONE
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_S3
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.AppConfig.REALITY
@@ -170,9 +172,27 @@ private fun ProtocolFields(
             ServerTextField(
                 R.string.server_lab_id3, ServerField.PASSWORD, editor, fieldErrors
             )
-            ServerTextField(
-                R.string.server_obfs_password, ServerField.OBFS_PASSWORD, editor, fieldErrors
+            val obfs by remember(editor) {
+                derivedStateOf { editor.text(ServerField.OBFS) }
+            }
+            ServerDropdownField(
+                R.string.server_obfs_type, ServerField.OBFS, editor, options.hysteria2ObfsTypes, fieldErrors
             )
+            if (obfs.isNotBlank() && obfs != HYSTERIA2_OBFS_NONE) {
+                ServerTextField(
+                    R.string.server_obfs_password, ServerField.OBFS_PASSWORD, editor, fieldErrors
+                )
+            }
+            if (obfs == HYSTERIA2_OBFS_GECKO) {
+                ServerTextField(
+                    R.string.server_min_packet_size, ServerField.MIN_PACKET_SIZE, editor, fieldErrors,
+                    KeyboardType.Number
+                )
+                ServerTextField(
+                    R.string.server_max_packet_size, ServerField.MAX_PACKET_SIZE, editor, fieldErrors,
+                    KeyboardType.Number
+                )
+            }
             ServerTextField(
                 R.string.server_lab_port_hop, ServerField.PORT_HOPPING, editor, fieldErrors
             )

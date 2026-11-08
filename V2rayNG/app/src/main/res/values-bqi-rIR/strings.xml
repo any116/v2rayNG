@@ -103,7 +103,10 @@
     <string name="toast_malformed_json">کانفیگ نا موئتبر هڌ</string>
     <string name="server_lab_request_host6">هاست(SNI)(اختیاری)</string>
     <string name="toast_action_not_allowed">ای کار ممنۊع هڌ</string>
+    <string name="server_obfs_type">نۊع obfs</string>
     <string name="server_obfs_password">رزم obfs</string>
+    <string name="server_min_packet_size">کۊچک‌ترین ٱنداڌه بسته (بایت، پؽش فرض 512)</string>
+    <string name="server_max_packet_size">گپ‌ترین ٱنداڌه بسته (بایت، پؽش فرض 1200)</string>
     <string name="server_lab_port_hop">پورت گوم (درگا سرورن ز نۊ هؽل اکونه)</string>
     <string name="server_lab_port_hop_interval">فاصله پورت گوم (ثانیه)</string>
     <string name="server_lab_bandwidth_down">ب لم ٱووڌن پئنا باند (واهڌ)</string>

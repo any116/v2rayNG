@@ -178,6 +178,7 @@ class CoreOutboundBuilderTest {
     fun hysteriaPortHoppingPrecedesSalamanderMask() {
         val profile = hysteriaProfile().apply {
             portHopping = "5000-6000"
+            obfs = "salamander"
             obfsPassword = "obfs-password"
         }
         val stream = OutboundBean.StreamSettingsBean()
@@ -225,11 +226,12 @@ class CoreOutboundBuilderTest {
     @Test
     fun hysteriaWithoutPortHoppingKeepsOptionalSalamanderMask() {
         listOf(null, "").forEach { ports ->
-            listOf(null, "obfs-password").forEach { obfs ->
+            listOf(null, "obfs-password").forEach { password ->
                 val profile = hysteriaProfile().apply {
                     portHopping = ports
                     portHoppingInterval = "10"
-                    obfsPassword = obfs
+                    obfs = if (password == null) null else "salamander"
+                    obfsPassword = password
                 }
                 val stream = OutboundBean.StreamSettingsBean()
 
@@ -238,7 +240,7 @@ class CoreOutboundBuilderTest {
                 val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(stream)))
                 val finalmask = json.getAsJsonObject("finalmask")
                 assertNull(finalmask.getAsJsonObject("quicParams").get("udpHop"))
-                if (obfs == null) {
+                if (password == null) {
                     assertNull(finalmask.get("udp"))
                 } else {
                     val masks = finalmask.getAsJsonArray("udp")
@@ -257,6 +259,7 @@ class CoreOutboundBuilderTest {
         """.trimIndent()
         val profile = hysteriaProfile().apply {
             portHopping = "5000-6000"
+            obfs = "salamander"
             obfsPassword = "obfs-password"
             finalMask = custom
         }

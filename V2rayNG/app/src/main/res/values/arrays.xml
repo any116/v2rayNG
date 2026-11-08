@@ -21,6 +21,12 @@
         <item>2022-blake3-chacha20-poly1305</item>
     </string-array>
 
+    <string-array name="hysteria2_obfs_types" translatable="false">
+        <item>none</item>
+        <item>salamander</item>
+        <item>gecko</item>
+    </string-array>
+
     <string-array name="networks" translatable="false">
         <item>tcp</item>
         <item>kcp</item>

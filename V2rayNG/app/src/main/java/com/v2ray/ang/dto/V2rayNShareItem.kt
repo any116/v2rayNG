@@ -1,5 +1,6 @@
 package com.v2ray.ang.dto
 
+import com.v2ray.ang.AppConfig
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.BalancerStrategyType
 import com.v2ray.ang.enums.EConfigType
@@ -156,6 +157,7 @@ data class V2rayNShareItem(
             reserved = ProtoExtraObj?.WgReserved,
             mtu = ProtoExtraObj?.WgMtu,
             remoteDNS = ProtoExtraObj?.WgDns,
+            obfs = if (!ProtoExtraObj?.SalamanderPass.isNullOrEmpty()) AppConfig.HYSTERIA2_OBFS_SALAMANDER else null,
             obfsPassword = ProtoExtraObj?.SalamanderPass,
             portHopping = ProtoExtraObj?.Ports,
             portHoppingInterval = ProtoExtraObj?.HopInterval,
