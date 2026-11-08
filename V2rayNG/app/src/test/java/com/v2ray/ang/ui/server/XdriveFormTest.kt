@@ -85,6 +85,67 @@ class XdriveFormTest {
         assertEquals(R.string.server_lab_xdrive_template, errors[ServerField.TEMPLATE])
     }
 
+    @Test
+    fun s3SettingsAndCredentialsSurviveEditing() {
+        val form = validS3Form()
+        val saved = form.toProfileItem(ProfileItem.create(EConfigType.VLESS), EConfigType.VLESS)
+        val restored = ServerForm.from(saved)
+
+        assertEquals(AppConfig.XDRIVE_SERVICE_S3, saved.service)
+        assertEquals(form.s3, saved.s3)
+        assertEquals(form.secrets, saved.secrets)
+        assertEquals(form.remoteFolder, restored.remoteFolder)
+        assertEquals(form.s3, restored.s3)
+        assertEquals(form.secrets, restored.secrets)
+        assertEquals(null, saved.template)
+        assertTrue(ServerValidator.validateForm(EConfigType.VLESS, form).isEmpty())
+        assertEquals(null, ServerValidator.validateProfile(EConfigType.VLESS, saved))
+    }
+
+    @Test
+    fun s3ValidationIsSharedByFormAndProfile() {
+        val cases = listOf(
+            Triple(validS3Form().copy(s3 = "{}"), ServerField.S3, R.string.server_lab_xdrive_s3_error),
+            Triple(
+                validS3Form().copy(secrets = "access\n\ntoken"),
+                ServerField.SECRETS,
+                R.string.server_lab_xdrive_s3_secrets_error
+            ),
+            Triple(
+                validS3Form().copy(remoteFolder = "../streams"),
+                ServerField.REMOTE_FOLDER,
+                R.string.server_lab_xdrive_s3_remote_folder_error
+            )
+        )
+        cases.forEach { (form, field, message) ->
+            assertEquals(message, ServerValidator.validateForm(EConfigType.VLESS, form)[field])
+            val profile = form.toProfileItem(ProfileItem.create(EConfigType.VLESS), EConfigType.VLESS)
+            assertEquals(
+                com.v2ray.ang.ui.base.BaseText.of(message),
+                ServerValidator.validateProfile(EConfigType.VLESS, profile)
+            )
+        }
+    }
+
+    @Test
+    fun switchingAwayFromS3ClearsItsSettings() {
+        val form = validS3Form()
+        val initial = form.toProfileItem(ProfileItem.create(EConfigType.VLESS), EConfigType.VLESS)
+        val local = form.copy(service = AppConfig.XDRIVE_SERVICE_LOCAL).toProfileItem(initial, EConfigType.VLESS)
+        val tcp = form.copy(network = NetworkType.TCP.type).toProfileItem(initial, EConfigType.VLESS)
+
+        assertEquals(null, local.s3)
+        assertEquals(null, local.secrets)
+        assertEquals(null, tcp.s3)
+        assertEquals(null, tcp.secrets)
+    }
+
+    private fun validS3Form() = validTemplateForm(
+        service = AppConfig.XDRIVE_SERVICE_S3,
+        remoteFolder = "streams/client/",
+        secrets = "access\nsecret\ntoken"
+    ).copy(s3 = """{"endpoint":"https://s3.example.com","bucket":"bucket","pathStyle":true}""")
+
     private fun validTemplateForm(
         remoteFolder: String = "",
         secrets: String = "",

@@ -280,7 +280,8 @@ data class V2rayConfig(
                 var remoteFolder: String? = null,
                 var service: String? = null,
                 var secrets: List<String>? = null,
-                var template: JsonObject? = null
+                var template: JsonObject? = null,
+                var s3: JsonObject? = null
             )
 
             //https://xtls.github.io/config/transport.html#finalmaskobject

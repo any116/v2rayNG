@@ -133,6 +133,12 @@
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
     <string name="server_lab_xdrive_secrets">secrets (one per line)</string>
     <string name="server_lab_xdrive_template">template JSON</string>
+    <string name="server_lab_xdrive_s3">s3 JSON</string>
+    <string name="server_lab_xdrive_s3_hint">{\"endpoint\":\"https://s3.example.com\",\"bucket\":\"bucket\",\"region\":\"us-east-1\",\"pathStyle\":false}</string>
+    <string name="server_lab_xdrive_s3_error">Enter an S3 object with a valid HTTP(S) endpoint and bucket; region is an optional string and pathStyle an optional boolean</string>
+    <string name="server_lab_xdrive_s3_secrets">AccessKeyID, SecretAccessKey, optional SessionToken (one per line)</string>
+    <string name="server_lab_xdrive_s3_secrets_error">S3 requires AccessKeyID and SecretAccessKey on the first two lines, with an optional SessionToken on the third; use valid HTTP header values</string>
+    <string name="server_lab_xdrive_s3_remote_folder_error">S3 remoteFolder must be a non-empty relative prefix without empty, \'.\' or \'..\' components or backslashes</string>
     <string name="server_lab_xdrive_secrets_error">Google Drive requires exactly 3 non-empty secrets, one per line</string>
     <string name="server_lab_xdrive_service_error">Unsupported XDRIVE service</string>
     <string name="server_lab_xdrive_vless_error">XDRIVE requires a VLESS outbound</string>

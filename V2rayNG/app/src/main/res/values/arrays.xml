@@ -35,6 +35,7 @@
     <string-array name="xdrive_services" translatable="false">
         <item>local</item>
         <item>@string/server_lab_xdrive_service_google_drive</item>
+        <item>s3</item>
         <item>template</item>
     </string-array>
 

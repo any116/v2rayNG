@@ -74,6 +74,7 @@ open class FmtBase {
             config.service = queryParam["service"]
             config.secrets = queryParam["secrets"]
             config.template = queryParam["template"]
+            config.s3 = queryParam["s3"]
         }
 
         config.seed = queryParam["seed"]
@@ -191,6 +192,9 @@ open class FmtBase {
                 config.service?.nullIfBlank()?.let { dicQuery["service"] = it }
                 config.secrets?.nullIfBlank()?.let { dicQuery["secrets"] = it }
                 config.template?.nullIfBlank()?.let { dicQuery["template"] = it }
+                if (config.service == AppConfig.XDRIVE_SERVICE_S3) {
+                    config.s3?.nullIfBlank()?.let { dicQuery["s3"] = it }
+                }
             }
 
             else -> {}

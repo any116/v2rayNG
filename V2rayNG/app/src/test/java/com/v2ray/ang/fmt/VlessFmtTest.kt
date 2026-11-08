@@ -11,6 +11,30 @@ import org.junit.jupiter.api.Test
 class VlessFmtTest {
 
     @Test
+    fun s3FieldsRoundTripThroughVlessUri() {
+        val profile = ProfileItem.create(EConfigType.VLESS).apply {
+            remarks = "S3"
+            server = "xdrive.example.com"
+            serverPort = "443"
+            password = "uuid"
+            method = "native-encryption"
+            network = NetworkType.XDRIVE.type
+            remoteFolder = "streams/client/"
+            service = AppConfig.XDRIVE_SERVICE_S3
+            secrets = "access\nsecret+/=\ntoken+/="
+            s3 = """{"endpoint":"https://s3.example.com/base%2Fpath","bucket":"bucket","pathStyle":true}"""
+        }
+
+        val parsed = checkNotNull(VlessFmt.parse(AppConfig.VLESS + VlessFmt.toUri(profile)))
+
+        assertEquals(profile.network, parsed.network)
+        assertEquals(profile.service, parsed.service)
+        assertEquals(profile.remoteFolder, parsed.remoteFolder)
+        assertEquals(profile.secrets, parsed.secrets)
+        assertEquals(profile.s3, parsed.s3)
+    }
+
+    @Test
     fun xdriveFieldsRoundTripThroughVlessUri() {
         val profile = ProfileItem.create(EConfigType.VLESS).apply {
             remarks = "XDRIVE"

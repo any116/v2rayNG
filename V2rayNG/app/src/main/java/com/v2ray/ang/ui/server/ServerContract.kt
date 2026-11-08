@@ -6,8 +6,8 @@ import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.AppConfig.WIREGUARD_LOCAL_ADDRESS_V4
 import com.v2ray.ang.AppConfig.WIREGUARD_LOCAL_MTU
-import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_LOCAL
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_S3
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.dto.SubscriptionOption
 import com.v2ray.ang.data.entities.ProfileItem
@@ -18,6 +18,7 @@ import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.ui.base.BaseAction
 import com.v2ray.ang.ui.base.BaseEvent
 import com.v2ray.ang.ui.base.BaseUiState
+import com.v2ray.ang.util.XdriveConfigValidator
 import java.util.UUID
 
 @Immutable
@@ -65,6 +66,7 @@ data class ServerForm(
     val service: String = XDRIVE_SERVICE_LOCAL,
     val secrets: String = "",
     val template: String = "",
+    val s3: String = "",
     val finalMask: String = "",
     val kcpMtu: String = "",
     val kcpTti: String = "",
@@ -149,12 +151,13 @@ data class ServerForm(
             masqueWarpAddress = if (isMasque && masqueWarpEnabled) masqueWarpAddress.nullIfBlank() else null,
             remoteFolder = if (isXdrive) remoteFolder.nullIfBlank() else null,
             service = if (isXdrive) service.nullIfBlank() else null,
-            secrets = if (isXdrive && service in setOf(XDRIVE_SERVICE_GOOGLE_DRIVE, XDRIVE_SERVICE_TEMPLATE)) {
+            secrets = if (isXdrive && XdriveConfigValidator.usesSecrets(service)) {
                 secrets.nullIfBlank()
             } else {
                 null
             },
             template = if (isXdrive && service == XDRIVE_SERVICE_TEMPLATE) template.nullIfBlank() else null,
+            s3 = if (isXdrive && service == XDRIVE_SERVICE_S3) s3.nullIfBlank() else null,
             finalMask = finalMask.nullIfBlank(),
             seed = seed.nullIfBlank(),
             kcpMtu = kcpMtu.toIntOrNull(),
@@ -226,6 +229,7 @@ data class ServerForm(
                 service = profile.service ?: XDRIVE_SERVICE_LOCAL,
                 secrets = profile.secrets.orEmpty(),
                 template = profile.template.orEmpty(),
+                s3 = profile.s3.orEmpty(),
                 finalMask = profile.finalMask.orEmpty(),
                 seed = profile.seed.orEmpty(),
                 kcpMtu = profile.kcpMtu?.toString().orEmpty(),
@@ -292,6 +296,7 @@ enum class ServerField(
     SERVICE({ it.service }, { f, v -> f.copy(service = v) }),
     SECRETS({ it.secrets }, { f, v -> f.copy(secrets = v) }),
     TEMPLATE({ it.template }, { f, v -> f.copy(template = v) }),
+    S3({ it.s3 }, { f, v -> f.copy(s3 = v) }),
     FINAL_MASK({ it.finalMask }, { f, v -> f.copy(finalMask = v) }),
     KCP_MTU({ it.kcpMtu }, { f, v -> f.copy(kcpMtu = v) }),
     KCP_TTI({ it.kcpTti }, { f, v -> f.copy(kcpTti = v) }),

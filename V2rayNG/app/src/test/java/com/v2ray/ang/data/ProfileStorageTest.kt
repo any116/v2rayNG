@@ -122,6 +122,31 @@ internal class ProfileStorageTest {
     }
 
     @Test
+    fun s3SettingsRoundTripAndCanBeClearedFromThePayload() {
+        val original = profile("s3", type = EConfigType.VLESS).apply {
+            network = NetworkType.XDRIVE.type
+            remoteFolder = "streams/client"
+            service = "s3"
+            secrets = "access\nsecret\ntoken"
+            s3 = """{"endpoint":"https://s3.example.com","bucket":"bucket","pathStyle":true}"""
+        }
+        val payload = original.toPayloadItem()
+        val restored = original.toMetadataItem().merge(payload)
+
+        assertEquals(original.s3, restored.s3)
+        assertEquals(original.secrets, restored.secrets)
+        assertEquals(original.service, restored.service)
+        assertEquals(original.remoteFolder, restored.remoteFolder)
+        assertFalse(original.computeDedupeKey() == original.copy(s3 = "{}").computeDedupeKey())
+
+        val cleared = original.copy(service = "local", s3 = null, secrets = null)
+        val updated = cleared.toPayloadItem(previousContent = payload.content)
+        val reloaded = cleared.toMetadataItem().merge(updated)
+        assertNull(reloaded.s3)
+        assertNull(reloaded.secrets)
+    }
+
+    @Test
     fun masqueWarpFieldsRoundTripThroughThePayload() {
         val original = profile("warp", type = EConfigType.MASQUE).apply {
             masqueWarp = true

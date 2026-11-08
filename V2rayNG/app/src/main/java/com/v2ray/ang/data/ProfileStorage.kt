@@ -20,7 +20,7 @@ internal object ProfilePayloadCodec {
         "seed", "kcpMtu", "kcpTti", "quicSecurity", "quicKey", "mode", "serviceName",
         "authority", "xhttpMode", "xhttpExtra", "masqueHeaders", "masqueWarp", "masqueWarpPrivateKey",
         "masqueWarpPublicKey", "masqueWarpAddress", "remoteFolder", "service", "secrets",
-        "template",
+        "template", "s3",
         "finalMask", "security", "sni", "alpn",
         "fingerPrint", "insecure", "echConfigList", "verifyPeerCertByName", "pinnedCA256",
         "publicKey", "shortId", "spiderX", "mldsa65Verify", "secretKey", "preSharedKey",

@@ -40,6 +40,49 @@ class CoreOutboundBuilderTest {
     }
 
     @Test
+    fun s3TransportKeepsSettingsAsAnObjectAndCredentialOrder() {
+        val profile = s3Profile()
+        val outbound = checkNotNull(CoreOutboundBuilder.convert(profile))
+        val stream = checkNotNull(outbound.streamSettings)
+        val settings = checkNotNull(stream.xdriveSettings)
+        val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(settings)))
+
+        assertEquals(AppConfig.XDRIVE_SERVICE_S3, settings.service)
+        assertEquals("streams/client/", settings.remoteFolder)
+        assertEquals(listOf("access", "secret", "token"), settings.secrets)
+        assertEquals(JsonUtil.parseString(profile.s3), json.getAsJsonObject("s3"))
+        assertNull(settings.template)
+        assertEquals(true, outbound.mux?.enabled)
+    }
+
+    @Test
+    fun s3SettingsAreNotEmittedForOtherServices() {
+        val profile = s3Profile().apply { service = AppConfig.XDRIVE_SERVICE_LOCAL }
+        val stream = OutboundBean.StreamSettingsBean()
+
+        CoreOutboundBuilder.populateTransportSettings(stream, profile)
+
+        assertNull(stream.xdriveSettings?.s3)
+        assertNull(stream.xdriveSettings?.secrets)
+    }
+
+    @Test
+    fun invalidS3ProfilesAreNotConvertedIntoCoreOutbounds() {
+        assertNotNull(CoreOutboundBuilder.convert(s3Profile().apply { secrets = "access\nsecret" }))
+        assertNull(CoreOutboundBuilder.convert(s3Profile().apply { s3 = null }))
+        assertNull(CoreOutboundBuilder.convert(s3Profile().apply { s3 = "{}" }))
+        assertNull(CoreOutboundBuilder.convert(s3Profile().apply { secrets = "access\n\ntoken" }))
+        assertNull(CoreOutboundBuilder.convert(s3Profile().apply { remoteFolder = "/streams" }))
+    }
+
+    private fun s3Profile() = xdriveProfile().apply {
+        service = AppConfig.XDRIVE_SERVICE_S3
+        remoteFolder = "streams/client/"
+        secrets = "access\nsecret\ntoken"
+        s3 = """{"endpoint":"https://s3.example.com","region":"us-east-1","bucket":"bucket","pathStyle":true}"""
+    }
+
+    @Test
     fun invalidXdriveProfilesAreNotConvertedIntoCoreOutbounds() {
         assertNull(CoreOutboundBuilder.convert(xdriveProfile()))
         assertNull(CoreOutboundBuilder.convert(xdriveProfile().apply { flow = "xtls-rprx-vision" }))

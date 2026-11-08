@@ -114,6 +114,9 @@ object CoreOutboundBuilder {
 
         return when (service) {
             AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE -> XdriveConfigValidator.secrets(profileItem.secrets).size == 3
+            AppConfig.XDRIVE_SERVICE_S3 -> XdriveConfigValidator.isValidS3(profileItem.s3) &&
+                XdriveConfigValidator.isValidS3Secrets(profileItem.secrets) &&
+                XdriveConfigValidator.isValidS3RemoteFolder(profileItem.remoteFolder)
             AppConfig.XDRIVE_SERVICE_TEMPLATE -> XdriveConfigValidator.isValidTemplate(profileItem.template)
             else -> true
         }
@@ -523,13 +526,13 @@ object CoreOutboundBuilder {
                     remoteFolder = profileItem.remoteFolder?.nullIfBlank(),
                     service = service,
                     secrets = profileItem.secrets
-                        ?.takeIf {
-                            service == AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE ||
-                                service == AppConfig.XDRIVE_SERVICE_TEMPLATE
-                        }
-                        ?.let { XdriveConfigValidator.secrets(it) },
+                        ?.takeIf { XdriveConfigValidator.usesSecrets(service) }
+                        ?.let { XdriveConfigValidator.secrets(it, service) },
                     template = profileItem.template
                         ?.takeIf { service == AppConfig.XDRIVE_SERVICE_TEMPLATE }
+                        ?.let { JsonUtil.parseString(it) },
+                    s3 = profileItem.s3
+                        ?.takeIf { service == AppConfig.XDRIVE_SERVICE_S3 }
                         ?.let { JsonUtil.parseString(it) }
                 )
                 streamSettings.xdriveSettings = xdriveSetting

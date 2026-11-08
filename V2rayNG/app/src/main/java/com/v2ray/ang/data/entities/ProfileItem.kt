@@ -69,6 +69,7 @@ data class ProfileItem(
     var service: String? = null,
     var secrets: String? = null,
     var template: String? = null,
+    var s3: String? = null,
     var finalMask: String? = null,
 
     var security: String? = null,

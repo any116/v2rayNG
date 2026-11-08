@@ -17,7 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_S3
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.AppConfig.REALITY
 import com.v2ray.ang.AppConfig.TLS
@@ -27,6 +27,7 @@ import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.ui.components.FormTextField
 import com.v2ray.ang.ui.components.SettingsSwitchItem
 import com.v2ray.ang.ui.components.StringOptions
+import com.v2ray.ang.util.XdriveConfigValidator
 
 private data class ProtocolSpec(
     val showNetwork: Boolean = false,
@@ -317,9 +318,20 @@ private fun NetworkFields(
                 R.string.server_lab_xdrive_remote_folder, ServerField.REMOTE_FOLDER,
                 editor, fieldErrors
             )
-            if (service == XDRIVE_SERVICE_GOOGLE_DRIVE || service == XDRIVE_SERVICE_TEMPLATE) {
+            if (XdriveConfigValidator.usesSecrets(service)) {
                 ServerTextField(
-                    R.string.server_lab_xdrive_secrets, ServerField.SECRETS, editor, fieldErrors
+                    if (service == XDRIVE_SERVICE_S3) R.string.server_lab_xdrive_s3_secrets
+                    else R.string.server_lab_xdrive_secrets,
+                    ServerField.SECRETS, editor, fieldErrors
+                )
+            }
+            if (service == XDRIVE_SERVICE_S3) {
+                FormTextField(
+                    label = stringResource(R.string.server_lab_xdrive_s3),
+                    state = editor[ServerField.S3],
+                    isError = ServerField.S3 in fieldErrors,
+                    supportingText = fieldErrors.errorMessage(ServerField.S3)
+                        ?: stringResource(R.string.server_lab_xdrive_s3_hint)
                 )
             }
             if (service == XDRIVE_SERVICE_TEMPLATE) {

@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.server
 
 import androidx.annotation.StringRes
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_S3
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.AppConfig.TLS
 import com.v2ray.ang.R
@@ -126,6 +127,17 @@ internal object ServerValidator {
                         errors[ServerField.SECRETS] = R.string.server_lab_xdrive_secrets_error
                     }
                 }
+                XDRIVE_SERVICE_S3 -> {
+                    if (!XdriveConfigValidator.isValidS3(form.s3)) {
+                        errors[ServerField.S3] = R.string.server_lab_xdrive_s3_error
+                    }
+                    if (!XdriveConfigValidator.isValidS3Secrets(form.secrets)) {
+                        errors[ServerField.SECRETS] = R.string.server_lab_xdrive_s3_secrets_error
+                    }
+                    if (!XdriveConfigValidator.isValidS3RemoteFolder(form.remoteFolder)) {
+                        errors[ServerField.REMOTE_FOLDER] = R.string.server_lab_xdrive_s3_remote_folder_error
+                    }
+                }
                 XDRIVE_SERVICE_TEMPLATE -> {
                     if (form.template.isBlank() || !XdriveConfigValidator.isValidTemplate(form.template)) {
                         errors[ServerField.TEMPLATE] = R.string.server_lab_xdrive_template
@@ -198,7 +210,10 @@ internal object ServerValidator {
                 return BaseText.of(R.string.server_lab_xdrive_service_error)
             }
             if (profile.service != XDRIVE_SERVICE_TEMPLATE && profile.remoteFolder.isNullOrBlank()) {
-                return BaseText.of(R.string.server_lab_xdrive_remote_folder)
+                return BaseText.of(
+                    if (profile.service == XDRIVE_SERVICE_S3) R.string.server_lab_xdrive_s3_remote_folder_error
+                    else R.string.server_lab_xdrive_remote_folder
+                )
             }
             if (profile.method.isNullOrBlank() || profile.method.equals("none", ignoreCase = true)) {
                 return BaseText.of(R.string.server_lab_xdrive_encryption_error)
@@ -210,6 +225,17 @@ internal object ServerValidator {
                 XdriveConfigValidator.secrets(profile.secrets).size != 3
             ) {
                 return BaseText.of(R.string.server_lab_xdrive_secrets_error)
+            }
+            if (profile.service == XDRIVE_SERVICE_S3) {
+                if (!XdriveConfigValidator.isValidS3(profile.s3)) {
+                    return BaseText.of(R.string.server_lab_xdrive_s3_error)
+                }
+                if (!XdriveConfigValidator.isValidS3Secrets(profile.secrets)) {
+                    return BaseText.of(R.string.server_lab_xdrive_s3_secrets_error)
+                }
+                if (!XdriveConfigValidator.isValidS3RemoteFolder(profile.remoteFolder)) {
+                    return BaseText.of(R.string.server_lab_xdrive_s3_remote_folder_error)
+                }
             }
             if (profile.service == XDRIVE_SERVICE_TEMPLATE && profile.template.isNullOrBlank()) {
                 return BaseText.of(R.string.server_lab_xdrive_template)

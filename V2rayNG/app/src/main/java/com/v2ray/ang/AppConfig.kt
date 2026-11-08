@@ -294,6 +294,7 @@ object AppConfig {
     const val MASQUE_WARP_SNI = "consumer-masque.cloudflareclient.com"
     const val XDRIVE_SERVICE_LOCAL = "local"
     const val XDRIVE_SERVICE_GOOGLE_DRIVE = "google-drive"
+    const val XDRIVE_SERVICE_S3 = "s3"
     const val XDRIVE_SERVICE_TEMPLATE = "template"
     const val TLS = "tls"
     const val REALITY = "reality"
