@@ -97,6 +97,139 @@ class CoreOutboundBuilderTest {
         assertTrue(JsonUtil.toJson(outbound).contains("\"warp\""))
     }
 
+    @Test
+    fun hysteriaPortHoppingUsesUdpMaskInsteadOfQuicParams() {
+        val profile = hysteriaProfile().apply {
+            portHopping = "443,5000-6000"
+            portHoppingInterval = "10-20"
+            bandwidthUp = "10 mbps"
+            bandwidthDown = "20 mbps"
+        }
+        val stream = OutboundBean.StreamSettingsBean()
+
+        CoreOutboundBuilder.populateTransportSettings(stream, profile)
+
+        val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(stream)))
+        val finalmask = json.getAsJsonObject("finalmask")
+        val masks = finalmask.getAsJsonArray("udp")
+        assertEquals(1, masks.size())
+        assertEquals(
+            JsonUtil.parseString(
+                """
+                    {"type":"udphop","settings":{"mode":"intervalLocal,intervalRemote",
+                     "remotePorts":"443,5000-6000","interval":"10-20"}}
+                """.trimIndent()
+            ),
+            masks[0]
+        )
+        val quicParams = finalmask.getAsJsonObject("quicParams")
+        assertEquals("brutal", quicParams.get("congestion").asString)
+        assertEquals("10 mbps", quicParams.get("brutalUp").asString)
+        assertEquals("20 mbps", quicParams.get("brutalDown").asString)
+        assertNull(quicParams.get("udpHop"))
+        assertEquals(2, stream.hysteriaSettings?.version)
+        assertEquals("auth", stream.hysteriaSettings?.auth)
+    }
+
+    @Test
+    fun hysteriaPortHoppingPrecedesSalamanderMask() {
+        val profile = hysteriaProfile().apply {
+            portHopping = "5000-6000"
+            obfsPassword = "obfs-password"
+        }
+        val stream = OutboundBean.StreamSettingsBean()
+
+        CoreOutboundBuilder.populateTransportSettings(stream, profile)
+
+        val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(stream)))
+        val masks = json.getAsJsonObject("finalmask").getAsJsonArray("udp")
+        assertEquals(listOf("udphop", "salamander"), masks.map { it.asJsonObject.get("type").asString })
+        assertEquals("30", masks[0].asJsonObject.getAsJsonObject("settings").get("interval").asString)
+        assertEquals("obfs-password", masks[1].asJsonObject.getAsJsonObject("settings").get("password").asString)
+    }
+
+    @Test
+    fun hysteriaPortHoppingKeepsIntervalNormalization() {
+        val intervals = listOf(
+            null to "30",
+            "" to "30",
+            "  " to "30",
+            "4" to "30",
+            "5" to "5",
+            " 10 " to "10",
+            "invalid" to "30",
+            "1-3" to "5-5",
+            "20-10" to "20-20",
+            "10 - 20" to "10-20",
+            "x-20" to "30",
+            "1-2-3" to "30"
+        )
+        intervals.forEach { (input, expected) ->
+            val profile = hysteriaProfile().apply {
+                portHopping = "5000-6000"
+                portHoppingInterval = input
+            }
+            val stream = OutboundBean.StreamSettingsBean()
+
+            CoreOutboundBuilder.populateTransportSettings(stream, profile)
+
+            val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(stream)))
+            val hop = json.getAsJsonObject("finalmask").getAsJsonArray("udp")[0].asJsonObject
+            assertEquals(expected, hop.getAsJsonObject("settings").get("interval").asString, "interval=$input")
+        }
+    }
+
+    @Test
+    fun hysteriaWithoutPortHoppingKeepsOptionalSalamanderMask() {
+        listOf(null, "").forEach { ports ->
+            listOf(null, "obfs-password").forEach { obfs ->
+                val profile = hysteriaProfile().apply {
+                    portHopping = ports
+                    portHoppingInterval = "10"
+                    obfsPassword = obfs
+                }
+                val stream = OutboundBean.StreamSettingsBean()
+
+                CoreOutboundBuilder.populateTransportSettings(stream, profile)
+
+                val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(stream)))
+                val finalmask = json.getAsJsonObject("finalmask")
+                assertNull(finalmask.getAsJsonObject("quicParams").get("udpHop"))
+                if (obfs == null) {
+                    assertNull(finalmask.get("udp"))
+                } else {
+                    val masks = finalmask.getAsJsonArray("udp")
+                    assertEquals(1, masks.size())
+                    assertEquals("salamander", masks[0].asJsonObject.get("type").asString)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun customFinalMaskStillOverridesGeneratedHysteriaMasks() {
+        val custom = """
+            {"udp":[{"type":"udphop","settings":{"mode":"intervalRemote",
+             "remotePorts":"8443","interval":"60"}}]}
+        """.trimIndent()
+        val profile = hysteriaProfile().apply {
+            portHopping = "5000-6000"
+            obfsPassword = "obfs-password"
+            finalMask = custom
+        }
+        val stream = OutboundBean.StreamSettingsBean()
+
+        CoreOutboundBuilder.populateTransportSettings(stream, profile)
+
+        val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(stream)))
+        assertEquals(JsonUtil.parseString(custom), json.getAsJsonObject("finalmask"))
+    }
+
+    private fun hysteriaProfile() = ProfileItem(configType = EConfigType.HYSTERIA2).apply {
+        network = NetworkType.HYSTERIA.type
+        password = "auth"
+    }
+
     private fun xdriveProfile() = ProfileItem.create(EConfigType.VLESS).apply {
         remarks = "XDRIVE"
         server = "xdrive.example.com"

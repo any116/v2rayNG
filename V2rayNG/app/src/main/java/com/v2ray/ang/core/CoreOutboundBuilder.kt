@@ -573,6 +573,7 @@ object CoreOutboundBuilder {
                     brutalDown = profileItem.bandwidthDown?.nullIfBlank(),
                 )
                 quicParams.congestion = if (quicParams.brutalUp != null || quicParams.brutalDown != null) "brutal" else null
+                val udpMasks = mutableListOf<OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean>()
                 if (profileItem.portHopping.isNotNullEmpty()) {
                     val rawInterval = profileItem.portHoppingInterval?.trim().nullIfBlank()
                     val interval = if (rawInterval == null) {
@@ -602,16 +603,20 @@ object CoreOutboundBuilder {
                             }
                         }
                     }
-                    quicParams.udpHop = OutboundBean.StreamSettingsBean.FinalMaskBean.QuicParamsBean.UdpHopBean(
-                        ports = profileItem.portHopping,
-                        interval = interval
+                    // UDP Hop handles dialing, so Xray requires it to be the first UDP mask.
+                    udpMasks.add(
+                        OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean(
+                            type = "udphop",
+                            settings = OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean.MaskSettingsBean(
+                                mode = "intervalLocal,intervalRemote",
+                                remotePorts = profileItem.portHopping,
+                                interval = interval
+                            )
+                        )
                     )
                 }
-                val finalmask = OutboundBean.StreamSettingsBean.FinalMaskBean(
-                    quicParams = quicParams
-                )
                 if (profileItem.obfsPassword.isNotNullEmpty()) {
-                    finalmask.udp = listOf(
+                    udpMasks.add(
                         OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean(
                             type = "salamander",
                             settings = OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean.MaskSettingsBean(
@@ -621,7 +626,10 @@ object CoreOutboundBuilder {
                     )
                 }
                 streamSettings.hysteriaSettings = hysteriaSetting
-                streamSettings.finalmask = finalmask
+                streamSettings.finalmask = OutboundBean.StreamSettingsBean.FinalMaskBean(
+                    udp = udpMasks.takeIf { it.isNotEmpty() }?.toList(),
+                    quicParams = quicParams
+                )
             }
         }
         finalMask?.let {
