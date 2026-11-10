@@ -319,19 +319,8 @@ object CoreServiceManager {
         networkMonitor = NetworkMonitor(
             connectivity = connectivity,
             onUnderlyingNetworksChanged = { networks -> serviceControl?.get()?.setUnderlyingNetworks(networks) },
-            onNetworkLost = { resetConnections() },
             onHandover = { scheduleCoreReload() },
         ).also { it.register() }
-    }
-
-    private fun resetConnections() {
-        val generation = lifecycleGeneration.get()
-        bgScope.launch {
-            if (generation != lifecycleGeneration.get() || !isRunning()) return@launch
-            LogUtil.i(AppConfig.TAG, "StartCore-Manager: Upstream network lost; resetting connections")
-            runCatching { coreController.resetConnections() }
-                .onFailure { LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to reset connections", it) }
-        }
     }
 
     private fun scheduleCoreReload() {

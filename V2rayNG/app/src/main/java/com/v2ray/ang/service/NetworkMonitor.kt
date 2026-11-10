@@ -19,19 +19,18 @@ import kotlinx.coroutines.launch
  * Watches the network that carries the tunnel and reports topology changes.
  *
  * Cellular -> Wi-Fi is a make-before-break handover: the new network is announced while the old one
- * is still connected, so the socket to the server is never reset and the core keeps using a dead
- * connection. A handover is debounced before [onHandover] is invoked; losing the current network
- * dispatches [onNetworkLost] in the monitor scope so stale sockets can be discarded while waiting
- * for recovery without blocking the platform callback thread.
+ * is still connected, so the stale socket is only dropped when the core is restarted. Deciding that
+ * a handover happened is what this class is for, acting on it is not. A handover is debounced
+ * before [onHandover] is invoked; losing the current network only detaches the upstream so the
+ * next available network is treated as a handover.
  *
  * Only used from Android P and above, see CoreServiceManager.startNetworkMonitor().
- * [onHandover] and [onNetworkLost] are invoked on a background thread and may block.
+ * [onHandover] is invoked on a background thread and may block.
  */
 class NetworkMonitor(
     private val connectivity: ConnectivityManager,
     private val onUnderlyingNetworksChanged: (Array<Network>?) -> Unit,
     private val onHandover: () -> Unit,
-    private val onNetworkLost: () -> Unit = {},
 ) {
     private companion object {
         const val HANDOVER_DEBOUNCE_MS = 1000L
@@ -98,7 +97,6 @@ class NetworkMonitor(
             }
             if (wasCurrent) {
                 onUnderlyingNetworksChanged(null)
-                dispatchNetworkLost()
             }
         }
     }
@@ -137,19 +135,6 @@ class NetworkMonitor(
             connectivity.unregisterNetworkCallback(callback)
         } catch (e: Exception) {
             LogUtil.w(AppConfig.TAG, "NetworkMonitor: Failed to unregister callback", e)
-        }
-    }
-
-    private fun dispatchNetworkLost() {
-        monitorScope.launch {
-            try {
-                if (!synchronized(stateLock) { registered }) return@launch
-                onNetworkLost()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.TAG, "NetworkMonitor: Failed to handle network loss", e)
-            }
         }
     }
 
