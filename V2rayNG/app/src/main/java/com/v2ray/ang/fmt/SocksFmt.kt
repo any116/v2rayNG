@@ -3,7 +3,6 @@ package com.v2ray.ang.fmt
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.idnHost
-import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.util.Utils
 import okio.ByteString.Companion.encodeUtf8
 import java.net.URI
@@ -22,19 +21,17 @@ object SocksFmt : FmtBase() {
         if (uri.idnHost.isEmpty()) return null
         if (uri.port <= 0) return null
 
-        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).let { it.ifEmpty { "none" } }
+        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).ifEmpty { "none" }
         config.server = uri.idnHost
         config.serverPort = uri.port.toString()
 
-        if (uri.userInfo?.isEmpty() == false) {
-            val result = if (uri.userInfo.contains(":")) {
-                uri.userInfo.split(":", limit = 2)
-            } else {
-                Utils.decode(uri.userInfo).split(":", limit = 2)
-            }
-            if (result.count() == 2) {
-                config.username = result.first()
-                config.password = result.last()
+        val userInfo = uri.userInfo
+        if (!userInfo.isNullOrEmpty()) {
+            val credentials = if (userInfo.contains(":")) userInfo else Utils.decode(userInfo)
+            val parts = credentials.split(":", limit = 2)
+            if (parts.size == 2) {
+                config.username = parts.first()
+                config.password = parts.last()
             }
         }
 
@@ -48,12 +45,7 @@ object SocksFmt : FmtBase() {
      * @return the converted URI string
      */
     fun toUri(config: ProfileItem): String {
-        val pw =
-            if (config.username.isNotNullEmpty())
-                "${config.username}:${config.password}"
-            else
-                ":"
-
-        return toUri(config, pw.encodeUtf8().base64(includePadding = false), null)
+        val userInfo = if (config.username.isNullOrBlank()) ":" else "${config.username}:${config.password}"
+        return toUri(config, userInfo.encodeUtf8().base64(includePadding = false), null)
     }
 }

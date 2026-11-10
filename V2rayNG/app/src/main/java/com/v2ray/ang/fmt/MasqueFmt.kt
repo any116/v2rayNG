@@ -26,8 +26,6 @@ object MasqueFmt : FmtBase() {
         config.password = if (warp) null else if (separator >= 0) userInfo.substring(separator + 1) else ""
         getItemFormQuery(config, query)
         config.network = NetworkType.MASQUE.type
-        config.host = query["host"]
-        config.path = query["path"]
         config.masqueHeaders = query["headers"]
         config.masqueWarp = warp
         config.masqueWarpPrivateKey = query["warpPrivateKey"]
@@ -45,10 +43,6 @@ object MasqueFmt : FmtBase() {
             put("security", AppConfig.TLS)
             remove("insecure")
             remove("allowInsecure")
-            remove("warp")
-            remove("warpPrivateKey")
-            remove("warpPublicKey")
-            remove("warpAddress")
             config.host?.nullIfBlank()?.let { put("host", it) }
             config.path?.nullIfBlank()?.let { put("path", it) }
             config.masqueHeaders?.nullIfBlank()?.let { put("headers", it) }

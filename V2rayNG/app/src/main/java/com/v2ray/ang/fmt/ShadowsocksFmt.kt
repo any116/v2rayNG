@@ -33,34 +33,32 @@ object ShadowsocksFmt : FmtBase() {
         val uri = URI(Utils.fixIllegalUrl(str))
         if (uri.idnHost.isEmpty()) return null
         if (uri.port <= 0) return null
-        if (uri.userInfo.isNullOrEmpty()) return null
+        val userInfo = uri.userInfo
+        if (userInfo.isNullOrEmpty()) return null
 
-        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).let { it.ifEmpty { "none" } }
+        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).ifEmpty { "none" }
         config.server = uri.idnHost
         config.serverPort = uri.port.toString()
 
-        val result = if (uri.userInfo.contains(":")) {
-            uri.userInfo.split(":", limit = 2)
-        } else {
-            Utils.decode(uri.userInfo).split(":", limit = 2)
-        }
-        if (result.count() == 2) {
-            config.method = result.first()
-            config.password = result.last()
+        val credentials = if (userInfo.contains(":")) userInfo else Utils.decode(userInfo)
+        val parts = credentials.split(":", limit = 2)
+        if (parts.size == 2) {
+            config.method = parts.first()
+            config.password = parts.last()
         }
 
         if (!uri.rawQuery.isNullOrEmpty()) {
-            val queryParam = getQueryParam(uri)
-            if (queryParam["plugin"]?.contains("obfs=http") == true) {
+            val plugin = getQueryParam(uri)["plugin"]
+            if (plugin?.contains("obfs=http") == true) {
                 val queryPairs = HashMap<String, String>()
-                for (pair in queryParam["plugin"]?.split(";") ?: listOf()) {
-                    val idx = pair.split("=", limit = 2)
-                    if (idx.count() == 2) {
-                        queryPairs.put(idx.first(), idx.last())
+                for (pair in plugin.split(";")) {
+                    val parts = pair.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        queryPairs[parts.first()] = parts.last()
                     }
                 }
                 config.network = NetworkType.TCP.type
-                config.headerType = "http"
+                config.headerType = AppConfig.HEADER_TYPE_HTTP
                 config.host = queryPairs["obfs-host"]
                 config.path = queryPairs["path"]
             }
@@ -93,10 +91,7 @@ object ShadowsocksFmt : FmtBase() {
         //part decode
         val indexS = result.indexOf("@")
         result = if (indexS > 0) {
-            Utils.decode(result.substring(0, indexS)) + result.substring(
-                indexS,
-                result.length
-            )
+            Utils.decode(result.substring(0, indexS)) + result.substring(indexS)
         } else {
             Utils.decode(result)
         }

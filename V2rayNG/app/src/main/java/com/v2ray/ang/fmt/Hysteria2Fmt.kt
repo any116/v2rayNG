@@ -5,7 +5,6 @@ import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.NetworkType
 import com.v2ray.ang.extension.idnHost
-import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.extension.nullIfBlank
 import com.v2ray.ang.util.Utils
 import java.net.URI
@@ -21,7 +20,7 @@ object Hysteria2Fmt : FmtBase() {
         val config = ProfileItem.create(EConfigType.HYSTERIA2)
 
         val uri = URI(Utils.fixIllegalUrl(str))
-        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).let { it.ifEmpty { "none" } }
+        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).ifEmpty { "none" }
         config.server = uri.idnHost
         config.serverPort = uri.port.toString()
         config.password = uri.userInfo
@@ -60,10 +59,10 @@ object Hysteria2Fmt : FmtBase() {
     fun toUri(config: ProfileItem): String {
         val dicQuery = HashMap<String, String>()
 
-        config.security.let { if (it != null) dicQuery["security"] = it }
+        config.security?.let { dicQuery["security"] = it }
         config.sni?.nullIfBlank()?.let { dicQuery["sni"] = it }
         config.alpn?.nullIfBlank()?.let { dicQuery["alpn"] = it }
-        config.insecure.let { dicQuery["insecure"] = if (it == true) "1" else "0" }
+        dicQuery["insecure"] = if (config.insecure == true) "1" else "0"
 
         val obfs = config.obfs?.trim()?.lowercase()?.nullIfBlank()
             ?.takeUnless { it == AppConfig.HYSTERIA2_OBFS_NONE }
@@ -75,12 +74,8 @@ object Hysteria2Fmt : FmtBase() {
                 config.maxPacketSize?.let { dicQuery["maxPacketSize"] = it.toString() }
             }
         }
-        if (config.portHopping.isNotNullEmpty()) {
-            dicQuery["mport"] = config.portHopping.orEmpty()
-        }
-        if (config.pinnedCA256.isNotNullEmpty()) {
-            dicQuery["pinSHA256"] = config.pinnedCA256.orEmpty()
-        }
+        config.portHopping.nullIfBlank()?.let { dicQuery["mport"] = it }
+        config.pinnedCA256.nullIfBlank()?.let { dicQuery["pinSHA256"] = it }
 
         return toUri(config, config.password, dicQuery)
     }

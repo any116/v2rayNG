@@ -23,7 +23,7 @@ object WireguardFmt : FmtBase() {
         if (uri.rawQuery.isNullOrEmpty()) return null
         val queryParam = getQueryParam(uri)
 
-        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).let { it.ifEmpty { "none" } }
+        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).ifEmpty { "none" }
         config.server = uri.idnHost
         config.serverPort = uri.port.toString()
 
@@ -48,32 +48,26 @@ object WireguardFmt : FmtBase() {
     fun parseWireguardConfFile(str: String): ProfileItem {
         val config = ProfileItem.create(EConfigType.WIREGUARD)
 
-        val interfaceParams: MutableMap<String, String> = mutableMapOf()
-        val peerParams: MutableMap<String, String> = mutableMapOf()
+        val interfaceParams = mutableMapOf<String, String>()
+        val peerParams = mutableMapOf<String, String>()
+        var currentParams: MutableMap<String, String>? = null
 
-        var currentSection: String? = null
-
-        str.lines().forEach { line ->
+        for (line in str.lineSequence()) {
             val trimmedLine = line.trim()
-
             if (trimmedLine.isEmpty() || trimmedLine.startsWith("#") || trimmedLine.startsWith(";")) {
-                return@forEach
+                continue
             }
 
             when {
-                trimmedLine.startsWith("[Interface]", ignoreCase = true) -> currentSection = "Interface"
-                trimmedLine.startsWith("[Peer]", ignoreCase = true) -> currentSection = "Peer"
+                trimmedLine.startsWith("[Interface]", ignoreCase = true) -> currentParams = interfaceParams
+                trimmedLine.startsWith("[Peer]", ignoreCase = true) -> currentParams = peerParams
                 else -> {
-                    if (currentSection != null) {
-                        val parts = trimmedLine.split("=", limit = 2).map { it.trim() }
-                        if (parts.size == 2) {
-                            val key = parts[0].lowercase()
-                            val value = parts[1].substringBefore('#').substringBefore(';').trim()
-                            when (currentSection) {
-                                "Interface" -> interfaceParams[key] = value
-                                "Peer" -> peerParams[key] = value
-                            }
-                        }
+                    val params = currentParams ?: continue
+                    val parts = trimmedLine.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        val key = parts[0].trim().lowercase()
+                        val value = parts[1].substringBefore('#').substringBefore(';').trim()
+                        params[key] = value
                     }
                 }
             }
@@ -107,16 +101,10 @@ object WireguardFmt : FmtBase() {
         val dicQuery = HashMap<String, String>()
 
         dicQuery["publickey"] = config.publicKey.orEmpty()
-        if (config.reserved != null) {
-            dicQuery["reserved"] = config.reserved.removeWhiteSpace().orEmpty()
-        }
+        config.reserved?.let { dicQuery["reserved"] = it.removeWhiteSpace().orEmpty() }
         dicQuery["address"] = config.localAddress.removeWhiteSpace().orEmpty()
-        if (config.mtu != null) {
-            dicQuery["mtu"] = config.mtu.toString()
-        }
-        if (config.preSharedKey != null) {
-            dicQuery["presharedkey"] = config.preSharedKey.removeWhiteSpace().orEmpty()
-        }
+        config.mtu?.let { dicQuery["mtu"] = it.toString() }
+        config.preSharedKey?.let { dicQuery["presharedkey"] = it.removeWhiteSpace().orEmpty() }
         config.finalMask?.nullIfBlank()?.let { dicQuery["fm"] = it }
         config.remoteDNS?.nullIfBlank()?.let { dicQuery["dns"] = it }
 
@@ -124,7 +112,7 @@ object WireguardFmt : FmtBase() {
     }
 
     private fun Map<String, String>.firstValue(vararg keys: String): String? =
-        keys.asSequence().mapNotNull { this[it] }.firstOrNull()
+        keys.firstNotNullOfOrNull { this[it] }
 
     private fun splitEndpoint(endpoint: String): Pair<String, String> {
         val value = endpoint.trim()

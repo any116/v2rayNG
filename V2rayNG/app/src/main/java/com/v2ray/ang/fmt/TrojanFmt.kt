@@ -19,7 +19,7 @@ object TrojanFmt : FmtBase() {
         val config = ProfileItem.create(EConfigType.TROJAN)
 
         val uri = URI(Utils.fixIllegalUrl(str))
-        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).let { it.ifEmpty { "none" } }
+        config.remarks = Utils.decodeURIComponent(uri.fragment.orEmpty()).ifEmpty { "none" }
         config.server = uri.idnHost
         config.serverPort = uri.port.toString()
         config.password = uri.userInfo
@@ -44,9 +44,5 @@ object TrojanFmt : FmtBase() {
      * @param config the ProfileItem object to convert
      * @return the converted URI string
      */
-    fun toUri(config: ProfileItem): String {
-        val dicQuery = getQueryDic(config)
-
-        return toUri(config, config.password, dicQuery)
-    }
+    fun toUri(config: ProfileItem): String = toUri(config, config.password, getQueryDic(config))
 }

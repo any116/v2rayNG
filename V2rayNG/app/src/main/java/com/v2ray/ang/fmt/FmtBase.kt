@@ -19,20 +19,18 @@ open class FmtBase {
      * @return the converted URI string
      */
     fun toUri(config: ProfileItem, userInfo: String?, dicQuery: HashMap<String, String>?): String {
-        val query = if (dicQuery != null)
-            "?" + dicQuery.toList().joinToString(
-                separator = "&",
-                transform = { it.first + "=" + Utils.encodeURIComponent(it.second) })
-        else ""
+        val query = dicQuery?.entries?.joinToString(separator = "&", prefix = "?") { (key, value) ->
+            "$key=${Utils.encodeURIComponent(value)}"
+        }.orEmpty()
 
         val url = String.format(
             "%s@%s:%s",
-            Utils.encodeURIComponent(userInfo ?: ""),
+            Utils.encodeURIComponent(userInfo.orEmpty()),
             Utils.getIpv6Address(HttpUtil.toIdnDomain(config.server.orEmpty())),
             config.serverPort
         )
 
-        return "${url}${query}#${Utils.encodeURIComponent(config.remarks)}"
+        return "$url$query#${Utils.encodeURIComponent(config.remarks)}"
     }
 
     /**
@@ -46,12 +44,9 @@ open class FmtBase {
         // (e.g. path=/ws?ed=2048 or base64 padding). Pairs without '=' carry no value; skip them.
         return uri.rawQuery.split("&")
             .filter { it.contains("=") }
-            .associate {
-                it.split("=", limit = 2).let { parts ->
-                    val key = parts.firstOrNull().orEmpty()
-                    val value = parts.getOrNull(1).orEmpty()
-                    key to Utils.decodeURIComponent(value)
-                }
+            .associate { pair ->
+                val (key, value) = pair.split("=", limit = 2)
+                key to Utils.decodeURIComponent(value)
             }
     }
 
@@ -98,11 +93,7 @@ open class FmtBase {
         }
         // Support multiple possible query keys for allowInsecure like the C# implementation
         val allowInsecureKeys = arrayOf("insecure", "allowInsecure", "allow_insecure")
-        config.insecure = when {
-            allowInsecureKeys.any { queryParam[it] == "1" } -> true
-            allowInsecureKeys.any { queryParam[it] == "0" } -> false
-            else -> false
-        }
+        config.insecure = allowInsecureKeys.any { queryParam[it] == "1" }
         config.sni = queryParam["sni"]
         config.fingerPrint = queryParam["fp"]
         config.alpn = queryParam["alpn"]
@@ -177,12 +168,6 @@ open class FmtBase {
                 config.host?.nullIfBlank()?.let { dicQuery["host"] = it }
                 config.path?.nullIfBlank()?.let { dicQuery["path"] = it }
             }
-
-//            NetworkType.QUIC -> {
-//                dicQuery["headerType"] = config.headerType?.ifEmpty { "none" }.orEmpty()
-//                config.quicSecurity?.nullIfBlank()?.let { dicQuery["quicSecurity"] = it }
-//                config.quicKey?.nullIfBlank()?.let { dicQuery["key"] = it }
-//            }
 
             NetworkType.GRPC -> {
                 config.mode?.nullIfBlank()?.let { dicQuery["mode"] = it }
