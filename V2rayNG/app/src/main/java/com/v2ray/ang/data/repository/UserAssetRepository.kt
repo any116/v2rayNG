@@ -205,16 +205,14 @@ open class UserAssetRepository @Inject constructor(
      */
     open suspend fun downloadAll(onProgress: suspend (done: Int, total: Int) -> Unit): Int = withIO {
         val items = composeAssets(assetDao.all(), geoSource())
-        val httpPort = SettingsManager.getHttpPort()
-        val username = SettingsManager.getSocksUsername()
-        val password = SettingsManager.getSocksPassword()
+        val request = downloadRequest()
         var success = 0
         try {
             items.forEachIndexed { index, assetFile ->
                 currentCoroutineContext().ensureActive()
                 onProgress(index + 1, items.size)
-                val ports = if (httpPort == 0) listOf(0) else listOf(httpPort, 0)
-                if (ports.any { port -> download(assetFile, port, username, password) }) {
+                val ports = if (request.httpPort == 0) listOf(0) else listOf(request.httpPort, 0)
+                if (ports.any { port -> download(assetFile, request.copy(httpPort = port)) }) {
                     withContext(NonCancellable) {
                         assetDao.touch(assetFile.guid, System.currentTimeMillis())
                     }
@@ -228,30 +226,43 @@ open class UserAssetRepository @Inject constructor(
         success
     }
 
-    private fun download(
-        assetFile: AssetFile,
-        httpPort: Int,
-        proxyUsername: String?,
-        proxyPassword: String?
-    ): Boolean = try {
+    /** Snapshots proxy settings once per batch; replaceable without initializing process-wide services. */
+    protected open fun downloadRequest(): UrlContentRequest = UrlContentRequest(
+        url = null,
+        timeout = 15000,
+        httpPort = SettingsManager.getHttpPort(),
+        proxyUsername = SettingsManager.getSocksUsername(),
+        proxyPassword = SettingsManager.getSocksPassword()
+    )
+
+    /** Blocking transport boundary; replacement and success accounting stay in the repository. */
+    protected open fun downloadToFile(request: UrlContentRequest, temp: File): Boolean =
+        HttpUtil.downloadToFile(request, temp)
+
+    private fun download(assetFile: AssetFile, request: UrlContentRequest): Boolean = try {
         val temp = File(extDir, "${assetFile.remarks}_temp")
         val target = File(extDir, assetFile.remarks)
-        val request = UrlContentRequest(
-            url = assetFile.url,
-            timeout = 15000,
-            httpPort = httpPort,
-            proxyUsername = proxyUsername,
-            proxyPassword = proxyPassword
-        )
-        if (HttpUtil.downloadToFile(request, temp)) {
-            temp.renameTo(target)
-            true
-        } else {
-            false
+        if (!downloadToFile(request.copy(url = assetFile.url), temp)) {
+            discardAssetFile(temp)
+            return false
         }
+        if (replaceAssetFile(temp, target)) return true
+        LogUtil.e(AppConfig.TAG, "Failed to replace geo file: ${assetFile.remarks}")
+        return false
     } catch (e: Exception) {
         LogUtil.e(AppConfig.TAG, "Failed to download geo file: ${assetFile.remarks}", e)
         false
+    }
+
+    /** Best-effort scratch cleanup that cannot mask the download result. */
+    private fun discardAssetFile(file: File): Boolean = runCatching { file.delete() }.getOrDefault(false)
+
+    /** A failed rename must not count as an update; discard its temporary file if possible. */
+    private fun replaceAssetFile(temp: File, target: File): Boolean {
+        if (temp.renameTo(target)) return true
+
+        discardAssetFile(temp)
+        return false
     }
 
     // ---- editor support ----
