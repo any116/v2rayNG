@@ -10,11 +10,8 @@ fun ProfileItem.computeDedupeKey(): String {
     val identity = duplicateIdentity()
     val jsonObject = JsonUtil.parseString(JsonUtil.toJson(identity))
         ?: error("Failed to encode duplicate identity")
-    identity.persistedConfigType?.let { rawType ->
-        jsonObject.add("persistedConfigType", JsonPrimitive(rawType))
-    }
-    val json = jsonObject.toString()
+    identity.persistedConfigType?.let { jsonObject.add("persistedConfigType", JsonPrimitive(it)) }
     return MessageDigest.getInstance("SHA-256")
-        .digest(json.toByteArray())
+        .digest(jsonObject.toString().toByteArray())
         .joinToString("") { "%02x".format(it) }
 }

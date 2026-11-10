@@ -51,15 +51,11 @@ object WidgetStateManager {
         if (isPendingFresh()) return flow.value
 
         val known = flow.value
-        val running = withTimeoutOrNull(QUERY_TIMEOUT_MS) { queryDaemon(context) }
-        val resolved = when {
-            running == null -> known
-            running -> WidgetRunState.RUNNING
-            known == WidgetRunState.FAILED -> WidgetRunState.FAILED
-            else -> WidgetRunState.STOPPED
-        }
-        publish(resolved)
-        return resolved
+        return when (val running = withTimeoutOrNull(QUERY_TIMEOUT_MS) { queryDaemon(context) }) {
+            null -> known
+            true -> WidgetRunState.RUNNING
+            false -> if (known == WidgetRunState.FAILED) known else WidgetRunState.STOPPED
+        }.also { publish(it) }
     }
 
     /**
@@ -77,17 +73,14 @@ object WidgetStateManager {
             }
         }
 
-    private fun isPendingFresh(): Boolean {
-        if (!flow.value.isPending) return false
-        val age = System.currentTimeMillis() - stateAt()
-        return age in 0..PENDING_TIMEOUT_MS
-    }
+    private fun isPendingFresh(): Boolean = flow.value.isPending && isAgeFresh()
+
+    /** A pending snapshot older than [PENDING_TIMEOUT_MS] lost its answer; treat it as unknown. */
+    private fun isAgeFresh(): Boolean = (System.currentTimeMillis() - stateAt()) in 0..PENDING_TIMEOUT_MS
 
     private fun restore(): WidgetRunState {
         val stored = WidgetRunState.from(Prefs.string(AppConfig.CACHE_WIDGET_STATE))
-        if (!stored.isPending) return stored
-        val age = System.currentTimeMillis() - stateAt()
-        return if (age in 0..PENDING_TIMEOUT_MS) stored else WidgetRunState.UNKNOWN
+        return if (stored.isPending && !isAgeFresh()) WidgetRunState.UNKNOWN else stored
     }
 
     private fun stateAt(): Long = Prefs.long(AppConfig.CACHE_WIDGET_STATE_AT, 0L)

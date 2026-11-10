@@ -17,7 +17,13 @@ import java.util.EnumMap
  * QR code decoder utility.
  */
 object QRCodeDecoder {
-    val HINTS: MutableMap<DecodeHintType, Any?> = EnumMap(DecodeHintType::class.java)
+    // Keep decoding hints focused on QR codes and enable TRY_HARDER + UTF-8 charset for a
+    // better success rate.
+    private val HINTS: MutableMap<DecodeHintType, Any?> = EnumMap<DecodeHintType, Any?>(DecodeHintType::class.java).apply {
+        put(DecodeHintType.TRY_HARDER, true)
+        put(DecodeHintType.POSSIBLE_FORMATS, listOf(BarcodeFormat.QR_CODE))
+        put(DecodeHintType.CHARACTER_SET, Charsets.UTF_8.name())
+    }
 
     /**
      * Creates a QR code bitmap from the given text.
@@ -45,9 +51,7 @@ object QRCodeDecoder {
      * @param picturePath The local path of the image file to decode.
      * @return The content of the QR code, or null if decoding fails.
      */
-    fun syncDecodeQRCode(picturePath: String): String? {
-        return syncDecodeQRCode(getDecodeAbleBitmap(picturePath))
-    }
+    fun syncDecodeQRCode(picturePath: String): String? = syncDecodeQRCode(getDecodeAbleBitmap(picturePath))
 
     /**
      * Decodes a QR code from a bitmap. This method is time-consuming and should be called in a background thread.
@@ -55,22 +59,20 @@ object QRCodeDecoder {
      * @param bitmap The bitmap to decode.
      * @return The content of the QR code, or null if decoding fails.
      */
-    fun syncDecodeQRCode(bitmap: Bitmap?): String? {
-        return bitmap?.let {
-            runCatching {
-                val pixels = IntArray(it.width * it.height).also { array ->
-                    it.getPixels(array, 0, it.width, 0, 0, it.width, it.height)
-                }
-                val source = RGBLuminanceSource(it.width, it.height, pixels)
-                val qrReader = QRCodeReader()
+    fun syncDecodeQRCode(bitmap: Bitmap?): String? = bitmap?.let {
+        runCatching {
+            val pixels = IntArray(it.width * it.height).also { array ->
+                it.getPixels(array, 0, it.width, 0, 0, it.width, it.height)
+            }
+            val source = RGBLuminanceSource(it.width, it.height, pixels)
+            val qrReader = QRCodeReader()
 
-                try {
-                    qrReader.decode(BinaryBitmap(GlobalHistogramBinarizer(source)), HINTS).text
-                } catch (e: NotFoundException) {
-                    qrReader.decode(BinaryBitmap(GlobalHistogramBinarizer(source.invert())), HINTS).text
-                }
-            }.getOrNull()
-        }
+            try {
+                qrReader.decode(BinaryBitmap(GlobalHistogramBinarizer(source)), HINTS).text
+            } catch (_: NotFoundException) {
+                qrReader.decode(BinaryBitmap(GlobalHistogramBinarizer(source.invert())), HINTS).text
+            }
+        }.getOrNull()
     }
 
     /**
@@ -79,27 +81,11 @@ object QRCodeDecoder {
      * @param picturePath The local path of the image file.
      * @return The decoded bitmap, or null if an error occurs.
      */
-    private fun getDecodeAbleBitmap(picturePath: String): Bitmap? {
-        return try {
-            val options = BitmapFactory.Options()
-            options.inJustDecodeBounds = true
-            BitmapFactory.decodeFile(picturePath, options)
-            var sampleSize = options.outHeight / 400
-            if (sampleSize <= 0) {
-                sampleSize = 1
-            }
-            options.inSampleSize = sampleSize
-            options.inJustDecodeBounds = false
-            BitmapFactory.decodeFile(picturePath, options)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    init {
-        // Keep decoding hints focused on QR codes and enable TRY_HARDER + UTF-8 charset for better success rate.
-        HINTS[DecodeHintType.TRY_HARDER] = true
-        HINTS[DecodeHintType.POSSIBLE_FORMATS] = listOf(BarcodeFormat.QR_CODE)
-        HINTS[DecodeHintType.CHARACTER_SET] = Charsets.UTF_8.name()
-    }
+    private fun getDecodeAbleBitmap(picturePath: String): Bitmap? = runCatching {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(picturePath, options)
+        options.inSampleSize = (options.outHeight / 400).coerceAtLeast(1)
+        options.inJustDecodeBounds = false
+        BitmapFactory.decodeFile(picturePath, options)
+    }.getOrNull()
 }

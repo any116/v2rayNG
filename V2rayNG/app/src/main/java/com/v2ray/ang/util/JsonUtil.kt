@@ -14,7 +14,7 @@ import java.lang.reflect.Type
 import java.math.BigDecimal
 
 object JsonUtil {
-    private var gson = Gson()
+    private val gson = Gson()
 
     /**
      * Converts an object to its JSON representation.
@@ -22,9 +22,7 @@ object JsonUtil {
      * @param src The object to convert.
      * @return The JSON representation of the object.
      */
-    fun toJson(src: Any?): String {
-        return gson.toJson(src)
-    }
+    fun toJson(src: Any?): String = gson.toJson(src)
 
     /**
      * Parses a JSON string into an object of the specified class.
@@ -33,9 +31,7 @@ object JsonUtil {
      * @param cls The class of the object to parse into.
      * @return The parsed object.
      */
-    fun <T> fromJson(src: String, cls: Class<T>): T? {
-        return gson.fromJson(src, cls)
-    }
+    fun <T> fromJson(src: String, cls: Class<T>): T? = gson.fromJson(src, cls)
 
     /**
      * Safely parses a JSON string into an object of the specified class.
@@ -61,20 +57,17 @@ object JsonUtil {
      * @return The pretty-printed JSON representation of the object, or null if the object is null.
      */
     fun toJsonPretty(src: Any?): String? {
-        if (src == null)
-            return null
+        if (src == null) return null
         val gsonPre = GsonBuilder()
             .setPrettyPrinting()
             .disableHtmlEscaping()
             .registerTypeAdapter( // Convert whole-valued Doubles to integers; the core rejects `1.0` for integer fields.
                 object : TypeToken<Double>() {}.type,
                 JsonSerializer { src: Double?, _: Type?, _: JsonSerializationContext? ->
-                    if (src == null) {
-                        JsonNull.INSTANCE
-                    } else if (src % 1.0 == 0.0) {
-                        JsonPrimitive(BigDecimal.valueOf(src).toBigInteger())
-                    } else {
-                        JsonPrimitive(src)
+                    when {
+                        src == null -> JsonNull.INSTANCE
+                        src % 1.0 == 0.0 -> JsonPrimitive(BigDecimal.valueOf(src).toBigInteger())
+                        else -> JsonPrimitive(src)
                     }
                 }
             )
@@ -89,8 +82,7 @@ object JsonUtil {
      * @return The parsed JsonObject, or null if parsing fails.
      */
     fun parseString(src: String?): JsonObject? {
-        if (src == null)
-            return null
+        if (src == null) return null
         try {
             val jsonElement = JsonParser.parseString(src)
             return if (jsonElement.isJsonObject) jsonElement.asJsonObject else null
@@ -105,13 +97,9 @@ object JsonUtil {
         val jsonObject = parseString(headersJson) ?: return headerMap
         try {
             for ((key, jsonElement) in jsonObject.entrySet()) {
-                if (key.isNullOrBlank() || jsonElement == null || jsonElement.isJsonNull) {
-                    continue
-                }
+                if (key.isNullOrBlank() || jsonElement.isJsonNull) continue
                 val value = if (jsonElement.isJsonPrimitive) jsonElement.asString else jsonElement.toString()
-                if (value.isNotBlank()) {
-                    headerMap[key] = value
-                }
+                if (value.isNotBlank()) headerMap[key] = value
             }
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to parse headers JSON", e)

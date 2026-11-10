@@ -24,13 +24,11 @@ object RootLanSharing {
      * short-circuits before touching root state.
      */
     fun startClientSharing(context: Context): Boolean {
-        if (Prefs.bool(AppConfig.PREF_ROOT_LAN_SHARING, false) && RootManager.cachedRoot()) {
-            if (lanShareJob != null) return false
+        if (!Prefs.bool(AppConfig.PREF_ROOT_LAN_SHARING, false) || !RootManager.cachedRoot()) return true
+        if (lanShareJob != null) return false
 
-            lanSharingStarted = true
-            lanShareJob = CoroutineScope(Dispatchers.IO).launch { RootProxyManager.startClientSharing(context) }
-        }
-
+        lanSharingStarted = true
+        lanShareJob = CoroutineScope(Dispatchers.IO).launch { RootProxyManager.startClientSharing(context) }
         return true
     }
 

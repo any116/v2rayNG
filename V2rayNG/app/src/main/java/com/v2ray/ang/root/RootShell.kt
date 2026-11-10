@@ -30,26 +30,24 @@ object RootShell {
         return exec("sh '$safePath'")
     }
 
-    private fun exec(command: String, timeoutSeconds: Long = 30): Result {
-        return try {
-            val process = ProcessBuilder("su", "-c", command)
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!finished) {
-                process.destroy()
-                LogUtil.e(AppConfig.TAG, "RootShell: timed out: $command")
-                return Result(-1, output)
+    private fun exec(command: String, timeoutSeconds: Long = 30): Result = try {
+        val process = ProcessBuilder("su", "-c", command)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+            process.destroy()
+            LogUtil.e(AppConfig.TAG, "RootShell: timed out: $command")
+            Result(-1, output)
+        } else {
+            Result(process.exitValue(), output).also { result ->
+                if (!result.success) {
+                    LogUtil.w(AppConfig.TAG, "RootShell: '$command' exited ${result.code}: ${output.trim()}")
+                }
             }
-            val result = Result(process.exitValue(), output)
-            if (!result.success) {
-                LogUtil.w(AppConfig.TAG, "RootShell: '$command' exited ${result.code}: ${output.trim()}")
-            }
-            result
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "RootShell: failed to run '$command'", e)
-            Result(-1, e.message ?: e.javaClass.simpleName)
         }
+    } catch (e: Exception) {
+        LogUtil.e(AppConfig.TAG, "RootShell: failed to run '$command'", e)
+        Result(-1, e.message ?: e.javaClass.simpleName)
     }
 }

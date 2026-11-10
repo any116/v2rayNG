@@ -23,11 +23,7 @@ object ShareUtil {
      * @return true when a chooser was launched, false when the file could not be exposed.
      */
     fun shareFile(context: Context, file: File, mimeType: String, title: String): Boolean = try {
-        val uri = FileProvider.getUriForFile(
-            context,
-            BuildConfig.APPLICATION_ID + CACHE_AUTHORITY_SUFFIX,
-            file,
-        )
+        val uri = FileProvider.getUriForFile(context, BuildConfig.APPLICATION_ID + CACHE_AUTHORITY_SUFFIX, file)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = mimeType
             putExtra(Intent.EXTRA_STREAM, uri)

@@ -14,7 +14,6 @@ import java.net.IDN
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
-import java.net.MalformedURLException
 import java.net.Proxy
 import java.net.URI
 import java.net.URL
@@ -36,14 +35,9 @@ object HttpUtil {
      * @return The URL string with the domain part converted to ASCII-compatible (Punycode) format.
      */
     fun toIdnUrl(str: String): String {
-        val url = URL(str)
-        val host = url.host
-        val asciiHost = IDN.toASCII(url.host, IDN.ALLOW_UNASSIGNED)
-        if (host != asciiHost) {
-            return str.replace(host, asciiHost)
-        } else {
-            return str
-        }
+        val host = URL(str).host
+        val asciiHost = IDN.toASCII(host, IDN.ALLOW_UNASSIGNED)
+        return if (host == asciiHost) str else str.replace(host, asciiHost)
     }
 
     /**
@@ -54,17 +48,8 @@ object HttpUtil {
      * @return The domain in ASCII-compatible (Punycode) format, or the original string if input is an IP or already ASCII.
      */
     fun toIdnDomain(domain: String): String {
-        // Return as is if it's a pure IP address (IPv4 or IPv6)
-        if (Utils.isPureIpAddress(domain)) {
-            return domain
-        }
-
-        // Return as is if already ASCII (English domain or already punycode)
-        if (domain.all { it.code < 128 }) {
-            return domain
-        }
-
-        // Otherwise, convert to ASCII using IDN
+        // Return as is if it's a pure IP address (IPv4 or IPv6) or already ASCII (plain or punycode).
+        if (Utils.isPureIpAddress(domain) || domain.all { it.code < 128 }) return domain
         return IDN.toASCII(domain, IDN.ALLOW_UNASSIGNED)
     }
 
@@ -76,29 +61,19 @@ object HttpUtil {
      * @return The resolved IP address or the original input (if it's already an IP or resolution fails)
      */
     fun resolveHostToIP(host: String, ipv6Preferred: Boolean = false): List<String>? {
+        // An address that is already an IP needs no resolution.
+        if (Utils.isPureIpAddress(host)) return null
         try {
-            // If it's already an IP address, return it as a list
-            if (Utils.isPureIpAddress(host)) {
-                return null
-            }
-
-            // Get all IP addresses
             val addresses = InetAddress.getAllByName(host)
-            if (addresses.isEmpty()) {
-                return null
-            }
+            if (addresses.isEmpty()) return null
 
-            // Sort addresses based on preference
             val sortedAddresses = if (ipv6Preferred) {
-                addresses.sortedWith(compareByDescending { it is Inet6Address })
+                addresses.sortedByDescending { it is Inet6Address }
             } else {
-                addresses.sortedWith(compareBy { it is Inet6Address })
+                addresses.sortedBy { it is Inet6Address }
             }
-
             val ipList = sortedAddresses.mapNotNull { it.hostAddress }
-
             LogUtil.i(AppConfig.TAG, "Resolved IPs for $host: ${ipList.joinToString()}")
-
             return ipList
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to resolve host to IP", e)
@@ -122,21 +97,19 @@ object HttpUtil {
             .url(url)
             .get()
             .header("Connection", "close")
-        if (request.httpPort != 0 && !request.proxyUsername.isNullOrBlank() && !request.proxyPassword.isNullOrBlank()) {
-            requestBuilder.header("Proxy-Authorization", Credentials.basic(request.proxyUsername, request.proxyPassword))
-        }
-        try {
+        applyProxyAuthorizationHeader(request, requestBuilder)
+        return try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     LogUtil.w(AppConfig.TAG, "Failed to get URL content, code=${response.code}")
                     return null
                 }
-                return response.body.string()
+                response.body.string()
             }
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to get URL content", e)
+            null
         }
-        return null
     }
 
     /**
@@ -189,11 +162,7 @@ object HttpUtil {
         while (redirects++ < maxRedirects) {
             val requestUrl = currentUrl ?: throw IOException("Subscription URL is missing")
             val client = buildOkHttpClient(request.timeout, request.httpPort, request.proxyUsername, request.proxyPassword, followRedirects = false)
-            val finalUserAgent = if (request.userAgent.isNullOrBlank()) {
-                "v2rayNG/${BuildConfig.VERSION_NAME}"
-            } else {
-                request.userAgent
-            }
+            val finalUserAgent = request.userAgent?.takeIf { it.isNotBlank() } ?: "v2rayNG/${BuildConfig.VERSION_NAME}"
             val requestBuilder = Request.Builder()
                 .url(requestUrl)
                 .get()
@@ -202,19 +171,13 @@ object HttpUtil {
 
             applyEmbeddedBasicAuthHeader(requestUrl, requestBuilder)
 
-
             val headersMap = JsonUtil.parseHeadersToMap(request.requestHeaders)
             for ((key, value) in headersMap) {
                 LogUtil.d(AppConfig.TAG, "Adding custom header: $key = $value")
-                try {
-                    requestBuilder.header(key, value)
-                } catch (_: IllegalArgumentException) {
-                }
+                runCatching { requestBuilder.header(key, value) }
             }
 
-            if (request.httpPort != 0 && !request.proxyUsername.isNullOrBlank() && !request.proxyPassword.isNullOrBlank()) {
-                requestBuilder.header("Proxy-Authorization", Credentials.basic(request.proxyUsername, request.proxyPassword))
-            }
+            applyProxyAuthorizationHeader(request, requestBuilder)
 
             client.newCall(requestBuilder.build()).execute().use { response ->
                 when {
@@ -243,19 +206,27 @@ object HttpUtil {
         throw IOException("Too many redirects")
     }
 
-    private fun applyEmbeddedBasicAuthHeader(rawUrl: String, requestBuilder: Request.Builder) {
-        val parsed = runCatching { URL(rawUrl) }.getOrNull() ?: return
-        parsed.userInfo?.let { userInfo ->
-            val colon = userInfo.indexOf(':')
-            val user = runCatching {
-                Utils.decodeURIComponent(if (colon >= 0) userInfo.substring(0, colon) else userInfo)
-            }.getOrDefault(if (colon >= 0) userInfo.substring(0, colon) else userInfo)
-            val pass = runCatching {
-                Utils.decodeURIComponent(if (colon >= 0) userInfo.substring(colon + 1) else "")
-            }.getOrDefault(if (colon >= 0) userInfo.substring(colon + 1) else "")
-            requestBuilder.header("Authorization", Credentials.basic(user, pass))
-        }
+    /** Upstream proxies only apply when a local HTTP port is configured. */
+    private fun applyProxyAuthorizationHeader(request: UrlContentRequest, requestBuilder: Request.Builder) {
+        if (request.httpPort == 0) return
+        val username = request.proxyUsername
+        val password = request.proxyPassword
+        if (username.isNullOrBlank() || password.isNullOrBlank()) return
+        requestBuilder.header("Proxy-Authorization", Credentials.basic(username, password))
     }
+
+    private fun applyEmbeddedBasicAuthHeader(rawUrl: String, requestBuilder: Request.Builder) {
+        val userInfo = runCatching { URL(rawUrl).userInfo }.getOrNull() ?: return
+        val user = userInfo.substringBefore(':')
+        val pass = if (':' in userInfo) userInfo.substringAfter(':') else ""
+        requestBuilder.header(
+            "Authorization",
+            Credentials.basic(decodeOrRaw(user), decodeOrRaw(pass)),
+        )
+    }
+
+    private fun decodeOrRaw(value: String): String =
+        runCatching { Utils.decodeURIComponent(value) }.getOrDefault(value)
 
     private fun buildOkHttpClient(
         timeout: Int,
@@ -276,13 +247,11 @@ object HttpUtil {
             builder.proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(LOOPBACK, httpPort)))
             if (!proxyUsername.isNullOrBlank() && !proxyPassword.isNullOrBlank()) {
                 builder.proxyAuthenticator { _, response ->
-                    if (response.request.header("Proxy-Authorization") != null) {
-                        null
-                    } else {
-                        response.request.newBuilder()
-                            .header("Proxy-Authorization", Credentials.basic(proxyUsername, proxyPassword))
-                            .build()
-                    }
+                    // Retrying a request that already carried credentials would loop forever.
+                    if (response.request.header("Proxy-Authorization") != null) return@proxyAuthenticator null
+                    response.request.newBuilder()
+                        .header("Proxy-Authorization", Credentials.basic(proxyUsername, proxyPassword))
+                        .build()
                 }
             }
         }
@@ -290,24 +259,14 @@ object HttpUtil {
         return builder.build()
     }
 
-    private fun resolveLocation(baseUrl: String, raw: String): String? {
-        return try {
+    private fun resolveLocation(baseUrl: String, raw: String): String? =
+        runCatching {
             val locUri = URI(raw)
-            val baseUri = URI(baseUrl)
-            val resolved = if (locUri.isAbsolute) locUri else baseUri.resolve(locUri)
+            val resolved = if (locUri.isAbsolute) locUri else URI(baseUrl).resolve(locUri)
             resolved.toURL().toString()
-        } catch (_: Exception) {
-            try {
-                URL(raw).toString()
-            } catch (_: MalformedURLException) {
-                try {
-                    URL(URL(baseUrl), raw).toString()
-                } catch (_: MalformedURLException) {
-                    null
-                }
-            }
-        }
-    }
+        }.getOrNull()
+            ?: runCatching { URL(raw).toString() }.getOrNull()
+            ?: runCatching { URL(URL(baseUrl), raw).toString() }.getOrNull()
 
     fun downloadToFile(
         request: UrlContentRequest,
@@ -319,9 +278,7 @@ object HttpUtil {
             .url(url)
             .get()
             .header("Connection", "close")
-        if (request.httpPort != 0 && !request.proxyUsername.isNullOrBlank() && !request.proxyPassword.isNullOrBlank()) {
-            requestBuilder.header("Proxy-Authorization", Credentials.basic(request.proxyUsername, request.proxyPassword))
-        }
+        applyProxyAuthorizationHeader(request, requestBuilder)
 
         return try {
             client.newCall(requestBuilder.build()).execute().use { response ->
@@ -329,11 +286,8 @@ object HttpUtil {
                     LogUtil.w(AppConfig.TAG, "Failed to download file, code=${response.code}, url=$url")
                     return false
                 }
-                val body = response.body
-                body.byteStream().use { input ->
-                    targetFile.outputStream().use { output ->
-                        input.copyTo(output)
-                    }
+                response.body.byteStream().use { input ->
+                    targetFile.outputStream().use { output -> input.copyTo(output) }
                 }
                 true
             }

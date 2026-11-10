@@ -29,36 +29,33 @@ class TaskerReceiver : BroadcastReceiver() {
             val switch = bundle?.getBoolean(AppConfig.TASKER_EXTRA_BUNDLE_SWITCH, false)
             val guid = bundle?.getString(AppConfig.TASKER_EXTRA_BUNDLE_GUID).orEmpty()
 
-            if (switch == null || TextUtils.isEmpty(guid)) {
-                return
-            } else if (switch) {
-                // The :daemon process may be cold (Tasker wakes it from nowhere), so this must
-                // not pick the run mode from an empty snapshot. goAsync keeps the process alive
-                // while startServiceWhenReady waits for the storage bootstrap.
-                val pendingResult = goAsync()
-                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                    try {
-                        val started = if (guid == AppConfig.TASKER_DEFAULT_GUID) {
-                            LauncherManager.startServiceWhenReady(context)
-                        } else {
-                            LauncherManager.startServiceWhenReady(context, guid)
-                        }
-                        if (!started) {
-                            LogUtil.w(
-                                AppConfig.TAG,
-                                "Tasker: service start skipped; storage not ready or start refused"
-                            )
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        LogUtil.e(AppConfig.TAG, "Error processing Tasker broadcast", e)
-                    } finally {
-                        pendingResult.finish()
-                    }
-                }
-            } else {
+            if (switch == null || TextUtils.isEmpty(guid)) return
+            if (!switch) {
                 LauncherManager.stopService(context)
+                return
+            }
+
+            // The :daemon process may be cold (Tasker wakes it from nowhere), so this must
+            // not pick the run mode from an empty snapshot. goAsync keeps the process alive
+            // while startServiceWhenReady waits for the storage bootstrap.
+            val pendingResult = goAsync()
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                try {
+                    val started = if (guid == AppConfig.TASKER_DEFAULT_GUID) {
+                        LauncherManager.startServiceWhenReady(context)
+                    } else {
+                        LauncherManager.startServiceWhenReady(context, guid)
+                    }
+                    if (!started) {
+                        LogUtil.w(AppConfig.TAG, "Tasker: service start skipped; storage not ready or start refused")
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    LogUtil.e(AppConfig.TAG, "Error processing Tasker broadcast", e)
+                } finally {
+                    pendingResult.finish()
+                }
             }
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Error processing Tasker broadcast", e)

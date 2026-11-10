@@ -17,23 +17,11 @@ private fun runOnMain(block: () -> Unit) {
     }
 }
 
-private fun Context.dispatchMessage(
-    message: CharSequence,
-    type: ToastType,
-    long: Boolean = false
-) {
-    val handledBySnackbar = AppSnackbarManager.show(
-        message = message,
-        type = type,
-        long = long
-    )
-    if (!handledBySnackbar) {
-        val appContext = applicationContext
-        val duration = if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
-        runOnMain {
-            Toast.makeText(appContext, message, duration).show()
-        }
-    }
+private fun Context.dispatchMessage(message: CharSequence, type: ToastType, long: Boolean = false) {
+    if (AppSnackbarManager.show(message = message, type = type, long = long)) return
+    val appContext = applicationContext
+    val duration = if (long) Toast.LENGTH_LONG else Toast.LENGTH_SHORT
+    runOnMain { Toast.makeText(appContext, message, duration).show() }
 }
 
 /**

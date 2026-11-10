@@ -50,48 +50,35 @@ object ZipUtil {
      */
     @Throws(IOException::class)
     fun zipFromFolder(folderPath: String, outputZipFilePath: String): Boolean {
-        val buffer = ByteArray(BUFFER_SIZE)
+        if (folderPath.isEmpty() || outputZipFilePath.isEmpty()) return false
 
-        try {
-            if (folderPath.isEmpty() || outputZipFilePath.isEmpty()) {
-                return false
-            }
+        return try {
+            val filesToCompress = File(folderPath).takeIf { it.isDirectory }
+                ?.listFiles()
+                ?.filter { it.isFile }
+                ?.map { it.absolutePath }
+                .orEmpty()
+            if (filesToCompress.isEmpty()) return false
 
-            val filesToCompress = ArrayList<String>()
-            val directory = File(folderPath)
-            if (directory.isDirectory) {
-                directory.listFiles()?.forEach {
-                    if (it.isFile) {
-                        filesToCompress.add(it.absolutePath)
+            val buffer = ByteArray(BUFFER_SIZE)
+            ZipOutputStream(FileOutputStream(outputZipFilePath)).use { zos ->
+                filesToCompress.forEach { file ->
+                    zos.putNextEntry(ZipEntry(File(file).name))
+                    FileInputStream(file).use { inputStream ->
+                        while (true) {
+                            val len = inputStream.read(buffer)
+                            if (len <= 0) break
+                            zos.write(buffer, 0, len)
+                        }
                     }
                 }
+                zos.closeEntry()
             }
-            if (filesToCompress.isEmpty()) {
-                return false
-            }
-
-            val zos = ZipOutputStream(FileOutputStream(outputZipFilePath))
-
-            filesToCompress.forEach { file ->
-                val ze = ZipEntry(File(file).name)
-                zos.putNextEntry(ze)
-                val inputStream = FileInputStream(file)
-                while (true) {
-                    val len = inputStream.read(buffer)
-                    if (len <= 0) break
-                    zos.write(buffer, 0, len)
-                }
-
-                inputStream.close()
-            }
-
-            zos.closeEntry()
-            zos.close()
+            true
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to zip folder", e)
-            return false
+            false
         }
-        return true
     }
 
     /**
@@ -177,28 +164,29 @@ object ZipUtil {
             if (totalBytes > limits.maxTotalBytes - entryBytes) {
                 throw ZipException("ZIP archive exceeds the total expanded-size limit")
             }
-            if (
-                entryBytes > 0L && (
-                        compressedBytes == 0L ||
-                                entryBytes.toDouble() / compressedBytes > limits.maxCompressionRatio
-                        )
-            ) {
+            val exceedsRatio = entryBytes > 0L && (
+                compressedBytes == 0L || entryBytes.toDouble() / compressedBytes > limits.maxCompressionRatio
+                )
+            if (exceedsRatio) {
                 throw ZipException("ZIP archive entry exceeds the compression-ratio limit")
             }
 
             totalBytes += entryBytes
         }
 
-        entriesByTarget.forEach { (target, _) ->
-            var parent = target.parentFile
-            while (parent != null && parent != root) {
-                if (entriesByTarget[parent]?.isDirectory == false) {
-                    throw ZipException("ZIP archive places an entry below a file")
-                }
-                parent = parent.parentFile
-            }
-        }
+        entriesByTarget.forEach { (target, _) -> validateEntryParents(target, root, entriesByTarget) }
         return entriesByTarget
+    }
+
+    /** A file entry may not also be an ancestor directory of another entry. */
+    private fun validateEntryParents(target: File, root: File, entriesByTarget: Map<File, ZipEntry>) {
+        var parent = target.parentFile
+        while (parent != null && parent != root) {
+            if (entriesByTarget[parent]?.isDirectory == false) {
+                throw ZipException("ZIP archive places an entry below a file")
+            }
+            parent = parent.parentFile
+        }
     }
 
     private fun resolveEntryTarget(root: File, entry: ZipEntry): File {
@@ -211,16 +199,14 @@ object ZipUtil {
     }
 
     private fun prepareDestination(root: File): Boolean {
-        if (root.exists()) {
-            if (!root.isDirectory || root.listFiles()?.isNotEmpty() != false) {
-                throw IOException("ZIP destination must be an empty directory")
-            }
-            return false
+        if (!root.exists()) {
+            if (!root.mkdirs()) throw IOException("Unable to create ZIP destination directory")
+            return true
         }
-        if (!root.mkdirs()) {
-            throw IOException("Unable to create ZIP destination directory")
+        if (!root.isDirectory || root.listFiles()?.isNotEmpty() != false) {
+            throw IOException("ZIP destination must be an empty directory")
         }
-        return true
+        return false
     }
 
     private fun extractEntries(
@@ -267,9 +253,8 @@ object ZipUtil {
             val read = input.read(buffer)
             if (read < 0) break
             val readBytes = read.toLong()
-            val remainingEntryBytes = limits.maxEntryBytes - entryBytes
-            val remainingTotalBytes = limits.maxTotalBytes - currentTotalBytes - entryBytes
-            if (readBytes > remainingEntryBytes || readBytes > remainingTotalBytes
+            if (readBytes > limits.maxEntryBytes - entryBytes ||
+                readBytes > limits.maxTotalBytes - currentTotalBytes - entryBytes
             ) {
                 throw ZipException("ZIP entry exceeds the expanded-size limit while extracting")
             }

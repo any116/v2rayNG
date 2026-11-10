@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -32,25 +33,22 @@ class ProcessService {
         LogUtil.i(AppConfig.TAG, cmd.toString())
 
         try {
-            val proBuilder = ProcessBuilder(cmd)
-            proBuilder.redirectErrorStream(true)
-            process = proBuilder
+            process = ProcessBuilder(cmd)
+                .redirectErrorStream(true)
                 .directory(context.filesDir)
                 .start()
 
             // Dispatcher resolved from the calling process's graph; never cached across processes.
-            val io = PlatformDependencies.ioDispatcher(context)
-            val runScope = CoroutineScope(SupervisorJob() + io)
+            val runScope = CoroutineScope(SupervisorJob() + PlatformDependencies.ioDispatcher(context))
             scope = runScope
 
             watchJob = runScope.launch {
-                Thread.sleep(50L)
+                delay(EXIT_CHECK_DELAY_MS)
                 LogUtil.i(AppConfig.TAG, "runProcess check")
                 process?.waitFor()
                 LogUtil.i(AppConfig.TAG, "runProcess exited")
             }
             LogUtil.i(AppConfig.TAG, process.toString())
-
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, e.toString(), e)
         }
@@ -74,5 +72,10 @@ class ProcessService {
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to destroy process", e)
         }
+    }
+
+    private companion object {
+        /** Give the native binary a moment to fail on its own before blocking on waitFor(). */
+        const val EXIT_CHECK_DELAY_MS = 50L
     }
 }

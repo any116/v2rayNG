@@ -31,6 +31,9 @@ object Utils {
         Regex("^([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\\.([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\\.([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\\.([01]?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])$")
     private val IPV6_REGEX = Regex("^((?:[0-9A-Fa-f]{1,4}))?((?::[0-9A-Fa-f]{1,4}))*::((?:[0-9A-Fa-f]{1,4}))?((?::[0-9A-Fa-f]{1,4}))*|((?:[0-9A-Fa-f]{1,4}))((?::[0-9A-Fa-f]{1,4})){7}$")
 
+    /** Schemes that Xray's built-in DNS clients accept as a server address prefix. */
+    private val CORE_DNS_PREFIXES = listOf("https", "tcp", "quic", "tls", "dot")
+
     /**
      * Parse a string to an integer with a default value.
      *
@@ -38,9 +41,7 @@ object Utils {
      * @param default The default value if parsing fails.
      * @return The parsed integer, or the default value if parsing fails.
      */
-    fun parseInt(str: String?, default: Int = 0): Int {
-        return str?.toIntOrNull() ?: default
-    }
+    fun parseInt(str: String?, default: Int = 0): Int = str?.toIntOrNull() ?: default
 
     /**
      * Get text from the clipboard.
@@ -121,9 +122,10 @@ object Utils {
 
             //CIDR
             if (addr.contains("/")) {
-                val arr = addr.split("/")
-                if (arr.size == 2 && arr[1].toIntOrNull() != null && arr[1].toInt() > -1) {
-                    addr = arr[0]
+                val parts = addr.split("/")
+                val prefix = parts.getOrNull(1)?.toIntOrNull()
+                if (parts.size == 2 && prefix != null && prefix > -1) {
+                    addr = parts[0]
                 }
             }
 
@@ -206,14 +208,8 @@ object Utils {
      * @param s The string to check.
      * @return True if the string is a CoreDNS address, false otherwise.
      */
-    fun isCoreDNSAddress(s: String): Boolean {
-        return s.startsWith("https") ||
-                s.startsWith("tcp") ||
-                s.startsWith("quic") ||
-                s.startsWith("tls") ||
-                s.startsWith("dot") ||
-                s == "localhost"
-    }
+    fun isCoreDNSAddress(s: String): Boolean =
+        s == "localhost" || CORE_DNS_PREFIXES.any { s.startsWith(it) }
 
     /**
      * Check if a string is a valid URL.
@@ -254,14 +250,7 @@ object Utils {
      *
      * @return A UUID string without dashes.
      */
-    fun getUuid(): String {
-        return try {
-            UUID.randomUUID().toString().replace("-", "")
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to generate UUID", e)
-            ""
-        }
-    }
+    fun getUuid(): String = UUID.randomUUID().toString().replace("-", "")
 
     /**
      * Decode a "encodeURIComponent" string.
@@ -309,11 +298,7 @@ object Utils {
         if (context == null) return ""
 
         return try {
-            context.assets.open(fileName).use { inputStream ->
-                inputStream.bufferedReader().use { reader ->
-                    reader.readText()
-                }
-            }
+            context.assets.open(fileName).bufferedReader().use { it.readText() }
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to read asset file: $fileName", e)
             ""
@@ -412,10 +397,8 @@ object Utils {
 
                 //Check private ip address
                 val uri = URI(fixIllegalUrl(value))
-                if (isIpAddress(uri.host)) {
-                    AppConfig.PRIVATE_IP_LIST.forEach {
-                        if (isIpInCidr(uri.host, it)) return true
-                    }
+                if (isIpAddress(uri.host) && AppConfig.PRIVATE_IP_LIST.any { isIpInCidr(uri.host, it) }) {
+                    return true
                 }
             }
         } catch (e: Exception) {

@@ -26,20 +26,18 @@ object CoreNativeManager {
      *
      */
     fun initCoreEnv(context: Context?) {
-        if (initialized.compareAndSet(false, true)) {
-            try {
-                Seq.setContext(context?.applicationContext)
-                val assetPath = Utils.userAssetPath(context)
-                val deviceId = Utils.getDeviceIdForXUDPBaseKey()
-                Libv2ray.initCoreEnv(assetPath, deviceId)
-                LogUtil.i(AppConfig.TAG, "V2Ray core environment initialized successfully")
-            } catch (e: Exception) {
-                LogUtil.e(AppConfig.TAG, "Failed to initialize V2Ray core environment", e)
-                initialized.set(false)
-                throw e
-            }
-        } else {
+        if (!initialized.compareAndSet(false, true)) {
             LogUtil.d(AppConfig.TAG, "V2Ray core environment already initialized, skipping")
+            return
+        }
+        try {
+            Seq.setContext(context?.applicationContext)
+            Libv2ray.initCoreEnv(Utils.userAssetPath(context), Utils.getDeviceIdForXUDPBaseKey())
+            LogUtil.i(AppConfig.TAG, "V2Ray core environment initialized successfully")
+        } catch (e: Exception) {
+            LogUtil.e(AppConfig.TAG, "Failed to initialize V2Ray core environment", e)
+            initialized.set(false)
+            throw e
         }
     }
 
@@ -52,19 +50,16 @@ object CoreNativeManager {
         }
     }
 
-
     /**
      * Get V2Ray core version.
      *
      * @return Version string of the V2Ray core
      */
-    fun getLibVersion(): String {
-        return try {
-            Libv2ray.checkVersionX()
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to check V2Ray version", e)
-            "Unknown"
-        }
+    fun getLibVersion(): String = try {
+        Libv2ray.checkVersionX()
+    } catch (e: Exception) {
+        LogUtil.e(AppConfig.TAG, "Failed to check V2Ray version", e)
+        "Unknown"
     }
 
     /**
@@ -74,13 +69,11 @@ object CoreNativeManager {
      * @param testUrl The URL to test against
      * @return Delay in milliseconds, or -1 if test failed
      */
-    fun measureOutboundDelay(config: String, testUrl: String): Long {
-        return try {
-            Libv2ray.measureOutboundDelay(config, testUrl)
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to measure outbound delay", e)
-            -1L
-        }
+    fun measureOutboundDelay(config: String, testUrl: String): Long = try {
+        Libv2ray.measureOutboundDelay(config, testUrl)
+    } catch (e: Exception) {
+        LogUtil.e(AppConfig.TAG, "Failed to measure outbound delay", e)
+        -1L
     }
 
     /**
@@ -89,12 +82,5 @@ object CoreNativeManager {
      * @param handler The callback handler for core events
      * @return A new CoreController instance
      */
-    fun newCoreController(handler: CoreCallbackHandler): CoreController {
-        return try {
-            Libv2ray.newCoreController(handler)
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to create core controller", e)
-            throw e
-        }
-    }
+    fun newCoreController(handler: CoreCallbackHandler): CoreController = Libv2ray.newCoreController(handler)
 }

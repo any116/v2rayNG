@@ -127,18 +127,15 @@ object AngConfigManager {
     suspend fun shareNonCustomConfigsToClipboard(context: Context, serverList: List<String>): Int {
         try {
             val sb = StringBuilder()
+            var shared = 0
             for (guid in serverList) {
                 val url = shareConfig(guid)
-                if (TextUtils.isEmpty(url)) {
-                    continue
-                }
-                sb.append(url)
-                sb.appendLine()
+                if (TextUtils.isEmpty(url)) continue
+                sb.append(url).appendLine()
+                shared++
             }
-            if (sb.count() > 0) {
-                Utils.setClipboard(context, sb.toString())
-            }
-            return sb.lines().count() - 1
+            if (sb.isNotEmpty()) Utils.setClipboard(context, sb.toString())
+            return shared
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to share non-custom configs to clipboard", e)
             return -1

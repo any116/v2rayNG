@@ -13,16 +13,14 @@ object LogUtil {
     @Volatile
     private var cachedMinPriority: Int = CACHE_UNSET
 
-    private fun parsePriority(level: String?): Int {
-        return when ((level ?: DEFAULT_LEVEL).lowercase(Locale.US)) {
-            "verbose" -> Log.VERBOSE
-            "debug" -> Log.DEBUG
-            "info" -> Log.INFO
-            "warn", "warning" -> Log.WARN
-            "error" -> Log.ERROR
-            "none", "off" -> Int.MAX_VALUE
-            else -> Log.WARN
-        }
+    private fun parsePriority(level: String?): Int = when ((level ?: DEFAULT_LEVEL).lowercase(Locale.US)) {
+        "verbose" -> Log.VERBOSE
+        "debug" -> Log.DEBUG
+        "info" -> Log.INFO
+        "warn", "warning" -> Log.WARN
+        "error" -> Log.ERROR
+        "none", "off" -> Int.MAX_VALUE
+        else -> Log.WARN
     }
 
     @Suppress("unused")
@@ -48,9 +46,7 @@ object LogUtil {
         }
     }
 
-    private fun isEnabled(priority: Int): Boolean {
-        return priority >= minPriority()
-    }
+    private fun isEnabled(priority: Int): Boolean = priority >= minPriority()
 
     private fun log(priority: Int, tag: String, message: String, throwable: Throwable? = null) {
         if (!isEnabled(priority)) return

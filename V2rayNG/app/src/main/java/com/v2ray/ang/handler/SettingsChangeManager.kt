@@ -35,10 +35,8 @@ object SettingsChangeManager {
      * Triggers service restart if the key is not UI-only, and always refreshes UI tabs.
      */
     fun notifySettingChanged(key: String) {
-        if (key !in uiOnlyKeys) {
-            makeRestartService()
-        }
-        makeSetupGroupTab()
+        if (key !in uiOnlyKeys) restartService.set(true)
+        setupGroupTab.set(true)
     }
 
     fun makeRestartService() {

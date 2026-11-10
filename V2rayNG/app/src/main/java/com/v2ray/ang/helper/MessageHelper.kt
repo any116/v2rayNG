@@ -15,7 +15,6 @@ import java.io.Serializable
 
 object MessageHelper {
 
-
     /**
      * Sends a message to the service.
      *
@@ -77,9 +76,10 @@ object MessageHelper {
      */
     fun sendMsg2TestService(ctx: Context, message: TestServiceMessage) {
         try {
-            val intent = Intent()
-            intent.component = ComponentName(ctx, CoreTestService::class.java)
-            intent.putExtra("content", message)
+            val intent = Intent().apply {
+                component = ComponentName(ctx, CoreTestService::class.java)
+                putExtra("content", message)
+            }
             when (message.key) {
                 AppConfig.MSG_MEASURE_CONFIG_START -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -89,14 +89,10 @@ object MessageHelper {
                     }
                 }
 
-                AppConfig.MSG_MEASURE_CONFIG_CANCEL -> {
-                    // Do not wake up service just to cancel; stop only if it is already running.
-                    ctx.stopService(intent)
-                }
+                // Do not wake up service just to cancel; stop only if it is already running.
+                AppConfig.MSG_MEASURE_CONFIG_CANCEL -> ctx.stopService(intent)
 
-                else -> {
-                    ctx.startService(intent)
-                }
+                else -> ctx.startService(intent)
             }
         } catch (e: Exception) {
             LogUtil.e(AppConfig.TAG, "Failed to send message to test service", e)

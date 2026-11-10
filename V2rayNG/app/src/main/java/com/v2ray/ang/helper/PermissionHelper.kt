@@ -31,19 +31,16 @@ class PermissionHelper(private val activity: ComponentActivity) {
         val permission = permissionType.getPermission()
         if (ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED) {
             onGranted()
-        } else {
-            permissionCallback = { isGranted ->
-                if (isGranted) {
-                    onGranted()
-                } else {
-                    val message = activity.getString(
-                        R.string.toast_permission_denied_for,
-                        activity.getString(permissionType.getLabelRes())
-                    )
-                    activity.toast(message)
-                }
-            }
-            permissionLauncher.launch(permission)
+            return
         }
+        permissionCallback = { isGranted ->
+            if (isGranted) {
+                onGranted()
+            } else {
+                val label = activity.getString(permissionType.getLabelRes())
+                activity.toast(activity.getString(R.string.toast_permission_denied_for, label))
+            }
+        }
+        permissionLauncher.launch(permission)
     }
 }

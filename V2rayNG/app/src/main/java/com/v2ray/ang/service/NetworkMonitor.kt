@@ -64,40 +64,31 @@ class NetworkMonitor(
         override fun onAvailable(network: Network) {
             val shouldReload = synchronized(stateLock) {
                 val previous = upstream
-                val shouldReload = (previous != null && previous != network) || waitingForRecovery
+                val reload = (previous != null && previous != network) || waitingForRecovery
                 upstream = network
                 waitingForRecovery = false
-                shouldReload
+                reload
             }
             onUnderlyingNetworksChanged(arrayOf(network))
-            if (shouldReload) {
-                scheduleHandover(network)
-            }
+            if (shouldReload) scheduleHandover(network)
         }
 
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            // It's a good idea to refresh capabilities of the current upstream only.
             val isCurrent = synchronized(stateLock) { upstream == network }
-            if (isCurrent) {
-                // It's a good idea to refresh capabilities of the current upstream only.
-                onUnderlyingNetworksChanged(arrayOf(network))
-            }
+            if (isCurrent) onUnderlyingNetworksChanged(arrayOf(network))
         }
 
         override fun onLost(network: Network) {
             val wasCurrent = synchronized(stateLock) {
-                if (upstream != network) {
-                    false
-                } else {
-                    upstream = null
-                    waitingForRecovery = true
-                    handoverJob?.cancel()
-                    handoverJob = null
-                    true
-                }
+                if (upstream != network) return@synchronized false
+                upstream = null
+                waitingForRecovery = true
+                handoverJob?.cancel()
+                handoverJob = null
+                true
             }
-            if (wasCurrent) {
-                onUnderlyingNetworksChanged(null)
-            }
+            if (wasCurrent) onUnderlyingNetworksChanged(null)
         }
     }
 
