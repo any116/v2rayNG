@@ -1,13 +1,16 @@
 package com.v2ray.ang.ui.components
 
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,6 +52,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -244,7 +248,7 @@ internal suspend fun observeDropdownQueries(
  * everything except what is intrinsic to paging (loading / empty / append states
  * and the debounced filter).
  */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun FormPagedDropdownField(
     label: String,
@@ -268,6 +272,8 @@ fun FormPagedDropdownField(
 
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val imeVisible = WindowInsets.isImeVisible
     val currentOnQueryChange by rememberUpdatedState(onQueryChange)
     val expandOnUserEdit = remember(queries) {
         InputTransformation {
@@ -286,12 +292,6 @@ fun FormPagedDropdownField(
     // Each row owns this list state, so a new query must always start at the first result.
     LaunchedEffect(query) {
         runCatching { listState.scrollToItem(0) }
-    }
-
-    // Route every close path through the same handler so resetQueryOnDismiss also applies to the
-    // ExposedDropdownMenuBox BackHandler used by this non-focusable popup.
-    BackHandler(enabled = queries.expanded) {
-        dismissDropdown()
     }
 
     ExposedDropdownMenuBox(
@@ -344,6 +344,16 @@ fun FormPagedDropdownField(
             )
         }
     }
+
+    // Register after ExposedDropdownMenuBox so its internal BackHandler cannot close the menu
+    // when Back is only intended to hide the IME. Keep the query and text focus intact.
+    BackHandler(enabled = queries.expanded && enabled) {
+        if (imeVisible) {
+            keyboardController?.hide()
+        } else {
+            dismissDropdown()
+        }
+    }
 }
 
 @Composable
@@ -387,9 +397,12 @@ private fun PagedDropdownPopup(
         popupPositionProvider = positionProvider,
         onDismissRequest = { currentOnDismiss() },
         properties = PopupProperties(
-            // Mirror PrimaryEditable: don't steal focus / IME from the anchor.
-            focusable = false,
-            dismissOnBackPress = true,
+            // Stay non-focusable and below the IME so keyboard controls are not outside taps.
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            dismissOnBackPress = false,
             dismissOnClickOutside = true,
             usePlatformDefaultWidth = false
         )
