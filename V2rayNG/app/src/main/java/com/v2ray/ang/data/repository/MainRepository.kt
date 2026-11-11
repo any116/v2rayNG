@@ -430,7 +430,15 @@ private fun protocolDescription(row: ServerRowProjection): String {
     if (row.configType.isComplexType()) return row.configType.name
     val parts = mutableListOf(row.configType.name)
     val network = row.network
-    if (!network.isNullOrBlank() && !network.equals("tcp", ignoreCase = true)) parts += network
+    // Hysteria/Hysteria2 store their own scheme name as the transport, so repeating it printed the
+    // protocol twice ("HYSTERIA2 / hysteria"); the transport token is dropped, security is kept.
+    val repeatedTransport = network != null && network.equals(EConfigType.HYSTERIA.name, ignoreCase = true)
+    if (!network.isNullOrBlank() &&
+        !network.equals("tcp", ignoreCase = true) &&
+        !repeatedTransport
+    ) {
+        parts += network
+    }
     val security = row.security
     if (!security.isNullOrBlank()) {
         parts += if (row.insecure == true && security.equals("tls", ignoreCase = true)) {
