@@ -143,9 +143,7 @@ open class MainRepository @Inject constructor(
 
     private fun updateServiceState(key: Int) {
         when (key) {
-            AppConfig.MSG_STATE_RUNNING,
-            AppConfig.MSG_STATE_START_SUCCESS -> _serviceState.value = true
-
+            AppConfig.MSG_STATE_RUNNING, AppConfig.MSG_STATE_START_SUCCESS -> _serviceState.value = true
             AppConfig.MSG_STATE_NOT_RUNNING,
             AppConfig.MSG_STATE_START_FAILURE,
             AppConfig.MSG_STATE_STOP_SUCCESS -> _serviceState.value = false
@@ -187,19 +185,13 @@ open class MainRepository @Inject constructor(
 
     // ---- Preferences: snapshot reads, stay synchronous ----
 
-    open fun selectedGroupId(): String =
-        settings.string(AppConfig.CACHE_SUBSCRIPTION_ID, "").orEmpty()
+    open fun selectedGroupId(): String = settings.string(AppConfig.CACHE_SUBSCRIPTION_ID, "").orEmpty()
 
-    open suspend fun setSelectedGroupId(id: String) {
-        settings.putString(AppConfig.CACHE_SUBSCRIPTION_ID, id)
-    }
+    open suspend fun setSelectedGroupId(id: String) = settings.putString(AppConfig.CACHE_SUBSCRIPTION_ID, id)
 
-    open fun selectedGuid(): String? =
-        settings.string(SettingsStore.KEY_SELECTED_SERVER).nullIfBlank()
+    open fun selectedGuid(): String? = settings.string(SettingsStore.KEY_SELECTED_SERVER).nullIfBlank()
 
-    open suspend fun setSelectedGuid(guid: String) {
-        settings.putString(SettingsStore.KEY_SELECTED_SERVER, guid)
-    }
+    open suspend fun setSelectedGuid(guid: String) = settings.putString(SettingsStore.KEY_SELECTED_SERVER, guid)
 
     open fun confirmRemove(): Boolean = settings.bool(AppConfig.PREF_CONFIRM_REMOVE, false)
     open fun doubleColumnDisplay(): Boolean = settings.bool(AppConfig.PREF_DOUBLE_COLUMN_DISPLAY, false)
@@ -410,12 +402,8 @@ open class MainRepository @Inject constructor(
 
     open suspend fun testCurrentServer(requestId: String) = withIO {
         MessageHelper.sendMsg2ServiceForResult(app, AppConfig.MSG_MEASURE_DELAY, requestId) { handled ->
-            if (!handled) emitDelayCanceled(requestId)
+            if (!handled) _serviceEvents.tryEmit(MainServiceEvent.MeasureDelayCanceled(requestId))
         }
-    }
-
-    private fun emitDelayCanceled(requestId: String) {
-        _serviceEvents.tryEmit(MainServiceEvent.MeasureDelayCanceled(requestId))
     }
 
     /**
@@ -441,12 +429,14 @@ open class MainRepository @Inject constructor(
 private fun protocolDescription(row: ServerRowProjection): String {
     if (row.configType.isComplexType()) return row.configType.name
     val parts = mutableListOf(row.configType.name)
-    row.network?.let { net ->
-        if (net.isNotBlank() && !net.equals("tcp", ignoreCase = true)) parts += net
-    }
-    row.security?.let { sec ->
-        if (sec.isNotBlank()) {
-            parts += if (row.insecure == true && sec.equals("tls", ignoreCase = true)) "$sec insecure" else sec
+    val network = row.network
+    if (!network.isNullOrBlank() && !network.equals("tcp", ignoreCase = true)) parts += network
+    val security = row.security
+    if (!security.isNullOrBlank()) {
+        parts += if (row.insecure == true && security.equals("tls", ignoreCase = true)) {
+            "$security insecure"
+        } else {
+            security
         }
     }
     return parts.joinToString(" / ")

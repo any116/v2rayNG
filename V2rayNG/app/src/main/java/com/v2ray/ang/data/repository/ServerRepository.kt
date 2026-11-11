@@ -73,30 +73,36 @@ open class ServerRepository @Inject constructor(
     // ---- Paged dropdown sources ----
 
     /** Replaces buildChainCandidates(): List<String>. */
-    open fun chainCandidatePager(query: String): Flow<PagingData<DropdownOption>> =
-        Pager(
+    open fun chainCandidatePager(query: String): Flow<PagingData<DropdownOption>> {
+        val escapedQuery = query.trim().normalizeLike()
+        return Pager(
             config = pagingConfig(),
-            pagingSourceFactory = { profileDao.pageRemarks(CHAIN_EXCLUDED, query.trim().normalizeLike()) }
+            pagingSourceFactory = { profileDao.pageRemarks(CHAIN_EXCLUDED, escapedQuery) }
         ).flow.map { data ->
             data.map { DropdownOption(it.remarks, DropdownOption.Source.PROFILE) }
         }
+    }
 
     /** Replaces buildFallbackTags(): List<String>. Builtin tags are not stored, so they go in as headers. */
-    open fun fallbackTagPager(query: String): Flow<PagingData<DropdownOption>> =
-        Pager(
+    open fun fallbackTagPager(query: String): Flow<PagingData<DropdownOption>> {
+        val trimmedQuery = query.trim()
+        val escapedQuery = trimmedQuery.normalizeLike()
+        val builtinTags = AppConfig.BUILTIN_OUTBOUND_TAGS
+            .filter { tag ->
+                tag != AppConfig.TAG_PROXY &&
+                    (trimmedQuery.isEmpty() || tag.contains(trimmedQuery, ignoreCase = true))
+            }
+            .asReversed()
+        return Pager(
             config = pagingConfig(),
-            pagingSourceFactory = { profileDao.pageRemarks(FALLBACK_EXCLUDED, query.trim().normalizeLike()) }
+            pagingSourceFactory = { profileDao.pageRemarks(FALLBACK_EXCLUDED, escapedQuery) }
         ).flow.map { data ->
-            var out = data.map { DropdownOption(it.remarks, DropdownOption.Source.PROFILE) }
-            AppConfig.BUILTIN_OUTBOUND_TAGS
-                .filter { it != AppConfig.TAG_PROXY }
-                .filter { query.isBlank() || it.contains(query.trim(), ignoreCase = true) }
-                .reversed()
-                .forEach { tag ->
-                    out = out.insertHeaderItem(item = DropdownOption(tag, DropdownOption.Source.BUILTIN))
-                }
-            out
+            val profiles = data.map { DropdownOption(it.remarks, DropdownOption.Source.PROFILE) }
+            builtinTags.fold(profiles) { paging, tag ->
+                paging.insertHeaderItem(item = DropdownOption(tag, DropdownOption.Source.BUILTIN))
+            }
         }
+    }
 
     // ---- Write ----
 
@@ -117,8 +123,7 @@ open class ServerRepository @Inject constructor(
         val saved = profile.copy(
             guid = targetGuid,
             subscriptionId = subId,
-            sortOrder = existing?.sortOrder
-                ?: (profileDao.minSortOrder(subId) - ProfileItem.SORT_STEP),
+            sortOrder = existing?.sortOrder ?: (profileDao.minSortOrder(subId) - ProfileItem.SORT_STEP),
             dedupeKey = "",
         )
         if (rawContent == null) profileDao.upsert(saved) else profileDao.upsertWithRaw(saved, rawContent)
@@ -153,8 +158,7 @@ open class ServerRepository @Inject constructor(
         subId: String,
         filter: String,
     ): String = withIO {
-        val typeName = app.resources.getStringArray(R.array.policy_group_type)
-            .getOrNull(typeIndex).orEmpty()
+        val typeName = app.resources.getStringArray(R.array.policy_group_type).getOrNull(typeIndex).orEmpty()
         val subName = if (subId.isEmpty()) {
             app.getString(R.string.filter_config_all)
         } else {

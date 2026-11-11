@@ -76,25 +76,19 @@ open class PerAppProxyRepository @Inject constructor(
         bypassMode = settings.bool(AppConfig.PREF_BYPASS_APPS, false)
     )
 
-    open suspend fun saveSelection(selection: Set<String>) {
+    open suspend fun saveSelection(selection: Set<String>) =
         settings.putStringSet(AppConfig.PREF_PER_APP_PROXY_SET, selection)
-    }
 
-    open suspend fun setPerAppProxyEnabled(enabled: Boolean) {
+    open suspend fun setPerAppProxyEnabled(enabled: Boolean) =
         settings.putBool(AppConfig.PREF_PER_APP_PROXY, enabled)
-    }
 
-    open suspend fun setBypassMode(enabled: Boolean) {
-        settings.putBool(AppConfig.PREF_BYPASS_APPS, enabled)
-    }
+    open suspend fun setBypassMode(enabled: Boolean) = settings.putBool(AppConfig.PREF_BYPASS_APPS, enabled)
 
     /**
      * Raises the global restart flag for consumers outside the result chain (tile, boot receiver,
      * running service).
      */
-    open suspend fun notifyRestartService() {
-        SettingsChangeManager.makeRestartService()
-    }
+    open suspend fun notifyRestartService() = SettingsChangeManager.makeRestartService()
 
     // ---------- Recommended list ----------
 
@@ -104,12 +98,9 @@ open class PerAppProxyRepository @Inject constructor(
      */
     open suspend fun fetchRecommendedList(): String = withIO {
         val url = AppConfig.ANDROID_PACKAGE_NAME_LIST_URL
-
-        HttpUtil.getUrlContent(UrlContentRequest(url = url, timeout = TIMEOUT_MS))
+        val direct = HttpUtil.getUrlContent(UrlContentRequest(url = url, timeout = TIMEOUT_MS))
             ?.takeIf { it.isNotBlank() }
-            ?.let { return@withIO it }
-
-        HttpUtil.getUrlContent(
+        val downloaded = direct ?: HttpUtil.getUrlContent(
             UrlContentRequest(
                 url = url,
                 timeout = TIMEOUT_MS,
@@ -118,9 +109,8 @@ open class PerAppProxyRepository @Inject constructor(
                 proxyPassword = SettingsManager.getSocksPassword()
             )
         )?.takeIf { it.isNotBlank() }
-            ?.let { return@withIO it }
 
-        runCatching { Utils.readTextFromAssets(app, BUNDLED_PROXY_LIST) }
+        downloaded ?: runCatching { Utils.readTextFromAssets(app, BUNDLED_PROXY_LIST) }
             .onFailure { LogUtil.e(AppConfig.TAG, "Failed to read bundled proxy list", it) }
             .getOrNull()
             .orEmpty()

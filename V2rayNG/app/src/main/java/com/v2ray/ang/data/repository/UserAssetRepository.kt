@@ -134,10 +134,10 @@ open class UserAssetRepository @Inject constructor(
     }
 
     /** Formats the size/date line, or falls back to the localized "not found" message. */
-    private fun formatProperties(file: File?): String = if (file != null) {
-        "${file.length().toTrafficString()}    ${Utils.formatTimestamp(file.lastModified())}"
-    } else {
+    private fun formatProperties(file: File?): String = if (file == null) {
         app.getString(R.string.msg_file_not_found)
+    } else {
+        "${file.length().toTrafficString()}    ${Utils.formatTimestamp(file.lastModified())}"
     }
 
     // ---- write ----
@@ -242,13 +242,17 @@ open class UserAssetRepository @Inject constructor(
     private fun download(assetFile: AssetFile, request: UrlContentRequest): Boolean = try {
         val temp = File(extDir, "${assetFile.remarks}_temp")
         val target = File(extDir, assetFile.remarks)
-        if (!downloadToFile(request.copy(url = assetFile.url), temp)) {
-            discardAssetFile(temp)
-            return false
+        when {
+            !downloadToFile(request.copy(url = assetFile.url), temp) -> {
+                discardAssetFile(temp)
+                false
+            }
+            replaceAssetFile(temp, target) -> true
+            else -> {
+                LogUtil.e(AppConfig.TAG, "Failed to replace geo file: ${assetFile.remarks}")
+                false
+            }
         }
-        if (replaceAssetFile(temp, target)) return true
-        LogUtil.e(AppConfig.TAG, "Failed to replace geo file: ${assetFile.remarks}")
-        return false
     } catch (e: Exception) {
         LogUtil.e(AppConfig.TAG, "Failed to download geo file: ${assetFile.remarks}", e)
         false
@@ -293,11 +297,8 @@ open class UserAssetRepository @Inject constructor(
 
     private fun cursorName(uri: Uri): String? = try {
         app.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
-            } else {
-                null
-            }
+            if (cursor.moveToFirst()) cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+            else null
         }
     } catch (e: Exception) {
         LogUtil.e(AppConfig.TAG, "Failed to get cursor name", e)

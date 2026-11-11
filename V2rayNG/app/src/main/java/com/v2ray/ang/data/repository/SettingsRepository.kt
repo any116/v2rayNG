@@ -120,12 +120,8 @@ open class SettingsRepository @Inject constructor(
     open suspend fun load(): SettingsPrefs {
         settings.awaitReady()
 
-        val bools = BoolPref.entries.associateWithTo(LinkedHashMap()) {
-            settings.bool(it.key, it.default)
-        }
-        val strings = StringPref.entries.associateWith {
-            settings.string(it.key, it.default) ?: it.default
-        }
+        val bools = BoolPref.entries.associateWithTo(LinkedHashMap()) { settings.bool(it.key, it.default) }
+        val strings = StringPref.entries.associateWith { settings.string(it.key, it.default) ?: it.default }
         bools[BoolPref.DYNAMIC_COLOR] = theme.isDynamicColorEnabled()
 
         if (socksInboundForced(bools, strings)) {
@@ -145,8 +141,7 @@ open class SettingsRepository @Inject constructor(
         strings: Map<StringPref, String>,
     ): Boolean {
         val hevTunnel = strings[StringPref.MODE] == VPN && bools[BoolPref.USE_HEV_TUNNEL] == true
-        val rootProxy = bools[BoolPref.ROOT_MODE_ENABLE] == true ||
-            bools[BoolPref.ROOT_LAN_SHARING] == true
+        val rootProxy = bools[BoolPref.ROOT_MODE_ENABLE] == true || bools[BoolPref.ROOT_LAN_SHARING] == true
         return hevTunnel || rootProxy
     }
 
@@ -158,20 +153,14 @@ open class SettingsRepository @Inject constructor(
     }
 
     open suspend fun setBool(pref: BoolPref, value: Boolean) {
-        if (pref == BoolPref.DYNAMIC_COLOR) {
-            theme.setDynamicColorEnabled(value)
-        } else {
-            settings.putBool(pref.key, value)
-        }
+        if (pref == BoolPref.DYNAMIC_COLOR) theme.setDynamicColorEnabled(value)
+        else settings.putBool(pref.key, value)
         SettingsChangeManager.notifySettingChanged(pref.key)
     }
 
     open suspend fun setString(pref: StringPref, value: String) {
-        if (pref == StringPref.UI_MODE_NIGHT) {
-            theme.setThemeMode(AppThemeMode.from(value))
-        } else {
-            settings.putString(pref.key, value)
-        }
+        if (pref == StringPref.UI_MODE_NIGHT) theme.setThemeMode(AppThemeMode.from(value))
+        else settings.putString(pref.key, value)
         SettingsChangeManager.notifySettingChanged(pref.key)
     }
 

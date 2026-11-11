@@ -91,12 +91,12 @@ open class BackupRepository @Inject constructor(
                 return@runIO null
             }
 
-            if (!ZipUtil.zipFromFolder(dumpDir.absolutePath, zip.absolutePath)) {
+            if (ZipUtil.zipFromFolder(dumpDir.absolutePath, zip.absolutePath)) {
+                zip
+            } else {
                 LogUtil.w(AppConfig.TAG, "Backup aborted: zipping ${dumpDir.name} failed")
                 zip.delete()
                 null
-            } else {
-                zip
             }
         } finally {
             dumpDir.deleteRecursively()
@@ -135,22 +135,16 @@ open class BackupRepository @Inject constructor(
             }
 
             val incoming = File(target, AppDatabase.NAME)
-            val dbPath = app.getDatabasePath(AppDatabase.NAME)
-
-            stopSiblingProcesses()
-
-            when {
-                incoming.isFile -> {
-                    db.close()
-                    clearSidecars(dbPath)
-                    incoming.copyTo(dbPath, overwrite = true)
-                }
-
-                else -> {
-                    LogUtil.w(AppConfig.TAG, "Restore aborted: archive does not contain ${AppDatabase.NAME}")
-                    return@runIO false
-                }
+            if (!incoming.isFile) {
+                LogUtil.w(AppConfig.TAG, "Restore aborted: archive does not contain ${AppDatabase.NAME}")
+                return@runIO false
             }
+
+            val dbPath = app.getDatabasePath(AppDatabase.NAME)
+            stopSiblingProcesses()
+            db.close()
+            clearSidecars(dbPath)
+            incoming.copyTo(dbPath, overwrite = true)
 
             scheduleSelfRestart()
             true

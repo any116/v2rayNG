@@ -30,32 +30,29 @@ open class AppListRepository @Inject constructor(
         includeUnidentified: Boolean = true
     ): List<AppInfo> = withIO {
         val sorted = sortApps(queryAllApps(), selectedSnapshot)
-        if (!includeUnidentified) {
-            sorted
-        } else {
-            buildList(sorted.size + 1) {
-                add(unidentifiedApp())
-                addAll(sorted)
-            }
+        if (!includeUnidentified) return@withIO sorted
+        buildList(sorted.size + 1) {
+            add(unidentifiedApp())
+            addAll(sorted)
         }
     }
 
     private suspend fun queryAllApps(): List<AppInfo> {
         val packageManager = app.packageManager
         val packages = installedPackages(packageManager)
-        val apps = ArrayList<AppInfo>(packages.size)
-        for (pkg in packages) {
-            currentCoroutineContext().ensureActive()
-            val applicationInfo = pkg.applicationInfo ?: continue
-            apps.add(
-                AppInfo(
-                    appName = applicationInfo.loadLabel(packageManager).toString(),
-                    packageName = pkg.packageName,
-                    isSystemApp = applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM > 0
+        return buildList(packages.size) {
+            for (pkg in packages) {
+                currentCoroutineContext().ensureActive()
+                val applicationInfo = pkg.applicationInfo ?: continue
+                add(
+                    AppInfo(
+                        appName = applicationInfo.loadLabel(packageManager).toString(),
+                        packageName = pkg.packageName,
+                        isSystemApp = applicationInfo.flags and ApplicationInfo.FLAG_SYSTEM > 0
+                    )
                 )
-            )
+            }
         }
-        return apps
     }
 
     private fun installedPackages(packageManager: PackageManager): List<PackageInfo> =
@@ -68,11 +65,8 @@ open class AppListRepository @Inject constructor(
             packageManager.getInstalledPackages(0)
         }
 
-    private fun unidentifiedApp() = AppInfo(
-        appName = "",
-        packageName = AppConfig.UNIDENTIFIED_PACKAGE,
-        isSystemApp = false
-    )
+    private fun unidentifiedApp() =
+        AppInfo(appName = "", packageName = AppConfig.UNIDENTIFIED_PACKAGE, isSystemApp = false)
 
     private fun sortApps(apps: List<AppInfo>, selected: Set<String>): List<AppInfo> {
         val collator = Collator.getInstance(Locale.getDefault())
@@ -90,11 +84,11 @@ open class AppListRepository @Inject constructor(
     // ---------- Filtering ----------
     open fun filter(apps: List<AppInfo>, query: String): List<AppInfo> {
         if (query.isBlank()) return apps
-        return apps.filter {
-            it.appName.contains(query, ignoreCase = true) ||
-                it.packageName.contains(query, ignoreCase = true)
-        }
+        return apps.filter { it.matches(query) }
     }
+
+    private fun AppInfo.matches(query: String): Boolean =
+        appName.contains(query, ignoreCase = true) || packageName.contains(query, ignoreCase = true)
 
     // ---------- Selection arithmetic (pure, no I/O) ----------
     open fun selectAll(current: Set<String>, packageNames: Collection<String>): Set<String> =

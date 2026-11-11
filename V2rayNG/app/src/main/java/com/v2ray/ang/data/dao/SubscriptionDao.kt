@@ -124,11 +124,7 @@ interface SubscriptionDao {
         val total = count()
         val created = !exists && (force || orphans > 0 || total == 0)
         if (created) {
-            val head = if (total == 0) {
-                ProfileItem.SORT_STEP
-            } else {
-                minSortOrder() - ProfileItem.SORT_STEP
-            }
+            val head = if (total == 0) ProfileItem.SORT_STEP else minSortOrder() - ProfileItem.SORT_STEP
             upsert(
                 SubscriptionItem(
                     guid = AppConfig.DEFAULT_SUBSCRIPTION_ID,

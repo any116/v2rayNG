@@ -8,10 +8,9 @@ import androidx.paging.filter
 import androidx.paging.insertHeaderItem
 import androidx.paging.map
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.data.Prefs
+import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.dao.ProfileDao
 import com.v2ray.ang.data.dao.RoutingDao
-import com.v2ray.ang.data.SettingsStore
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.di.IoDispatcher
@@ -63,25 +62,28 @@ open class RoutingRepository @Inject constructor(
         )
     }
 
-    open fun outboundTagPager(query: String): Flow<PagingData<DropdownOption>> = Pager(
-        config = PagingConfig(
-            pageSize = 40,
-            initialLoadSize = 80,
-            prefetchDistance = 20,
-            enablePlaceholders = false,
-        ),
-        pagingSourceFactory = { profileDao.pageRemarks(OUTBOUND_EXCLUDED, query.trim().normalizeLike()) }
-    ).flow.map { data ->
-        var out = data
-            .filter { it.remarks !in AppConfig.BUILTIN_OUTBOUND_TAGS }
-            .map { DropdownOption(it.remarks, DropdownOption.Source.PROFILE) }
-        AppConfig.BUILTIN_OUTBOUND_TAGS
-            .filter { query.isBlank() || it.contains(query.trim(), ignoreCase = true) }
-            .reversed()
-            .forEach { tag ->
-                out = out.insertHeaderItem(item = DropdownOption(tag, DropdownOption.Source.BUILTIN))
+    open fun outboundTagPager(query: String): Flow<PagingData<DropdownOption>> {
+        val trimmedQuery = query.trim()
+        val escapedQuery = trimmedQuery.normalizeLike()
+        val builtinTags = AppConfig.BUILTIN_OUTBOUND_TAGS
+            .filter { trimmedQuery.isEmpty() || it.contains(trimmedQuery, ignoreCase = true) }
+            .asReversed()
+        return Pager(
+            config = PagingConfig(
+                pageSize = 40,
+                initialLoadSize = 80,
+                prefetchDistance = 20,
+                enablePlaceholders = false
+            ),
+            pagingSourceFactory = { profileDao.pageRemarks(OUTBOUND_EXCLUDED, escapedQuery) }
+        ).flow.map { data ->
+            val profiles = data
+                .filter { it.remarks !in AppConfig.BUILTIN_OUTBOUND_TAGS }
+                .map { DropdownOption(it.remarks, DropdownOption.Source.PROFILE) }
+            builtinTags.fold(profiles) { paging, tag ->
+                paging.insertHeaderItem(item = DropdownOption(tag, DropdownOption.Source.BUILTIN))
             }
-        out
+        }
     }
 
     // ----- Insert / update / remove by id (atomic) -----
@@ -117,7 +119,7 @@ open class RoutingRepository @Inject constructor(
     // ----- Domain strategy -----
 
     open suspend fun getDomainStrategy(): String = runIO("") {
-        Prefs.string(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY).orEmpty()
+        settings.string(AppConfig.PREF_ROUTING_DOMAIN_STRATEGY).orEmpty()
     }
 
     open suspend fun setDomainStrategy(value: String) = runIO(Unit) {
@@ -154,10 +156,10 @@ open class RoutingRepository @Inject constructor(
      * silently share a key with another item.
      */
     private suspend fun repairedRulesets(): List<RulesetItem> {
-        val list = routingDao.all().toMutableList()
+        val list = routingDao.all()
         val seen = HashSet<String>(list.size)
         val toReinsert = mutableListOf<RulesetItem>()
-        list.forEach { item ->
+        for (item in list) {
             if (item.id.isEmpty() || !seen.add(item.id)) {
                 item.id = UUID.randomUUID().toString()
                 seen.add(item.id)

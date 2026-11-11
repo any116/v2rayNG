@@ -29,16 +29,12 @@ internal class LogcatExports(cacheDir: File) {
 
     fun prune(now: Long, keep: File? = null) {
         runCatching {
-            val files = ownedFiles().sortedByDescending { it.lastModified() }
-            val valid = files.filter { file ->
-                if (file != keep && now - file.lastModified() >= LOGCAT_EXPORT_RETENTION_MS) {
-                    file.delete()
-                    false
-                } else {
-                    true
-                }
-            }
-            valid.filter { it != keep }.drop(LOGCAT_MAX_EXPORTS - if (keep == null) 0 else 1)
+            val (expired, retained) = ownedFiles()
+                .sortedByDescending { it.lastModified() }
+                .partition { file -> file != keep && now - file.lastModified() >= LOGCAT_EXPORT_RETENTION_MS }
+            expired.forEach { runCatching { it.delete() } }
+            retained.filter { it != keep }
+                .drop(LOGCAT_MAX_EXPORTS - if (keep == null) 0 else 1)
                 .forEach { runCatching { it.delete() } }
         }
     }
@@ -48,8 +44,8 @@ internal class LogcatExports(cacheDir: File) {
     }
 
     private fun ownedFiles(): List<File> = runCatching {
-        directory.listFiles()?.filter {
-            it.isFile && it.name.startsWith(EXPORT_PREFIX) && it.name.endsWith(".txt")
+        directory.listFiles()?.filter { file ->
+            file.isFile && file.name.startsWith(EXPORT_PREFIX) && file.name.endsWith(".txt")
         }.orEmpty()
     }.getOrDefault(emptyList())
 }
