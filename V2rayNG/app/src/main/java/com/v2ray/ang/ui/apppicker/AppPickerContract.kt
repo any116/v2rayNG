@@ -30,7 +30,7 @@ data class AppPickerUiState(
 
     companion object {
 
-        /** Used when the caller passed no [com.v2ray.ang.ui.AppRoute.EXTRA_PICKER_TITLE_RES]. */
+        /** Used when the caller passed no [com.v2ray.ang.ui.AppRoute.AppPicker.titleRes]. */
         @StringRes
         val DEFAULT_TITLE_RES: Int = R.string.per_app_proxy_settings
     }

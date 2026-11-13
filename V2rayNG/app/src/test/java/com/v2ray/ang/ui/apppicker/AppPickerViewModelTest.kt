@@ -27,8 +27,9 @@ class AppPickerViewModelTest {
             onBlocking { loadApps(any(), any()) } doReturn emptyList()
             on { filter(any(), any()) } doReturn emptyList()
         }
+        // Navigation stores a List<String> argument as a String array in the handle.
         val handle = SavedStateHandle(
-            mapOf(AppRoute.EXTRA_PICKER_SELECTED to ArrayList(selected))
+            mapOf(AppRoute.EXTRA_PICKER_SELECTED to selected.toTypedArray())
         )
         return AppPickerViewModel(repo, handle)
     }

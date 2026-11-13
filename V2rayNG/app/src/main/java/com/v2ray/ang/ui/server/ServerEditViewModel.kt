@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.server
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.toRoute
 import androidx.paging.cachedIn
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
@@ -39,7 +40,10 @@ class ServerEditViewModel @Inject constructor(
     private val repository: ServerRepository
 ) : BaseEditViewModel<ServerUiState, ServerAction>(initialState(handle)) {
 
-    private val subscriptionId: String = handle.get<String>(AppRoute.EXTRA_SUB_ID).orEmpty()
+    /** Route arguments travel through the type-safe route, never through hand-typed keys. */
+    private val route = handle.toRoute<AppRoute.ServerEdit>()
+
+    private val subscriptionId: String = route.subscriptionId
 
     val documentKey: String = if (state.guid.isNotEmpty()) {
         "profile:${state.guid}"
@@ -369,13 +373,11 @@ class ServerEditViewModel @Inject constructor(
 
     companion object {
         private fun initialState(handle: SavedStateHandle): ServerUiState {
-            val typeValue = handle.get<Int>(AppRoute.EXTRA_TYPE) ?: EConfigType.VMESS.value
-            val guid = handle.get<String>(AppRoute.EXTRA_GUID).orEmpty()
+            val route = handle.toRoute<AppRoute.ServerEdit>()
             return ServerUiState(
-                configType = EConfigType.fromInt(typeValue) ?: EConfigType.VMESS,
-                guid = guid,
-                isRunning = (handle.get<Boolean>(AppRoute.EXTRA_RUNNING) ?: false) &&
-                        guid.isNotEmpty()
+                configType = EConfigType.fromInt(route.configType) ?: EConfigType.VMESS,
+                guid = route.guid,
+                isRunning = route.isRunning && route.guid.isNotEmpty()
             )
         }
     }

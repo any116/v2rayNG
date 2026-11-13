@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui
 
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -19,11 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavBackStackEntry
-import androidx.navigation.NavType
-import androidx.navigation.compose.composable
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.handler.AppLocaleManager
@@ -84,60 +82,8 @@ import java.io.File
 import kotlin.math.roundToInt
 
 private const val RESULT_KEY = "app_navigation_result"
-private const val SELECTED_SEPARATOR = ","
 private const val TransitionDurationMillis = 400
 private const val TransitionOffsetFraction = 0.15f
-
-private object NavRoute {
-    const val MAIN = "main"
-    const val SUB_SETTING = "sub_setting"
-    const val PER_APP_PROXY = "per_app_proxy"
-    const val ROUTING_SETTING = "routing_setting"
-    const val USER_ASSET = "user_asset"
-    const val SETTINGS = "settings"
-    const val LOGCAT = "logcat"
-    const val CHECK_UPDATE = "check_update"
-    const val BACKUP = "backup"
-    const val ABOUT = "about"
-    const val SCANNER = "scanner"
-
-    const val SERVER_EDIT = "server_edit"
-    const val ROUTING_EDIT = "routing_edit"
-    const val SUB_EDIT = "sub_edit"
-    const val USER_ASSET_URL = "user_asset_url"
-    const val APP_PICKER = "app_picker"
-}
-
-private fun AppRoute.toNavRoute(): String = when (this) {
-    AppRoute.Main -> NavRoute.MAIN
-    AppRoute.SubSetting -> NavRoute.SUB_SETTING
-    AppRoute.PerAppProxy -> NavRoute.PER_APP_PROXY
-    AppRoute.RoutingSetting -> NavRoute.ROUTING_SETTING
-    AppRoute.UserAsset -> NavRoute.USER_ASSET
-    AppRoute.Settings -> NavRoute.SETTINGS
-    AppRoute.Logcat -> NavRoute.LOGCAT
-    AppRoute.CheckUpdate -> NavRoute.CHECK_UPDATE
-    AppRoute.Backup -> NavRoute.BACKUP
-    AppRoute.About -> NavRoute.ABOUT
-    AppRoute.Scanner -> NavRoute.SCANNER
-    is AppRoute.ServerEdit ->
-        "${NavRoute.SERVER_EDIT}?${AppRoute.EXTRA_TYPE}=${configType.value}" +
-            "&${AppRoute.EXTRA_GUID}=${Uri.encode(guid)}" +
-            "&${AppRoute.EXTRA_SUB_ID}=${Uri.encode(subscriptionId)}" +
-            "&${AppRoute.EXTRA_RUNNING}=$isRunning"
-    is AppRoute.RoutingEdit ->
-        "${NavRoute.ROUTING_EDIT}?${AppRoute.EXTRA_RULE_ID}=${Uri.encode(ruleId)}"
-    is AppRoute.SubEdit ->
-        "${NavRoute.SUB_EDIT}?${AppRoute.EXTRA_SUB_GUID}=${Uri.encode(subId)}"
-    is AppRoute.UserAssetUrl ->
-        "${NavRoute.USER_ASSET_URL}?${AppRoute.EXTRA_ASSET_ID}=${Uri.encode(assetId)}" +
-            "&${AppRoute.EXTRA_ASSET_QRCODE}=${Uri.encode(qrCodeUrl)}"
-    is AppRoute.AppPicker ->
-        "${NavRoute.APP_PICKER}?${AppRoute.EXTRA_PICKER_SELECTED}=" +
-            Uri.encode(selected.joinToString(SELECTED_SEPARATOR)) +
-            "&${AppRoute.EXTRA_PICKER_TITLE_RES}=$titleRes"
-    is AppRoute.OpenUrl -> error("OpenUrl is handled before route conversion")
-}
 
 private fun enterFromRight(): EnterTransition =
     slideInHorizontally(
@@ -171,7 +117,7 @@ private fun exitToRight(): ExitTransition =
  * without competing with the home screen's first visible frame.
  */
 private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnterTransitionForDestination(): EnterTransition =
-    if (targetState.destination.route == NavRoute.MAIN) EnterTransition.None else enterFromLeft()
+    if (targetState.destination.hasRoute<AppRoute.Main>()) EnterTransition.None else enterFromLeft()
 
 private class NavEntryNavigator(
     private val entry: NavBackStackEntry,
@@ -192,34 +138,6 @@ private class NavEntryNavigator(
     }
 }
 
-private fun NavBackStackEntry.setPickerArgumentsFromRoute() {
-    val selected = arguments?.getString(AppRoute.EXTRA_PICKER_SELECTED)
-        .orEmpty()
-        .split(SELECTED_SEPARATOR)
-        .filter(String::isNotEmpty)
-    savedStateHandle[AppRoute.EXTRA_PICKER_SELECTED] = ArrayList(selected)
-}
-
-private const val SERVER_EDIT_ROUTE =
-    "${NavRoute.SERVER_EDIT}?${AppRoute.EXTRA_TYPE}={${AppRoute.EXTRA_TYPE}}" +
-        "&${AppRoute.EXTRA_GUID}={${AppRoute.EXTRA_GUID}}" +
-        "&${AppRoute.EXTRA_SUB_ID}={${AppRoute.EXTRA_SUB_ID}}" +
-        "&${AppRoute.EXTRA_RUNNING}={${AppRoute.EXTRA_RUNNING}}"
-
-private const val ROUTING_EDIT_ROUTE =
-    "${NavRoute.ROUTING_EDIT}?${AppRoute.EXTRA_RULE_ID}={${AppRoute.EXTRA_RULE_ID}}"
-
-private const val SUB_EDIT_ROUTE =
-    "${NavRoute.SUB_EDIT}?${AppRoute.EXTRA_SUB_GUID}={${AppRoute.EXTRA_SUB_GUID}}"
-
-private const val USER_ASSET_URL_ROUTE =
-    "${NavRoute.USER_ASSET_URL}?${AppRoute.EXTRA_ASSET_ID}={${AppRoute.EXTRA_ASSET_ID}}" +
-        "&${AppRoute.EXTRA_ASSET_QRCODE}={${AppRoute.EXTRA_ASSET_QRCODE}}"
-
-private const val APP_PICKER_ROUTE =
-    "${NavRoute.APP_PICKER}?${AppRoute.EXTRA_PICKER_SELECTED}={${AppRoute.EXTRA_PICKER_SELECTED}}" +
-        "&${AppRoute.EXTRA_PICKER_TITLE_RES}={${AppRoute.EXTRA_PICKER_TITLE_RES}}"
-
 /** The single in-app Compose graph; Activity wrappers remain for external and compatibility entry points. */
 @Composable
 fun AppNavHost(
@@ -231,23 +149,31 @@ fun AppNavHost(
     val platform = LocalPlatformActions.current
     val navController = rememberNavController()
 
+    /**
+     * The route type decides the destination, so each branch is a plain `navigate(route)` call.
+     * Arguments are read from the route object by Navigation; nothing is encoded here.
+     */
     fun navigate(route: AppRoute): Boolean {
-        if (route is AppRoute.OpenUrl) return false
-        if (route is AppRoute.Main) {
-            navController.popBackStack(NavRoute.MAIN, inclusive = false)
-            return true
-        }
-        navController.navigate(route.toNavRoute()) {
-            launchSingleTop = route is AppRoute.SubSetting ||
-                route is AppRoute.PerAppProxy ||
-                route is AppRoute.RoutingSetting ||
-                route is AppRoute.UserAsset ||
-                route is AppRoute.Settings ||
-                route is AppRoute.Logcat ||
-                route is AppRoute.CheckUpdate ||
-                route is AppRoute.Backup ||
-                route is AppRoute.About ||
-                route is AppRoute.Scanner
+        when (route) {
+            // Not an Activity navigation; the host opens the link instead.
+            is AppRoute.OpenUrl -> return false
+            // MAIN is the graph root: this is "return home", not "push another home".
+            is AppRoute.Main -> navController.popBackStack<AppRoute.Main>(inclusive = false)
+            is AppRoute.SubSetting -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.PerAppProxy -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.RoutingSetting -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.UserAsset -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.Settings -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.Logcat -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.CheckUpdate -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.Backup -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.About -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.Scanner -> navController.navigate(route) { launchSingleTop = true }
+            is AppRoute.ServerEdit -> navController.navigate(route)
+            is AppRoute.RoutingEdit -> navController.navigate(route)
+            is AppRoute.SubEdit -> navController.navigate(route)
+            is AppRoute.UserAssetUrl -> navController.navigate(route)
+            is AppRoute.AppPicker -> navController.navigate(route)
         }
         return true
     }
@@ -269,7 +195,7 @@ fun AppNavHost(
 
     NavHost(
         navController = navController,
-        startDestination = NavRoute.MAIN,
+        startDestination = AppRoute.Main,
         modifier = modifier.fillMaxSize(),
         enterTransition = { enterFromRight() },
         exitTransition = { exitToLeft() },
@@ -278,25 +204,25 @@ fun AppNavHost(
         predictivePopEnterTransition = { _ -> popEnterTransitionForDestination() },
         predictivePopExitTransition = { _ -> exitToRight() },
     ) {
-        composable(NavRoute.MAIN) { entry ->
+        composable<AppRoute.Main> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 MainScreen(mainViewModel, onMainPlatformEvent)
             }
         }
 
-        composable(NavRoute.SUB_SETTING) { entry ->
+        composable<AppRoute.SubSetting> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 SubSettingScreen(hiltViewModel<SubSettingViewModel>())
             }
         }
 
-        composable(NavRoute.PER_APP_PROXY) { entry ->
+        composable<AppRoute.PerAppProxy> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 PerAppProxyScreen(hiltViewModel<PerAppProxyViewModel>())
             }
         }
 
-        composable(NavRoute.ROUTING_SETTING) { entry ->
+        composable<AppRoute.RoutingSetting> { entry ->
             val viewModel = hiltViewModel<RoutingSettingViewModel>()
             val platformEventHandler: (RoutingEvent) -> Boolean = remember(viewModel, platform) {
                 { event ->
@@ -316,13 +242,13 @@ fun AppNavHost(
             }
         }
 
-        composable(NavRoute.USER_ASSET) { entry ->
+        composable<AppRoute.UserAsset> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 UserAssetScreen(hiltViewModel<UserAssetViewModel>())
             }
         }
 
-        composable(NavRoute.SETTINGS) { entry ->
+        composable<AppRoute.Settings> { entry ->
             val viewModel = hiltViewModel<SettingsViewModel>()
             val platformEventHandler: (SettingsEvent) -> Boolean = remember(viewModel, context) {
                 { event ->
@@ -343,7 +269,7 @@ fun AppNavHost(
             }
         }
 
-        composable(NavRoute.LOGCAT) { entry ->
+        composable<AppRoute.Logcat> { entry ->
             val viewModel = hiltViewModel<LogcatViewModel>()
             val platformEventHandler: (LogcatEvent) -> Boolean = remember(viewModel, context) {
                 { event ->
@@ -366,13 +292,13 @@ fun AppNavHost(
             }
         }
 
-        composable(NavRoute.CHECK_UPDATE) { entry ->
+        composable<AppRoute.CheckUpdate> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 CheckUpdateScreen(hiltViewModel<CheckUpdateViewModel>())
             }
         }
 
-        composable(NavRoute.BACKUP) { entry ->
+        composable<AppRoute.Backup> { entry ->
             val viewModel = hiltViewModel<BackupViewModel>()
             val platformEventHandler: (BackupEvent) -> Boolean = remember(viewModel, context, platform) {
                 { event ->
@@ -408,13 +334,13 @@ fun AppNavHost(
             }
         }
 
-        composable(NavRoute.ABOUT) { entry ->
+        composable<AppRoute.About> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 AboutScreen(hiltViewModel<AboutViewModel>())
             }
         }
 
-        composable(NavRoute.SCANNER) { entry ->
+        composable<AppRoute.Scanner> { entry ->
             val viewModel = hiltViewModel<ScannerViewModel>()
             val platformEventHandler: (ScannerEvent) -> Boolean = remember(viewModel, platform) {
                 { event ->
@@ -439,68 +365,31 @@ fun AppNavHost(
             }
         }
 
-        composable(
-            route = SERVER_EDIT_ROUTE,
-            arguments = listOf(
-                navArgument(AppRoute.EXTRA_TYPE) { type = NavType.IntType },
-                navArgument(AppRoute.EXTRA_GUID) { type = NavType.StringType; defaultValue = "" },
-                navArgument(AppRoute.EXTRA_SUB_ID) { type = NavType.StringType; defaultValue = "" },
-                navArgument(AppRoute.EXTRA_RUNNING) { type = NavType.BoolType; defaultValue = false },
-            )
-        ) { entry ->
+        composable<AppRoute.ServerEdit> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 ServerEditScreen(hiltViewModel<ServerEditViewModel>())
             }
         }
 
-        composable(
-            route = ROUTING_EDIT_ROUTE,
-            arguments = listOf(
-                navArgument(AppRoute.EXTRA_RULE_ID) { type = NavType.StringType; defaultValue = "" },
-            )
-        ) { entry ->
+        composable<AppRoute.RoutingEdit> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 RoutingEditScreen(hiltViewModel<RoutingEditViewModel>())
             }
         }
 
-        composable(
-            route = SUB_EDIT_ROUTE,
-            arguments = listOf(
-                navArgument(AppRoute.EXTRA_SUB_GUID) { type = NavType.StringType; defaultValue = "" },
-            )
-        ) { entry ->
+        composable<AppRoute.SubEdit> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 SubEditScreen(hiltViewModel<SubEditViewModel>())
             }
         }
 
-        composable(
-            route = USER_ASSET_URL_ROUTE,
-            arguments = listOf(
-                navArgument(AppRoute.EXTRA_ASSET_ID) { type = NavType.StringType; defaultValue = "" },
-                navArgument(AppRoute.EXTRA_ASSET_QRCODE) { type = NavType.StringType; defaultValue = "" },
-            )
-        ) { entry ->
+        composable<AppRoute.UserAssetUrl> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 UserAssetUrlScreen(hiltViewModel<UserAssetUrlViewModel>())
             }
         }
 
-        composable(
-            route = APP_PICKER_ROUTE,
-            arguments = listOf(
-                navArgument(AppRoute.EXTRA_PICKER_SELECTED) {
-                    type = NavType.StringType
-                    defaultValue = ""
-                },
-                navArgument(AppRoute.EXTRA_PICKER_TITLE_RES) {
-                    type = NavType.IntType
-                    defaultValue = 0
-                },
-            )
-        ) { entry ->
-            entry.setPickerArgumentsFromRoute()
+        composable<AppRoute.AppPicker> { entry ->
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
                 AppPickerScreen(hiltViewModel<AppPickerViewModel>())
             }

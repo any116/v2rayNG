@@ -243,14 +243,14 @@ class MainViewModel @Inject constructor(
             is MainAction.CancelScrollAnchorRestore -> scrollAnchorJobs.remove(action.requestId)?.cancel()
             is MainAction.AddServer -> navigate(
                 AppRoute.ServerEdit(
-                    configType = action.configType,
+                    configType = action.configType.value,
                     subscriptionId = state.selectedGroupId,
                     isRunning = state.isRunning
                 )
             )
             is MainAction.EditServer -> navigate(
                 AppRoute.ServerEdit(
-                    configType = action.configType,
+                    configType = action.configType.value,
                     guid = action.guid,
                     subscriptionId = state.selectedGroupId,
                     isRunning = state.isRunning

@@ -68,6 +68,7 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | AboutLibraries | `15.3.0` | 许可页；固定提交 `app/src/main/assets/aboutlibraries.json`，运行时读取 |
 | OkHttp | `5.5.1` | 订阅拉取、测速、更新检查 |
 | Coroutines | `1.11.0` | |
+| Serialization | `1.11.0` | `kotlinx-serialization-json` + `kotlin-serialization` 插件，类型安全导航路由用 |
 | WorkManager | `2.12.0` | 含 `work-multiprocess` |
 | CameraX | `1.6.2` | 扫码，配合 zxing core 3.5.4 |
 | Coil | `3.6.3` | `io.coil-kt.coil3:coil-compose`，只用于分应用代理的应用图标 |
@@ -166,7 +167,7 @@ extension/             # Kotlin 扩展（ListExt / StringExt / ToastExt / _Ext�
 util/                  # Utils / HttpUtil / JsonUtil / LogUtil / QRCodeDecoder / ZipUtil /
                        # AppIconFetcher …
 ui/                    # 全部 Compose UI
-  AppRoute.kt          # 所有导航目标与参数定义
+  AppRoute.kt          # 所有导航目标（@Serializable 路由）与参数键定义
   AppNavigation.kt     # 单 Activity 的 Navigation Compose 图、结果回传与转场
   base/                # BaseActivity / BaseHelperActivity / BaseContract / BaseScreen /
                        # BaseViewModel / BaseEditViewModel / BaseResult
@@ -220,6 +221,11 @@ ui/<feature>/
 页面之间的 slide/fade 转场使用 Compose 的 `enterTransition` / `exitTransition` /
 `popEnterTransition` / `popExitTransition`。外部入口（Tasker、分享、URL Scheme）以及存储启动
 失败时的恢复入口仍可保留独立 Activity 包装层，不参与应用内页面导航。
+
+导航用**类型安全路由**：`AppRoute` 的每个成员都是 `@Serializable` 的 `data object` / `data class`，
+`AppNavigation.kt` 只写 `composable<AppRoute.Xxx> { }` 与 `navigate(AppRoute.Xxx(...))`。
+路由属性名就是参数名，不再有 `NavRoute` 字符串常量、`toNavRoute()` 映射、占位符模板与
+`navArgument` 列表；兼容 Activity 用同一批 `AppRoute.Companion.EXTRA_*` 常量写 Intent extra。
 
 `BaseScreen` 在 Compose 图内通过 `LocalAppNavigator` 导航并回传 `BaseResult`；兼容包装 Activity
 没有该 CompositionLocal 时，继续使用 `BaseResultContract`。`AppRoute.OpenUrl` 仍由宿主走

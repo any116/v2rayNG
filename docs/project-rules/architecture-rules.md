@@ -187,8 +187,8 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 1. 在 `ui/<feature>/` 建四件套：`XxxContract.kt` → `XxxViewModel.kt` → `XxxScreen.kt` → `XxxActivity.kt`。
 2. 在 `data/repository/` 建 `XxxRepository @Inject constructor(dao…, @IoDispatcher io) : BaseRepository(io)`，
    需要落盘/查询的 `suspend` 方法用 `withIO { }` 包裹。
-3. 在 `ui/AppRoute.kt` 加导航目标（成员 + `intent(context)`）；需要传参的用
-   `AppRoute.Companion` 里的 `EXTRA_*` 常量。
+3. 在 `ui/AppRoute.kt` 加导航目标（`@Serializable` 成员 + `intent(context)`）；需要传参的用
+   路由属性，并在 `AppRoute.Companion` 用同名 `EXTRA_*` 常量给兼容 Intent 复用。
 4. 在 `AndroidManifest.xml` 注册 Activity（`android:exported="false"`，需要时设置 `process`）。
 5. 若该屏需要文件/权限/扫码 → 继承 `BaseHelperActivity`。
 6. 跑 `./gradlew :app:compileFdroidReleaseKotlin` 与 `./gradlew test`。

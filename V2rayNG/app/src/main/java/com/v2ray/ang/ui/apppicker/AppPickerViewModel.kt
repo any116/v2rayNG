@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.apppicker
 
 import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
+import androidx.navigation.toRoute
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.AppInfo
 import com.v2ray.ang.extension.delay
@@ -154,10 +155,12 @@ class AppPickerViewModel @Inject constructor(
 }
 
 /**
- * Seeds the state from the Intent arguments.
+ * Seeds the state from the route arguments.
  */
-private fun initialState(handle: SavedStateHandle) = AppPickerUiState(
-    titleRes = handle.get<Int>(AppRoute.EXTRA_PICKER_TITLE_RES)?.takeIf { it != 0 }
-        ?: AppPickerUiState.DEFAULT_TITLE_RES,
-    selected = handle.get<ArrayList<String>>(AppRoute.EXTRA_PICKER_SELECTED)?.toSet().orEmpty()
-)
+private fun initialState(handle: SavedStateHandle): AppPickerUiState {
+    val route = handle.toRoute<AppRoute.AppPicker>()
+    return AppPickerUiState(
+        titleRes = route.titleRes.takeIf { it != 0 } ?: AppPickerUiState.DEFAULT_TITLE_RES,
+        selected = route.selected.toSet()
+    )
+}

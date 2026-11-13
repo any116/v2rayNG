@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.routing
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.toRoute
 import androidx.paging.cachedIn
 import com.v2ray.ang.R
 import com.v2ray.ang.data.entities.RulesetItem
@@ -22,7 +23,7 @@ class RoutingEditViewModel @Inject constructor(
     handle: SavedStateHandle,
     private val repo: RoutingRepository
 ) : BaseEditViewModel<RoutingEditUiState, RoutingEditAction>(
-    initialState = RoutingEditUiState(ruleId = handle.get<String>(AppRoute.EXTRA_RULE_ID) ?: "")
+    initialState = RoutingEditUiState(ruleId = handle.toRoute<AppRoute.RoutingEdit>().ruleId)
 ) {
 
     private val outboundQuery = MutableStateFlow("")

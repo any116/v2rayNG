@@ -1,6 +1,7 @@
 package com.v2ray.ang.ui.userasset
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.navigation.toRoute
 import com.v2ray.ang.R
 import com.v2ray.ang.data.repository.UserAssetRepository
 import com.v2ray.ang.ui.AppRoute
@@ -21,7 +22,7 @@ class UserAssetUrlViewModel internal constructor(
     private val repo: UserAssetRepository,
     private val isValidUrl: (String) -> Boolean
 ) : BaseEditViewModel<UserAssetUrlUiState, UserAssetUrlAction>(
-    UserAssetUrlUiState(assetId = handle.get<String>(AppRoute.EXTRA_ASSET_ID).orEmpty())
+    UserAssetUrlUiState(assetId = handle.toRoute<AppRoute.UserAssetUrl>().assetId)
 ) {
 
     /** Keeps Android URL validation at the production boundary and snapshot tests on the JVM. */
@@ -48,7 +49,7 @@ class UserAssetUrlViewModel internal constructor(
             toastError()
             return@launch
         }
-        val qrCodeUrl = handle.get<String>(AppRoute.EXTRA_ASSET_QRCODE).orEmpty()
+        val qrCodeUrl = handle.toRoute<AppRoute.UserAssetUrl>().qrCodeUrl
         val seed = when {
             item != null -> AssetForm(item.remarks, item.url)
             qrCodeUrl.isNotEmpty() -> AssetForm(File(qrCodeUrl).name, qrCodeUrl)

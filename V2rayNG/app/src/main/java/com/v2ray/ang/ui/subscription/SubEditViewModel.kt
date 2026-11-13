@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.subscription
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.toRoute
 import androidx.paging.cachedIn
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
@@ -28,7 +29,7 @@ class SubEditViewModel @Inject constructor(
     handle: SavedStateHandle,
     private val repo: SubRepository
 ) : BaseEditViewModel<SubEditUiState, SubEditAction>(
-    SubEditUiState(subId = handle.get<String>(AppRoute.EXTRA_SUB_GUID).orEmpty())
+    SubEditUiState(subId = handle.toRoute<AppRoute.SubEdit>().subId)
 ) {
 
     private val prevQuery = MutableStateFlow("")

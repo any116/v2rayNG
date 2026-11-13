@@ -2,19 +2,21 @@
 
 ## 1. 导航模型
 
-应用内页面使用**单 Activity + Navigation Compose**；`ui/AppNavigation.kt` 是唯一的应用内
-导航图与转场入口。`ui/AppRoute.kt` 仍集中定义目标与参数，并保留兼容 Intent，但应用内正常
+应用内页面使用**单 Activity + Navigation Compose + 类型安全路由**；`ui/AppNavigation.kt` 是唯一的
+应用内导航图与转场入口。`ui/AppRoute.kt` 集中定义目标与参数，并保留兼容 Intent，但应用内正常
 导航优先由 `LocalAppNavigator` 交给 Compose 图处理。
 
-`ui/AppRoute.kt` 里每个目标自己构造 Intent：
+`ui/AppRoute.kt` 的每个目标既是路由定义，也自己构造兼容 Intent：
 
 ```kotlin
 sealed interface AppRoute : BaseRoute {
+    @Serializable
     data object Settings : AppRoute {
         override fun intent(context: Context) = Intent(context, SettingsActivity::class.java)
     }
+    @Serializable
     data class ServerEdit(
-        val configType: EConfigType,
+        val configType: Int = EConfigType.VMESS.value,
         val guid: String = "",
         val subscriptionId: String = "",
         val isRunning: Boolean = false,
@@ -24,18 +26,28 @@ sealed interface AppRoute : BaseRoute {
 }
 ```
 
+- 路由类由 `@Serializable` 生成 serializer，`AppNavigation.kt` 用
+  `composable<AppRoute.ServerEdit> { }` / `navController.navigate(AppRoute.ServerEdit(...))`；
+  **属性名就是参数名**，同时必须与 `AppRoute.Companion.EXTRA_*` 的值一致（兼容 Intent 复用同一批
+  key，两条路径读到的 `SavedStateHandle` 才等价）。
+- 接收方用 `handle.toRoute<AppRoute.Xxx>()` 取参数，不用 `handle.get<String>("guid")`。
+- 枚举不能进路由：`EConfigType` 传 `configType`（`EConfigType.value`），由接收方 `EConfigType.fromInt`。
+- 集合参数（如 `AppPicker.selected`）由 Navigation 的 `List<String>` 参数与 `StringListType` 承载，
+  不再手工 join/split。
+
 当前目标集合：`Main`、`SubSetting`、`PerAppProxy`、`RoutingSetting`、`UserAsset`、
 `Settings`、`Logcat`、`CheckUpdate`、`Backup`、`About`、`Scanner`、`ServerEdit`、
 `RoutingEdit`、`SubEdit`、`UserAssetUrl`、`AppPicker`、`OpenUrl`。
 
 规则：
 
-1. 新增应用内目标 → 在 `AppRoute` 加成员 + 在 `AppNavigation.kt` 注册 destination + 在
-   `AppRoute.Companion` 加 `EXTRA_*` 常量。只有外部入口才需要 manifest 注册 Activity。
-   **不要**在 Activity 里手写 `Intent(this, XxxActivity::class.java)`。
+1. 新增应用内目标 → 在 `AppRoute` 加 `@Serializable` 成员 + 在 `AppNavigation.kt` 注册
+   `composable<AppRoute.Xxx>` + 在 `navigate` 的 `when` 加分支。只有外部入口才需要 manifest 注册
+   Activity。**不要**在 Activity 里手写 `Intent(this, XxxActivity::class.java)`，也不要再新增
+   `NavRoute` 式字符串常量、占位符模板或 `navArgument` 列表。
 2. ViewModel 侧只调 `navigate(AppRoute.Xxx(...))`，不接触 `Intent`。
-3. 参数只传可序列化的标量（String / Int / Boolean / 枚举值 / 字符串数组），不传对象；
-   接收方用 id 从数据层重新取。
+3. 参数只传 `@Serializable` 支持的原生类型（String / Int / Boolean / 字符串集合；枚举传 `value`），
+   不传对象；接收方用 id 从数据层重新取。
 4. 外部链接一律 `AppRoute.OpenUrl(url)`，`BaseScreen` 会走 `Utils.openUri`。
 5. 返回值走 `BaseResult`（见 `state-events.md` §7）。Compose destination 通过
    `NavBackStackEntry.savedStateHandle` 回传；兼容 Activity 包装层才使用
