@@ -54,7 +54,6 @@ private class RoutingDialogHost {
 @Composable
 fun RoutingSettingScreen(
     viewModel: RoutingSettingViewModel,
-    onPlatformEvent: (RoutingEvent) -> Boolean,
     modifier: Modifier = Modifier
 ) {
     val onAction = remember(viewModel) { viewModel::onAction }
@@ -75,7 +74,6 @@ fun RoutingSettingScreen(
                     dialogs.show(event.dialog)
                     true
                 }
-                is RoutingEvent -> onPlatformEvent(event)
                 else -> false
             }
         },

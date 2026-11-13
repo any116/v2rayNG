@@ -8,7 +8,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 ```
 ┌───────────────────────────── UI Layer ─────────────────────────────────┐
 │ ui/<feature>/XxxScreen.kt      纯 Composable，无状态，读 UiState / LazyPagingItems │
-│ ui/<feature>/XxxActivity.kt    Compose 宿主 + 平台能力翻译（@AndroidEntryPoint）    │
+│ ui/AppNavigation.kt           唯一页面图；Activity 仅保留系统入口               │
 │ ui/<feature>/XxxViewModel.kt   状态持有者（@HiltViewModel），产出 UiState / 消费 Action │
 │ ui/<feature>/XxxContract.kt    UiState / Action / Event 类型定义          │
 │ ui/base/ ui/components/        基座与共享组件                            │
@@ -111,7 +111,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 ### 2.4 `helper/` 与 `util/`
 
 - `helper/` = 需要 Activity / Context 的能力封装（`FileChooserHelper`、`PermissionHelper`、
-  `QRCodeScannerHelper`、`NotificationHelper`、`MessageHelper`）。
+  `NotificationHelper`、`MessageHelper`）。扫码是 `AppRoute.Scanner`，不属于 Activity helper。
   Activity 侧能力必须经 `BaseHelperActivity` → `PlatformActions` → `LocalPlatformActions` 下发。
 - `util/` = 无状态纯函数或极薄的系统 API 包装，可在任何进程调用。
 
@@ -147,9 +147,9 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
    - `BaseEvent.Navigate(route)` —— 由 `BaseScreen` 消费；
    - `BaseEvent.Finish(result)` —— 关页并回传；
    - `XxxEvent : BaseEvent.Platform` —— 只有 Activity 能做的事
-     （VPN 授权、启停内核、扫码、选文件、显示二维码 Bitmap），
-     先由 `XxxScreen` 的 `onEvent` 截获本屏能处理的，其余由 `XxxActivity` 的
-     `handlePlatformEvent` 翻译。
+     （VPN 授权、启停内核、选文件、显示二维码 Bitmap），
+     先由 `XxxScreen` 的 `onEvent` 截获本屏能处理的，其余由 `AppNavigation` 或 Main 的
+     `handlePlatformEvent` 翻译。扫码直接 Navigate，并通过 BaseResult 回传。
 4. Composable 拿到的永远是 `(state, onAction)`；子组件继续往下传 `onAction` 或更窄的回调，
    不得下传 ViewModel（例外：根 Composable 收 `viewModel` 供 `BaseScreen` 与槽位订阅）。
 5. Activity 里禁止业务判断。`MainActivity` 的形态就是上限：`by viewModels()` 拿 VM、
@@ -175,8 +175,8 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 ## 6. Activity 规范
 
 - 只继承 `BaseActivity` 或 `BaseHelperActivity`，并标 `@AndroidEntryPoint`。
-- `ScreenContent()` 里只允许一个 `XxxScreen(viewModel, ...)` 调用；启动前需要等设置快照时，
-  参考 `MainActivity` 的 `awaitReady()` + 超时兜底写法。
+- 普通页面只注册 Compose destination，不创建 Activity。仅保留 Main、URL Scheme、Tasker、Sc* 系统入口。
+- Main 的启动屏障与恢复图由宿主管理；恢复页留在同一 Activity，ScScanner 只显式转发给 Main。
 - 允许出现的成员：VM 字段、`ActivityResultLauncher`、`handlePlatformEvent`、
   `onNewIntent` / `onKeyDown` 这类系统回调。
 - 禁止：持有 UI 状态、直接读写 Room/Prefs、直接调 handler/core（`LauncherManager` 例外，
@@ -184,11 +184,10 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 
 ## 7. 新增一屏的标准动作
 
-1. 在 `ui/<feature>/` 建四件套：`XxxContract.kt` → `XxxViewModel.kt` → `XxxScreen.kt` → `XxxActivity.kt`。
+1. 在 `ui/<feature>/` 建 `XxxContract.kt` → `XxxViewModel.kt` → `XxxScreen.kt`。
 2. 在 `data/repository/` 建 `XxxRepository @Inject constructor(dao…, @IoDispatcher io) : BaseRepository(io)`，
    需要落盘/查询的 `suspend` 方法用 `withIO { }` 包裹。
-3. 在 `ui/AppRoute.kt` 加导航目标（`@Serializable` 成员 + `intent(context)`）；需要传参的用
-   路由属性，并在 `AppRoute.Companion` 用同名 `EXTRA_*` 常量给兼容 Intent 复用。
-4. 在 `AndroidManifest.xml` 注册 Activity（`android:exported="false"`，需要时设置 `process`）。
-5. 若该屏需要文件/权限/扫码 → 继承 `BaseHelperActivity`。
+3. 在 `AppRoute` 加纯 `@Serializable` 目标，在 `AppNavigation.kt` 注册 destination；参数用路由属性。
+4. 不注册页面 Activity；需要新系统入口时才在 `ExternalEntry` 与 manifest 中显式定义。
+5. 文件与权限通过 `LocalPlatformActions` 调用；扫码 Navigate 到 Scanner，结果通过 BaseResult 回传。
 6. 跑 `./gradlew :app:compileFdroidReleaseKotlin` 与 `./gradlew test`。

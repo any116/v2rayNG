@@ -109,7 +109,6 @@ sealed interface MainEvent : BaseEvent.Platform {
         val requireVpnPermission: Boolean,
         val requireLocalNetwork: Boolean
     ) : MainEvent
-    data object ScanQrCode : MainEvent
     data object PickConfigFile : MainEvent
     data class ShowQrCode(val bitmap: Bitmap) : MainEvent
     data class LocateProfile(val target: LocateTarget) : MainEvent

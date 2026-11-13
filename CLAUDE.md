@@ -68,7 +68,7 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | AboutLibraries | `15.3.0` | 许可页；固定提交 `app/src/main/assets/aboutlibraries.json`，运行时读取 |
 | OkHttp | `5.5.1` | 订阅拉取、测速、更新检查 |
 | Coroutines | `1.11.0` | |
-| Serialization | `1.11.0` | `kotlinx-serialization-json` + `kotlin-serialization` 插件，类型安全导航路由用 |
+| Serialization | `1.11.0` | `kotlinx-serialization-core` + `kotlin-serialization` 插件，类型安全导航路由用 |
 | WorkManager | `2.12.0` | 含 `work-multiprocess` |
 | CameraX | `1.6.2` | 扫码，配合 zxing core 3.5.4 |
 | Coil | `3.6.3` | `io.coil-kt.coil3:coil-compose`，只用于分应用代理的应用图标 |
@@ -161,13 +161,14 @@ fmt/                   # 各协议分享链接的解析与生成
 root/                  # RootManager / RootShell / RootProxyManager / RootLanSharing
 receiver/              # BootReceiver / TaskerReceiver / WidgetProvider（Glance，:bg）
 contracts/             # ServiceControl / Tun2SocksControl / IDialerService
-helper/                # Activity 能力封装：FileChooser / Permission / QRCodeScanner /
+helper/                # Activity 能力封装：FileChooser / Permission /
                        # Notification / MessageHelper（跨进程消息）
 extension/             # Kotlin 扩展（ListExt / StringExt / ToastExt / _Ext）
 util/                  # Utils / HttpUtil / JsonUtil / LogUtil / QRCodeDecoder / ZipUtil /
                        # AppIconFetcher …
 ui/                    # 全部 Compose UI
-  AppRoute.kt          # 所有导航目标（@Serializable 路由）与参数键定义
+  AppRoute.kt          # 纯导航目标与类型安全参数
+  ExternalEntry.kt     # Android 外部入口与显式 Intent 构建
   AppNavigation.kt     # 单 Activity 的 Navigation Compose 图、结果回传与转场
   base/                # BaseActivity / BaseHelperActivity / BaseContract / BaseScreen /
                        # BaseViewModel / BaseEditViewModel / BaseResult
@@ -189,15 +190,15 @@ ui/                    # 全部 Compose UI
 - `BaseEditViewModel<S, A>`：编辑页父类，`save { saveSnapshot(action.form) }` 捕获提交快照，
   子类实现 `doDelete()`；操作返回 `null` 留在原页，`mutationJob` 负责防重入。
 - `BaseScreen(...)`：**唯一**收集 `uiState` 的地方，提供 Scaffold 槽位、事件消费、
-  在 Compose 图内通过 `LocalAppNavigator` 导航并回传 `BaseResult`；兼容 Activity 包装层
-  才使用 `BaseResultContract`。
+  在 Compose 图内只通过 `LocalAppNavigator` 导航并回传 `BaseResult`，未处理的图内请求不会降级启动
+  Activity；仅外部宿主可通过 `ExternalEntry` 交还 Main。
   它**不**订阅 `isLoading`（也无全屏遮罩）；需要顶栏进度时在槽位内自行收集。
 - `BaseActivity` / `BaseHelperActivity`：`BaseActivity` 只做 edge-to-edge + `AppTheme` +
-  `ScreenContent()`；应用内页面统一由 `MainActivity` 的 `AppNavHost` 承载；需要文件、权限、
-  扫码时继承 `BaseHelperActivity`，
+  `ScreenContent()`；应用内页面统一由 `MainActivity` 的 `AppNavHost` 承载；文件与权限由
+  `BaseHelperActivity` 提供，扫码也是图内 destination，
   能力通过 `LocalPlatformActions` 下发，**禁止在 Composable 里 `context as XxxActivity`**。
-- `AppNavigator` / `LocalAppNavigator`：Compose 图内的导航与 `BaseResult` 回传桥；没有该
-  CompositionLocal 的兼容 Activity 继续走 `BaseResultContract`。
+- `AppNavigator` / `LocalAppNavigator`：每个 Compose entry 的导航与 `BaseResult` 回传桥；
+  父页在 RESUMED 后消费结果。外部 Activity 的关闭保留 `finishWithResult`，不再有 `BaseResultContract`。
 - `BaseRepository`：只做线程收敛，`withIO { }` 包住所有阻塞调用，注入 `@IoDispatcher`。
 - 编辑草稿由 UI-owned `TextFieldState` 及 feature Saver 保存，ViewModel 接收不可变动作快照。
 
@@ -205,7 +206,7 @@ ui/                    # 全部 Compose UI
 
 ```
 ui/<feature>/
-  XxxActivity.kt     # 外部/兼容入口才保留；应用内页面由 AppNavigation 承载
+  XxxActivity.kt     # 仅系统入口保留；普通页面没有 Activity 包装层
   XxxContract.kt     # XxxUiState / XxxAction / XxxEvent（+ 该屏专用 @Immutable 模型）
   XxxScreen.kt       # 根 Composable，内部只有 BaseScreen + 槽位
   XxxViewModel.kt    # @HiltViewModel，继承 BaseViewModel / BaseEditViewModel
@@ -217,19 +218,28 @@ ui/<feature>/
 
 ### 导航与返回值
 
-应用内页面统一由 `MainActivity` 承载，`AppNavigation.kt` 持有 Navigation Compose 图；
-页面之间的 slide/fade 转场使用 Compose 的 `enterTransition` / `exitTransition` /
-`popEnterTransition` / `popExitTransition`。外部入口（Tasker、分享、URL Scheme）以及存储启动
-失败时的恢复入口仍可保留独立 Activity 包装层，不参与应用内页面导航。
+应用内页面统一由 `MainActivity` 承载，`AppNavigation.kt` 持有 Navigation Compose 图和 slide/fade
+转场。所有普通页面的 Activity 包装层及 manifest 声明已删除，仅保留 `MainActivity`、
+`UrlSchemeActivity`、`TaskerActivity`、`Sc*Activity` 等系统入口。
 
-导航用**类型安全路由**：`AppRoute` 的每个成员都是 `@Serializable` 的 `data object` / `data class`，
-`AppNavigation.kt` 只写 `composable<AppRoute.Xxx> { }` 与 `navigate(AppRoute.Xxx(...))`。
-路由属性名就是参数名，不再有 `NavRoute` 字符串常量、`toNavRoute()` 映射、占位符模板与
-`navArgument` 列表；兼容 Activity 用同一批 `AppRoute.Companion.EXTRA_*` 常量写 Intent extra。
+`BaseRoute` / `AppRoute` 只描述导航目标，不构造 Intent；`ExternalEntry.toIntent()` 只负责 Android
+入口。`BaseScreen` 在图内只调用 `LocalAppNavigator`，失败不会降级启动 Activity。没有 navigator
+的外部宿主只能通过 `ExternalEntry.fromRoute(AppRoute.Main)` 交还 Main；其它目标返回 null，
+由宿主记录日志并忽略。图内导航/关闭失败只记录日志，不抛异常或关闭宿主 Activity。
 
-`BaseScreen` 在 Compose 图内通过 `LocalAppNavigator` 导航并回传 `BaseResult`；兼容包装 Activity
-没有该 CompositionLocal 时，继续使用 `BaseResultContract`。`AppRoute.OpenUrl` 仍由宿主走
-`Utils.openUri` 处理。
+导航用**类型安全路由**：除 `OpenUrl` 外，`AppRoute` 成员为 `@Serializable` 的 `data object` /
+`data class`，图内用 `composable<AppRoute.Xxx>` 与 `navigate(AppRoute.Xxx(...))`。属性名就是参数名，
+接收方用 `SavedStateHandle.toRoute()`；`EXTRA_*` 常量仅用于测试种子，不再是 Intent 协议。
+
+结果通过 entry 的 `savedStateHandle` 回传，父页到 RESUMED 后消费。根主页退出退到后台；
+启动失败的恢复入口在同一 MainActivity 内以 Backup 为根挂载图，关闭恢复页后重试存储启动，
+不会通过存储屏障再创建主页。Main 的 `windowSoftInputMode` 统一设置为 `stateUnchanged|adjustResize`，
+编辑页继续用 `.imePadding()`。
+
+扫码用 `AppRoute.Scanner` 和 `BaseResult.Selected`，Main、路由、资产页在自身 `ResultReceived`
+处理中导入扫描内容。`ScScannerActivity` 仅把显式扫描请求转发给 Main；Main 在存储就绪后消费
+请求，配置重建不会重复入栈；恢复图不消费外部入口，恢复期间收到的扫描请求保留到重试成功后。
+权限和选图片仍由 `LocalPlatformActions` 提供。
 
 ### 多进程与 IPC
 

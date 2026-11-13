@@ -36,14 +36,12 @@ sealed interface RoutingAction : BaseAction {
     data class PresetSelected(val type: RoutingType) : RoutingAction
     data object ImportFromClipboard : RoutingAction
     data object ImportFromQrCode : RoutingAction
-    data class QrCodeScanned(val text: String?) : RoutingAction
     data object ExportToClipboard : RoutingAction
     data class ConfirmImport(val pending: PendingImport) : RoutingAction
     data class ResultReceived(val result: BaseResult) : RoutingAction
 }
 
 sealed interface RoutingEvent : BaseEvent.Platform {
-    data object ScanQrCode : RoutingEvent
     data class ShowDialog(val dialog: RoutingDialog) : RoutingEvent
 }
 

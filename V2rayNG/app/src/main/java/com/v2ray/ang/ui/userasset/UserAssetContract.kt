@@ -49,7 +49,6 @@ sealed interface UserAssetAction : BaseAction {
     data object AddUrlClicked : UserAssetAction
     data object ScanQrCodeClicked : UserAssetAction
     data class FileSelected(val uri: Uri?) : UserAssetAction
-    data class QrCodeScanned(val text: String?) : UserAssetAction
 
     data object DownloadClicked : UserAssetAction
     data class Edit(val guid: String) : UserAssetAction
@@ -63,7 +62,6 @@ sealed interface UserAssetAction : BaseAction {
 /** Platform events; consumed by the screen through `LocalPlatformActions`. */
 sealed interface UserAssetEvent : BaseEvent.Platform {
     data object PickFile : UserAssetEvent
-    data object ScanQrCode : UserAssetEvent
 }
 
 // ===== Asset URL editor =====

@@ -3,7 +3,6 @@ package com.v2ray.ang.ui.base
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,10 +20,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.ui.AppRoute
+import com.v2ray.ang.ui.ExternalEntry
 import com.v2ray.ang.ui.components.LocalAppSnackbar
 import com.v2ray.ang.ui.components.ToastType
+import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.flow.Flow
 
@@ -63,25 +65,33 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
     val navigator = LocalAppNavigator.current
 
     val resultHandler by rememberUpdatedState(onResult)
-    val launcher = rememberLauncherForActivityResult(BaseResultContract()) { result ->
-        if (autoToastResult && result.notify) snackbar.show(okText, ToastType.SUCCESS)
-        resultHandler(result)
-    }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     if (navigator != null) {
-        LaunchedEffect(navigator) {
-            navigator.results.collect { result ->
-                result ?: return@collect
-                if (autoToastResult && result.notify) snackbar.show(okText, ToastType.SUCCESS)
-                resultHandler(result)
-                navigator.consumeResult()
+        LaunchedEffect(navigator, lifecycleOwner) {
+            // A child may return while the parent is still entering; deliver only after its pop.
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                navigator.results.collect { result ->
+                    result ?: return@collect
+                    navigator.consumeResult()
+                    if (autoToastResult && result.notify) snackbar.show(okText, ToastType.SUCCESS)
+                    resultHandler(result)
+                }
             }
         }
     }
 
     BaseEventEffect(
         events = viewModel.events,
-        onFinish = { result -> navigator?.finish(result) == true },
+        onFinish = { result ->
+            if (navigator == null) false else {
+                if (!navigator.finish(result)) {
+                    LogUtil.e(AppConfig.TAG, "The navigation host did not handle finish; ignoring request")
+                }
+                // A failed graph pop must not fall through to finishing the host Activity.
+                true
+            }
+        },
         onEvent = { event ->
             when {
                 onEvent(event) -> true
@@ -90,8 +100,23 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
                         Utils.openUri(context, route.url)
                         true
                     }
-                    else -> navigator?.navigate(route) == true ||
-                        route.intent(context)?.let { launcher.launch(it); true } == true
+                    else -> {
+                        if (navigator != null) {
+                            navigator.navigate(route).also { handled ->
+                                if (!handled) LogUtil.e(AppConfig.TAG, "In-app navigation not handled: $route")
+                            }
+                        } else {
+                            // Only an external host can transfer control to the root Activity.
+                            val entry = ExternalEntry.fromRoute(route)
+                            if (entry == null) {
+                                LogUtil.e(AppConfig.TAG, "No external entry for $route; ignoring request")
+                                false
+                            } else {
+                                context.startActivity(entry.toIntent(context))
+                                true
+                            }
+                        }
+                    }
                 }
                 else -> false
             }

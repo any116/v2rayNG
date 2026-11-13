@@ -2,38 +2,26 @@
 
 ## 1. 导航模型
 
-应用内页面使用**单 Activity + Navigation Compose + 类型安全路由**；`ui/AppNavigation.kt` 是唯一的
-应用内导航图与转场入口。`ui/AppRoute.kt` 集中定义目标与参数，并保留兼容 Intent，但应用内正常
-导航优先由 `LocalAppNavigator` 交给 Compose 图处理。
-
-`ui/AppRoute.kt` 的每个目标既是路由定义，也自己构造兼容 Intent：
+应用内页面使用**单 Activity + Navigation Compose + 类型安全路由**。`AppNavigation.kt` 是唯一的
+页面图与转场入口；`AppRoute` / `BaseRoute` 只描述目标与参数，Android 入口由 `ExternalEntry` 构建。
+普通页面不再保留 Activity 包装层。
 
 ```kotlin
 sealed interface AppRoute : BaseRoute {
     @Serializable
-    data object Settings : AppRoute {
-        override fun intent(context: Context) = Intent(context, SettingsActivity::class.java)
-    }
+    data object Settings : AppRoute
+
     @Serializable
     data class ServerEdit(
         val configType: Int = EConfigType.VMESS.value,
         val guid: String = "",
         val subscriptionId: String = "",
-        val isRunning: Boolean = false,
+        val isRunning: Boolean = false
     ) : AppRoute
-    data class OpenUrl(val url: String) : AppRoute   // intent() 返回 null，由宿主处理
-    companion object { const val EXTRA_GUID = "guid" /* … */ }
+
+    data class OpenUrl(val url: String) : AppRoute
 }
 ```
-
-- 路由类由 `@Serializable` 生成 serializer，`AppNavigation.kt` 用
-  `composable<AppRoute.ServerEdit> { }` / `navController.navigate(AppRoute.ServerEdit(...))`；
-  **属性名就是参数名**，同时必须与 `AppRoute.Companion.EXTRA_*` 的值一致（兼容 Intent 复用同一批
-  key，两条路径读到的 `SavedStateHandle` 才等价）。
-- 接收方用 `handle.toRoute<AppRoute.Xxx>()` 取参数，不用 `handle.get<String>("guid")`。
-- 枚举不能进路由：`EConfigType` 传 `configType`（`EConfigType.value`），由接收方 `EConfigType.fromInt`。
-- 集合参数（如 `AppPicker.selected`）由 Navigation 的 `List<String>` 参数与 `StringListType` 承载，
-  不再手工 join/split。
 
 当前目标集合：`Main`、`SubSetting`、`PerAppProxy`、`RoutingSetting`、`UserAsset`、
 `Settings`、`Logcat`、`CheckUpdate`、`Backup`、`About`、`Scanner`、`ServerEdit`、
@@ -41,20 +29,24 @@ sealed interface AppRoute : BaseRoute {
 
 规则：
 
-1. 新增应用内目标 → 在 `AppRoute` 加 `@Serializable` 成员 + 在 `AppNavigation.kt` 注册
-   `composable<AppRoute.Xxx>` + 在 `navigate` 的 `when` 加分支。只有外部入口才需要 manifest 注册
-   Activity。**不要**在 Activity 里手写 `Intent(this, XxxActivity::class.java)`，也不要再新增
-   `NavRoute` 式字符串常量、占位符模板或 `navArgument` 列表。
-2. ViewModel 侧只调 `navigate(AppRoute.Xxx(...))`，不接触 `Intent`。
-3. 参数只传 `@Serializable` 支持的原生类型（String / Int / Boolean / 字符串集合；枚举传 `value`），
-   不传对象；接收方用 id 从数据层重新取。
-4. 外部链接一律 `AppRoute.OpenUrl(url)`，`BaseScreen` 会走 `Utils.openUri`。
-5. 返回值走 `BaseResult`（见 `state-events.md` §7）。Compose destination 通过
-   `NavBackStackEntry.savedStateHandle` 回传；兼容 Activity 包装层才使用
-   `rememberLauncherForActivityResult(BaseResultContract())`。
-6. Compose destination 从 `NavBackStackEntry` / `SavedStateHandle` 读参数；兼容 Activity
-   入口在 Activity 或 `SavedStateHandle` 里读参数，转成 ViewModel 的构造参数或初始 State，
-   Composable 不读 Intent。
+1. 新增图内目标：在 `AppRoute` 加 `@Serializable` 成员，在图中注册 `composable<AppRoute.Xxx>`
+   并补齐 `navigate` 分支；不要新增 Activity、Intent、字符串模板或 `navArgument`。
+2. ViewModel 只调用 `navigate(AppRoute.Xxx(...))`，参数由 `SavedStateHandle.toRoute()` 读取。
+   属性名就是参数名；`AppRoute.EXTRA_*` 只保留为测试种子键，不再用于兼容 Intent。
+3. 传 String / Int / Boolean / 字符串集合，不传完整实体；协议类型使用 `EConfigType.value`。
+   `AppPicker.selected` 由 Navigation 的 `StringListType` 编解码，不手工 join/split。
+4. `AppRoute.OpenUrl` 由 `BaseScreen` 走 `Utils.openUri`，不进入页面栈。
+5. 图内导航与 Finish 必须由 `LocalAppNavigator` 处理；处理失败不得启动 Activity。
+   仅没有 navigator 的外部宿主可通过 `ExternalEntry.fromRoute(AppRoute.Main)` 交还 Main；
+   其它目标返回 null，由宿主记录日志并忽略。图内失败同样记录日志并忽略，不抛异常或关闭 Activity。
+6. 返回值由 `savedStateHandle` 传递，父页在 RESUMED 后消费一次；没有 `BaseResultContract`。
+   系统入口的 Activity 结果（如 Tasker）保留自身协议，不把页面导航改为 ActivityResult。
+7. 扫码是普通 `AppRoute.Scanner`，用 `BaseResult.Selected` 回传；父页在 `ResultReceived` 中处理。
+   `ScScannerActivity` 只把扫描请求转交 Main，权限和选图仍属 `PlatformActions`。
+8. 启动失败时 Main 内部以 Backup 为根挂载恢复图，关闭根恢复页后重试启动，不新起 Activity。
+   MAIN 根退出退到后台；其他返回仍遵守页面的保存/确认逻辑。恢复图不消费外部入口，
+   恢复期间收到的扫描请求保留到重试成功、主图挂载后再消费；Backup 的 `AppBackHandler` 将系统返回派发为 Back Action。
+9. Main 统一使用 `stateUnchanged|adjustResize`，编辑页保留 `.imePadding()`，不要叠加第二份 IME 避让。
 
 ## 2. Compose 转场
 

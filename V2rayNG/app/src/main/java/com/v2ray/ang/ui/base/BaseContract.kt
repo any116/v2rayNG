@@ -1,7 +1,6 @@
 package com.v2ray.ang.ui.base
 
 import android.content.Context
-import android.content.Intent
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -41,27 +40,19 @@ sealed interface BaseEvent {
     @Immutable
     data class Finish(val result: BaseResult = BaseResult.Cancelled) : BaseEvent
 
-    /** Navigate to [route]; the route itself knows how to build its Intent. */
+    /** Describe a navigation target; the host owns its execution. */
     @Immutable
     data class Navigate(val route: BaseRoute) : BaseEvent
 
     /**
-     * Capability only an Activity can perform (VPN permission, core start/stop, share, scan…).
+     * Capability only an Activity can perform (VPN permission, core start/stop, share…).
      * Features extend it, e.g. `sealed interface MainEvent : BaseEvent.Platform`.
      */
     interface Platform : BaseEvent
 }
 
-/**
- * Navigation target.
- *
- * Each route builds its own [Intent], which removes string routes and the central `when` table
- * that used to live in the Activity. Returning `null` marks a non-Activity navigation (external
- * link) handled by the host.
- */
-interface BaseRoute {
-    fun intent(context: Context): Intent?
-}
+/** Pure navigation intent, with no Context or Activity construction API. */
+interface BaseRoute
 
 /**
  * Lazily resolved text: the ViewModel names a resource, the UI resolves it.

@@ -26,7 +26,7 @@ class UserAssetViewModel @Inject constructor(
     /** Only decides which [BaseResult] Back answers with. */
     private var changed = false
 
-    /** Back can be pressed again before the Activity actually finishes. */
+    /** Back can be pressed again before the destination actually pops. */
     private var finishing = false
 
     private val _downloadProgress = MutableStateFlow<AssetDownloadProgress?>(null)
@@ -55,12 +55,11 @@ class UserAssetViewModel @Inject constructor(
             is UserAssetAction.GeoSourceSelected -> selectGeoSource(action.value)
 
             UserAssetAction.AddFileClicked -> platform(UserAssetEvent.PickFile)
-            UserAssetAction.ScanQrCodeClicked -> platform(UserAssetEvent.ScanQrCode)
+            UserAssetAction.ScanQrCodeClicked -> navigate(AppRoute.Scanner)
             UserAssetAction.AddUrlClicked -> navigate(AppRoute.UserAssetUrl())
 
             // A null uri means the picker was dismissed, which is not a failure worth reporting.
             is UserAssetAction.FileSelected -> action.uri?.let(::importFile)
-            is UserAssetAction.QrCodeScanned -> importFromQrCode(action.text)
 
             UserAssetAction.DownloadClicked -> download()
 
@@ -71,7 +70,15 @@ class UserAssetViewModel @Inject constructor(
             UserAssetAction.DialogConfirm -> confirmDialog()
             UserAssetAction.DialogDismiss -> setState { copy(dialog = null) }
 
-            is UserAssetAction.ResultReceived -> if (action.result.isOk) changed = true
+            is UserAssetAction.ResultReceived -> handleResult(action.result)
+        }
+    }
+
+    private fun handleResult(result: BaseResult) {
+        if (result is BaseResult.Selected) {
+            result.values.firstOrNull()?.let(::importFromQrCode)
+        } else if (result.isOk) {
+            changed = true
         }
     }
 

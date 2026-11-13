@@ -10,6 +10,7 @@ ui/base/       屏幕基座（BaseScreen / BaseActivity / BaseHelperActivity /
                BaseViewModel / BaseEditViewModel / BaseContract / BaseResult /
                AppNavigator / PlatformActions），不可随意扩充
 ui/AppNavigation.kt  单 Activity 的 Navigation Compose 图、结果回传与统一转场
+ui/ExternalEntry.kt   显式 Android 入口，普通 route 不提供 Intent API
 ui/components/ 跨屏共享组件与主题
   Theme.kt                    AppTheme、色板、AppSemanticColors、LocalAppColors、
                               LocalDarkTheme、ThemeManager、resolveDarkTheme
@@ -40,7 +41,7 @@ feature 目录，宁可以后再上提，不要预先泛化。
 | `XxxContract.kt` | `XxxUiState`、`XxxAction`、`XxxEvent`，以及该屏专用的 `@Immutable` 小模型 |
 | `XxxScreen.kt` | `XxxScreen(viewModel, …)` 根 Composable + 少量私有子 Composable |
 | `XxxViewModel.kt` | 一个 `@HiltViewModel` 类 |
-| `XxxActivity.kt` | 外部/兼容入口才保留的 `@AndroidEntryPoint` 类 |
+| `XxxActivity.kt` | 仅系统入口保留的 `@AndroidEntryPoint` 类，普通页面没有包装 Activity |
 | `XxxDialogs.kt` | `XxxDialog` 密封接口 + `XxxDialogs(...)` 宿主 |
 | `XxxTopBar.kt` / `XxxBottomBar.kt` | 复杂栏区 |
 | `XxxSections.kt` / `XxxRuleList.kt` / `XxxFormFields.kt` / `XxxProtocolForm.kt` 等 | 大表单/大列表的分块 |

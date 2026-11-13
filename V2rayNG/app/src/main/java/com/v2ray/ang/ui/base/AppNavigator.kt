@@ -4,19 +4,19 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.flow.Flow
 
-/** Navigation bridge shared by Compose destinations and legacy Activity wrappers. */
+/** Navigation and result bridge owned by each Compose back-stack entry. */
 @Stable
 interface AppNavigator {
     /** Results returned by the most recently popped child destination. */
     val results: Flow<BaseResult?>
 
-    /** @return true when an application route was handled by the Compose graph. */
+    /** @return true when handled, including an explicitly logged discard from an inactive entry. */
     fun navigate(route: BaseRoute): Boolean
 
-    /** @return true when the current destination was popped by the Compose graph. */
+    /** @return true when popped, exited at the root, or explicitly discarded from an inactive entry. */
     fun finish(result: BaseResult): Boolean
 
-    /** Clears the result after the current screen has delivered it to its ViewModel. */
+    /** Claims the result before the screen delivers it to its ViewModel. */
     fun consumeResult()
 }
 

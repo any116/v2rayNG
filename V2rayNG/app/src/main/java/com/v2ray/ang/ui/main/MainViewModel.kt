@@ -224,7 +224,7 @@ class MainViewModel @Inject constructor(
             MainAction.SortByTestResults -> sortByTestResults()
             MainAction.UpdateSubscriptions -> updateSubscriptions()
             MainAction.ExportAll -> exportAll()
-            MainAction.ImportFromQrCode -> platform(MainEvent.ScanQrCode)
+            MainAction.ImportFromQrCode -> navigate(AppRoute.Scanner)
             MainAction.ImportFromFile -> platform(MainEvent.PickConfigFile)
             MainAction.ImportFromClipboard -> launch(loading = true) { importBatchConfig(repo.readClipboard()) }
             is MainAction.ConfigFileSelected -> launch(loading = true) {
@@ -340,6 +340,12 @@ class MainViewModel @Inject constructor(
     }
 
     private fun handleResult(result: BaseResult) {
+        if (result is BaseResult.Selected) {
+            result.values.firstOrNull()?.takeIf { it.isNotBlank() }?.let { text ->
+                launch(loading = true) { importBatchConfig(text) }
+            }
+            return
+        }
         val confirmRemove = repo.confirmRemove()
         val doubleColumn = repo.doubleColumnDisplay()
         setState { copy(confirmRemove = confirmRemove, doubleColumnDisplay = doubleColumn) }

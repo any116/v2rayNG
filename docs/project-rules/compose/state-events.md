@@ -69,10 +69,10 @@ sealed interface XxxEvent : BaseEvent.Platform {
 | --- | --- |
 | `BaseEvent.Message` | `BaseEventEffect` → `LocalAppSnackbar` |
 | `BaseEvent.Navigate(route)` | `BaseScreen`：`AppRoute.OpenUrl` 走 `Utils.openUri`，应用内由
-  `LocalAppNavigator` 交给 `AppNavigation.kt`，兼容 Activity 才走 `BaseResultContract` |
-| `BaseEvent.Finish(result)` | `BaseEventEffect` → `Activity.finishWithResult` |
+  `LocalAppNavigator` 交给 `AppNavigation.kt`；无 navigator 的外部宿主只能显式交还 Main |
+| `BaseEvent.Finish(result)` | 图内由 navigator pop / 根退出；外部宿主才 `Activity.finishWithResult` |
 | `BaseEvent.Platform` 子类型 | 先由 `BaseScreen(onEvent = …)` 里的屏内处理器截获（弹窗、滚动定位），未截获的由
-  `AppNavigation.kt` 或兼容 `XxxActivity.handlePlatformEvent` 翻译 |
+  `AppNavigation.kt` / `MainActivity.handlePlatformEvent` 或系统入口翻译 |
 
 `onEvent` 返回 `true` = 已消费。样板：
 
@@ -155,11 +155,12 @@ sealed interface XxxDialog {
 sealed interface BaseResult { Cancelled / Saved / Deleted / Changed / Selected }
 ```
 
-- 子页：`finishWithResult(BaseResult.Saved(...))`。
+- 子页 ViewModel：`finishWith(BaseResult.Saved(...))`，由图内 navigator 执行。
 - 父页：`BaseScreen(onResult = { viewModel.onAction(XxxAction.ResultReceived(it)) })`。
 - ViewModel 在 `handleResult` 里按 `result.refreshList` / `result.restartService` 决定后续动作。
 - `autoToastResult = true`（默认）时框架已经替你弹成功提示，别重复弹。
-- `BaseResult.Selected` 用于"选择器"语义（如 `AppPicker`），`refreshList` / `notify` 都为 false。
+- `BaseResult.Selected` 用于选择器和扫码，`refreshList` / `notify` 都为 false；调用页决定导入或字段更新。
+- 结果写到父 entry 的 `savedStateHandle`，父页 RESUMED 后先 consume 再派发 Action，避免返回转场中抢导航。
 
 ## 8. 预测性返回观察状态
 

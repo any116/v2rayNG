@@ -36,16 +36,20 @@ class RoutingSettingViewModel @Inject constructor(
             RoutingAction.PresetClicked -> platform(RoutingEvent.ShowDialog(RoutingDialog.Presets))
             is RoutingAction.PresetSelected -> handleImport(PendingImport.Preset(action.type))
             RoutingAction.ImportFromClipboard -> handleImport(PendingImport.Clipboard)
-            RoutingAction.ImportFromQrCode -> platform(RoutingEvent.ScanQrCode)
-            is RoutingAction.QrCodeScanned ->
-                action.text?.takeIf { it.isNotBlank() }
-                    ?.let { handleImport(PendingImport.Text(it)) }
+            RoutingAction.ImportFromQrCode -> navigate(AppRoute.Scanner)
             RoutingAction.ExportToClipboard -> export()
             is RoutingAction.ConfirmImport -> launch(loading = true) { runImport(action.pending) }
-            is RoutingAction.ResultReceived -> if (action.result.isOk) {
-                changed = true
-                load()
-            }
+            is RoutingAction.ResultReceived -> handleResult(action.result)
+        }
+    }
+
+    private fun handleResult(result: BaseResult) {
+        if (result is BaseResult.Selected) {
+            result.values.firstOrNull()?.takeIf { it.isNotBlank() }
+                ?.let { handleImport(PendingImport.Text(it)) }
+        } else if (result.isOk) {
+            changed = true
+            load()
         }
     }
 

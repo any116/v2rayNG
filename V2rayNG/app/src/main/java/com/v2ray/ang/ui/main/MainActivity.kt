@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +38,7 @@ import com.v2ray.ang.extension.delay
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.ui.AppRoute
 import com.v2ray.ang.ui.AppNavHost
+import com.v2ray.ang.ui.ExternalEntry
 import com.v2ray.ang.ui.base.BaseHelperActivity
 import com.v2ray.ang.util.LogUtil
 import dagger.hilt.android.AndroidEntryPoint
@@ -51,6 +53,9 @@ class MainActivity : BaseHelperActivity() {
 
     private var pendingLocalNetwork = false
 
+    /** Retained until the storage barrier opens and the navigation graph consumes this request. */
+    private var pendingEntry by mutableStateOf<String?>(null)
+
     /** The permission request moved behind the storage barrier; ask at most once per Activity. */
     private var notificationAsked = false
 
@@ -61,6 +66,11 @@ class MainActivity : BaseHelperActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingEntry = if (savedInstanceState != null) {
+            savedInstanceState.getString(KEY_PENDING_ENTRY)
+        } else {
+            externalEntryAction(intent)
+        }
         // Keep the root task in the background instead of letting Android finish the Activity
         // into the caller's cold/installer window, which can expose a white surface on first back.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
@@ -77,12 +87,13 @@ class MainActivity : BaseHelperActivity() {
     override fun ScreenContent() {
         // An attempt that does not end in "ready" shows an explicit failure/retry surface
         // instead of the main UI. Retry really re-runs the storage bootstrap now.
-        var attempt by remember { mutableIntStateOf(0) }
+        var attempt by rememberSaveable { mutableIntStateOf(0) }
         // Pure, side-effect-free check: a recreated Activity in a live process starts out ready
         // and never draws the spinner frame. State seeding and observer startup still happen
         // exactly once, inside awaitReady() below — never during composition.
         var ready by remember { mutableStateOf(viewModel.isStorageReadyNow()) }
         var failed by remember { mutableStateOf(false) }
+        var recovering by rememberSaveable { mutableStateOf(false) }
         LaunchedEffect(attempt) {
             failed = false
             // No-op while an attempt is still running (timeout case) or after success.
@@ -109,6 +120,19 @@ class MainActivity : BaseHelperActivity() {
             }
         }
         when {
+            recovering -> AppNavHost(
+                mainViewModel = viewModel,
+                onMainPlatformEvent = ::handlePlatformEvent,
+                startDestination = AppRoute.Backup,
+                // Recovery never consumes external entries; pending requests wait for the ready graph.
+                externalEntryAction = null,
+                onRootFinish = {
+                    recovering = false
+                    ready = false
+                    attempt++
+                }
+            )
+
             ready -> {
                 LaunchedEffect(Unit) {
                     if (!notificationAsked) {
@@ -118,13 +142,16 @@ class MainActivity : BaseHelperActivity() {
                 }
                 AppNavHost(
                     mainViewModel = viewModel,
-                    onMainPlatformEvent = ::handlePlatformEvent
+                    onMainPlatformEvent = ::handlePlatformEvent,
+                    onRootFinish = { moveTaskToBack(false) },
+                    externalEntryAction = pendingEntry,
+                    onExternalEntryHandled = { pendingEntry = null }
                 )
             }
 
             failed -> BootFailureContent(
                 onRetry = { attempt++ },
-                onRestoreFromWebdav = { startActivity(AppRoute.Backup.intent(this)) }
+                onRestoreFromWebdav = { recovering = true }
             )
 
             else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -178,12 +205,6 @@ class MainActivity : BaseHelperActivity() {
             }
             true
         }
-        MainEvent.ScanQrCode -> {
-            scanQrCode { text ->
-                if (!text.isNullOrBlank()) viewModel.onAction(MainAction.ImportBatchConfig(text))
-            }
-            true
-        }
         MainEvent.PickConfigFile -> {
             pickFile { uri -> uri?.let { viewModel.onAction(MainAction.ConfigFileSelected(it)) } }
             true
@@ -228,10 +249,21 @@ class MainActivity : BaseHelperActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        externalEntryAction(intent)?.let { pendingEntry = it }
         viewModel.onAction(MainAction.RefreshGroups)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString(KEY_PENDING_ENTRY, pendingEntry)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun externalEntryAction(intent: Intent?): String? = intent?.action?.takeIf {
+        it == ExternalEntry.ACTION_OPEN_MAIN || it == ExternalEntry.ACTION_SCAN
+    }
+
     private companion object {
+        const val KEY_PENDING_ENTRY = "pending_external_entry"
         /**
          * Generous on purpose: the first launch after an upgrade may run the whole legacy
          * import (thousands of rows) before the barrier opens.

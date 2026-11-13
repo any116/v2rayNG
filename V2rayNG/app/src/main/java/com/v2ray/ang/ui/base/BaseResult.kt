@@ -1,9 +1,7 @@
 package com.v2ray.ang.ui.base
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
-import androidx.activity.result.contract.ActivityResultContract
 
 /**
  * The single screen-result contract of the app; replaces ProfileEditorResult, bare
@@ -103,13 +101,6 @@ fun Intent?.toBaseResult(): BaseResult {
         )
         else -> BaseResult.Cancelled
     }
-}
-
-/** The single ActivityResultContract used by [BaseScreen] for every navigation. */
-class BaseResultContract : ActivityResultContract<Intent, BaseResult>() {
-    override fun createIntent(context: Context, input: Intent): Intent = input
-    override fun parseResult(resultCode: Int, intent: Intent?): BaseResult =
-        if (resultCode != Activity.RESULT_OK) BaseResult.Cancelled else intent.toBaseResult()
 }
 
 /** Finishes the Activity, mapping [result] onto RESULT_OK / RESULT_CANCELED. */

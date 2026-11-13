@@ -12,7 +12,7 @@ import com.v2ray.ang.data.StorageBootstrap
 import com.v2ray.ang.enums.WidgetRunState
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.WidgetStateManager
-import com.v2ray.ang.ui.AppRoute
+import com.v2ray.ang.ui.ExternalEntry
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.ui.widget.SwitchWidget
 import kotlinx.coroutines.CoroutineScope
@@ -79,7 +79,7 @@ class WidgetProvider : GlanceAppWidgetReceiver() {
             // The system consent dialog needs a visible Activity; a receiver cannot show one.
             WidgetStateManager.publish(WidgetRunState.PERMISSION_REQUIRED)
             context.startActivity(
-                AppRoute.Main.intent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ExternalEntry.Main.toIntent(context).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
             return
         }

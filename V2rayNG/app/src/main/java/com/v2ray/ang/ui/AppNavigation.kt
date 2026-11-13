@@ -14,6 +14,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -22,6 +25,7 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.enums.PermissionType
 import com.v2ray.ang.handler.AppLocaleManager
@@ -41,6 +45,7 @@ import com.v2ray.ang.ui.base.LocalPlatformActions
 import com.v2ray.ang.ui.base.findActivity
 import com.v2ray.ang.ui.base.toBaseResult
 import com.v2ray.ang.ui.base.toIntent
+import com.v2ray.ang.ui.components.LocalPredictiveBackProgress
 import com.v2ray.ang.ui.checkupdate.CheckUpdateScreen
 import com.v2ray.ang.ui.checkupdate.CheckUpdateViewModel
 import com.v2ray.ang.ui.logcat.LogcatAction
@@ -52,10 +57,8 @@ import com.v2ray.ang.ui.main.MainScreen
 import com.v2ray.ang.ui.main.MainViewModel
 import com.v2ray.ang.ui.perappproxy.PerAppProxyScreen
 import com.v2ray.ang.ui.perappproxy.PerAppProxyViewModel
-import com.v2ray.ang.ui.routing.RoutingAction
 import com.v2ray.ang.ui.routing.RoutingEditScreen
 import com.v2ray.ang.ui.routing.RoutingEditViewModel
-import com.v2ray.ang.ui.routing.RoutingEvent
 import com.v2ray.ang.ui.routing.RoutingSettingScreen
 import com.v2ray.ang.ui.routing.RoutingSettingViewModel
 import com.v2ray.ang.ui.scanner.ScannerAction
@@ -75,6 +78,7 @@ import com.v2ray.ang.ui.userasset.UserAssetScreen
 import com.v2ray.ang.ui.userasset.UserAssetUrlScreen
 import com.v2ray.ang.ui.userasset.UserAssetUrlViewModel
 import com.v2ray.ang.ui.userasset.UserAssetViewModel
+import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.ShareUtil
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -138,16 +142,23 @@ private class NavEntryNavigator(
     }
 }
 
-/** The single in-app Compose graph; Activity wrappers remain for external and compatibility entry points. */
+/** The only application screen graph; even bootstrap recovery and shortcut scanning use it. */
 @Composable
 fun AppNavHost(
     mainViewModel: MainViewModel,
     onMainPlatformEvent: (MainEvent) -> Boolean,
+    onRootFinish: (BaseResult) -> Unit,
     modifier: Modifier = Modifier,
+    startDestination: AppRoute = AppRoute.Main,
+    externalEntryAction: String? = null,
+    onExternalEntryHandled: () -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val platform = LocalPlatformActions.current
     val navController = rememberNavController()
+    val rootFinish by rememberUpdatedState(onRootFinish)
+    val entryHandled by rememberUpdatedState(onExternalEntryHandled)
+    val backProgress = LocalPredictiveBackProgress.current
 
     /**
      * The route type decides the destination, so each branch is a plain `navigate(route)` call.
@@ -179,7 +190,18 @@ fun AppNavHost(
     }
 
     fun finish(entry: NavBackStackEntry, result: BaseResult): Boolean {
-        val previous = navController.previousBackStackEntry ?: return false
+        // An asynchronous finish from an exiting entry must never pop the new destination.
+        if (entry != navController.currentBackStackEntry) {
+            LogUtil.d(AppConfig.TAG, "Ignoring finish from inactive navigation entry ${entry.id}")
+            return true
+        }
+        val previous = navController.previousBackStackEntry
+        if (previous == null) {
+            // Recovery exits locally; no Activity pause/resume will reset gesture suppression.
+            if (!entry.destination.hasRoute<AppRoute.Main>()) backProgress?.onBackFinished()
+            rootFinish(result)
+            return true
+        }
         previous.savedStateHandle[RESULT_KEY] = result.toIntent()
         return navController.popBackStack()
     }
@@ -188,14 +210,22 @@ fun AppNavHost(
     fun navigator(entry: NavBackStackEntry): AppNavigator = remember(entry) {
         NavEntryNavigator(
             entry = entry,
-            navigateRoute = ::navigate,
+            navigateRoute = { route ->
+                if (entry != navController.currentBackStackEntry) {
+                    LogUtil.d(AppConfig.TAG, "Ignoring navigation from inactive entry ${entry.id}: $route")
+                    // Consumed deliberately: a late event must not navigate from the replacement entry.
+                    true
+                } else {
+                    navigate(route)
+                }
+            },
             popRoute = { result -> finish(entry, result) },
         )
     }
 
     NavHost(
         navController = navController,
-        startDestination = AppRoute.Main,
+        startDestination = startDestination,
         modifier = modifier.fillMaxSize(),
         enterTransition = { enterFromRight() },
         exitTransition = { exitToLeft() },
@@ -223,22 +253,8 @@ fun AppNavHost(
         }
 
         composable<AppRoute.RoutingSetting> { entry ->
-            val viewModel = hiltViewModel<RoutingSettingViewModel>()
-            val platformEventHandler: (RoutingEvent) -> Boolean = remember(viewModel, platform) {
-                { event ->
-                    when (event) {
-                        RoutingEvent.ScanQrCode -> {
-                            platform.scanQrCode { text ->
-                                viewModel.onAction(RoutingAction.QrCodeScanned(text))
-                            }
-                            true
-                        }
-                        else -> false
-                    }
-                }
-            }
             CompositionLocalProvider(LocalAppNavigator provides navigator(entry)) {
-                RoutingSettingScreen(viewModel, platformEventHandler)
+                RoutingSettingScreen(hiltViewModel<RoutingSettingViewModel>())
             }
         }
 
@@ -394,5 +410,14 @@ fun AppNavHost(
                 AppPickerScreen(hiltViewModel<AppPickerViewModel>())
             }
         }
+    }
+
+    // Run after NavHost installs the graph. Restored requests are cleared once, not on every resume.
+    LaunchedEffect(externalEntryAction) {
+        val action = externalEntryAction ?: return@LaunchedEffect
+        // Claim the request before changing the stack so subsequent saved state cannot replay it.
+        entryHandled()
+        navController.popBackStack<AppRoute.Main>(inclusive = false)
+        if (action == ExternalEntry.ACTION_SCAN) navigate(AppRoute.Scanner)
     }
 }

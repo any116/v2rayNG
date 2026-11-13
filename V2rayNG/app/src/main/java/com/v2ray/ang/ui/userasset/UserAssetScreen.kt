@@ -72,11 +72,6 @@ fun UserAssetScreen(viewModel: UserAssetViewModel) {
                     true
                 }
 
-                UserAssetEvent.ScanQrCode -> {
-                    platform.scanQrCode { text -> onAction(UserAssetAction.QrCodeScanned(text)) }
-                    true
-                }
-
                 else -> false
             }
         }
