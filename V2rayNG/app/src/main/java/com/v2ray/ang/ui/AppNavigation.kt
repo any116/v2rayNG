@@ -202,8 +202,16 @@ fun AppNavHost(
             rootFinish(result)
             return true
         }
-        previous.savedStateHandle[RESULT_KEY] = result.toIntent()
-        return navController.popBackStack()
+        val resultHandle = previous.savedStateHandle
+        val previousResult = resultHandle.get<Intent>(RESULT_KEY)
+        resultHandle[RESULT_KEY] = result.toIntent()
+        val popped = navController.popBackStack()
+        if (!popped) {
+            // Restore the old value without remove(), which would detach the existing StateFlow.
+            resultHandle[RESULT_KEY] = previousResult
+            backProgress?.onBackFinished()
+        }
+        return popped
     }
 
     @Composable

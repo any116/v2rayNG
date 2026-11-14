@@ -43,6 +43,7 @@ abstract class ScServiceActivity(private val command: ShortcutCommand) : BaseAct
         }
     )
 
+    // The headless composition still consumes service/finish events; composesContent must remain true.
     @Composable
     override fun ScreenContent() = ShortcutScreen(viewModel, ::handleEvent)
 
@@ -73,6 +74,8 @@ abstract class ScServiceActivity(private val command: ShortcutCommand) : BaseAct
 /** Keeps the existing shortcut component while all scanner UI lives in Main's graph. */
 @AndroidEntryPoint
 class ScScannerActivity : BaseActivity() {
+    override val composesContent: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         startActivity(ExternalEntry.Scanner.toIntent(this))

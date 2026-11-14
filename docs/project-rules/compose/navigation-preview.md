@@ -39,8 +39,10 @@ sealed interface AppRoute : BaseRoute {
 5. 图内导航与 Finish 必须由 `LocalAppNavigator` 处理；处理失败不得启动 Activity。
    仅没有 navigator 的外部宿主可通过 `ExternalEntry.fromRoute(AppRoute.Main)` 交还 Main；
    其它目标返回 null，由宿主记录日志并忽略。图内失败同样记录日志并忽略，不抛异常或关闭 Activity。
+   事件消费层返回 true 表示请求已消费（含记录日志后忽略），不是导航执行成功。
 6. 返回值由 `savedStateHandle` 传递，父页在 RESUMED 后消费一次；没有 `BaseResultContract`。
    系统入口的 Activity 结果（如 Tasker）保留自身协议，不把页面导航改为 ActivityResult。
+   pop 失败时恢复父 entry 的旧结果值，不调用 `SavedStateHandle.remove`，避免断开已订阅的 StateFlow。
 7. 扫码是普通 `AppRoute.Scanner`，用 `BaseResult.Selected` 回传；父页在 `ResultReceived` 中处理。
    `ScScannerActivity` 只把扫描请求转交 Main，权限和选图仍属 `PlatformActions`。
 8. 启动失败时 Main 内部以 Backup 为根挂载恢复图，关闭根恢复页后重试启动，不新起 Activity。

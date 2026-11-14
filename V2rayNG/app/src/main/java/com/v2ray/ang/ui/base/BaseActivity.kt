@@ -33,6 +33,9 @@ abstract class BaseActivity : ComponentActivity() {
     private var predictiveBackEnabled = true
     private var legacyBackCallback: Any? = null
 
+    /** Pure forwarding entries can skip composition; hosts consuming ViewModel events must keep it. */
+    protected open val composesContent: Boolean = true
+
     override fun attachBaseContext(newBase: Context?) {
         val base = requireNotNull(newBase) { "attachBaseContext called with null" }
         super.attachBaseContext(AppLocaleManager.localizedContext(base))
@@ -47,6 +50,7 @@ abstract class BaseActivity : ComponentActivity() {
             // predictive path, so it cannot compete with PredictiveBackHandler.
             legacyBackCallback = Api33Impl.register(this)
         }
+        if (!composesContent) return
         setContent {
             CompositionLocalProvider(
                 LocalPlatformActions provides (this@BaseActivity as? PlatformActions

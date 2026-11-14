@@ -102,20 +102,20 @@ fun <S : BaseUiState, A : BaseAction> BaseScreen(
                     }
                     else -> {
                         if (navigator != null) {
-                            navigator.navigate(route).also { handled ->
-                                if (!handled) LogUtil.e(AppConfig.TAG, "In-app navigation not handled: $route")
+                            if (!navigator.navigate(route)) {
+                                LogUtil.e(AppConfig.TAG, "In-app navigation not handled: $route")
                             }
                         } else {
                             // Only an external host can transfer control to the root Activity.
                             val entry = ExternalEntry.fromRoute(route)
                             if (entry == null) {
                                 LogUtil.e(AppConfig.TAG, "No external entry for $route; ignoring request")
-                                false
                             } else {
                                 context.startActivity(entry.toIntent(context))
-                                true
                             }
                         }
+                        // Consumed even when ignored: navigation has no further fallback handler.
+                        true
                     }
                 }
                 else -> false
