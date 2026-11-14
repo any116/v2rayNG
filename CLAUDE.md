@@ -194,7 +194,8 @@ ui/                    # 全部 Compose UI
   Activity；仅外部宿主可通过 `ExternalEntry` 交还 Main。
   它**不**订阅 `isLoading`（也无全屏遮罩）；需要顶栏进度时在槽位内自行收集。
 - `BaseActivity` / `BaseHelperActivity`：`BaseActivity` 只做 edge-to-edge + `AppTheme` +
-  `ScreenContent()`；纯转发入口可通过 `composesContent = false` 跳过 Composition（ScScanner），
+  `ScreenContent()`；无界面 ScService 通过 `configureSystemBars = false` 跳过系统栏配置，避免旧版 Android
+  的导航栏 scrim 产生白色横条。纯转发入口可通过 `composesContent = false` 跳过 Composition（ScScanner），
   ScService 仍依赖 Composition 消费 ViewModel 事件，不能关闭。应用内页面统一由 `MainActivity` 的 `AppNavHost` 承载；文件与权限由
   `BaseHelperActivity` 提供，扫码也是图内 destination，
   能力通过 `LocalPlatformActions` 下发，**禁止在 Composable 里 `context as XxxActivity`**。

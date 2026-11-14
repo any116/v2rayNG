@@ -33,6 +33,9 @@ abstract class BaseActivity : ComponentActivity() {
     private var predictiveBackEnabled = true
     private var legacyBackCallback: Any? = null
 
+    /** Headless entries can preserve transparent system bars without legacy edge-to-edge scrims. */
+    protected open val configureSystemBars: Boolean = true
+
     /** Pure forwarding entries can skip composition; hosts consuming ViewModel events must keep it. */
     protected open val composesContent: Boolean = true
 
@@ -43,7 +46,7 @@ abstract class BaseActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        if (configureSystemBars) enableEdgeToEdge()
         predictiveBackEnabled = PredictiveBackManager.isEnabled()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !predictiveBackEnabled) {
             // This callback is only the explicit opt-out bridge. It is never registered on the
@@ -108,7 +111,7 @@ abstract class BaseActivity : ComponentActivity() {
             LocalContext provides localeContext,
             LocalResources provides localeContext.resources,
         ) {
-            AppTheme { ScreenContent() }
+            AppTheme(configureSystemBars = configureSystemBars) { ScreenContent() }
         }
     }
 

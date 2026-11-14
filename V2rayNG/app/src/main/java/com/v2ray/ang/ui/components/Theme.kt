@@ -206,6 +206,7 @@ fun resolveDarkTheme(): Boolean {
 @Composable
 fun AppTheme(
     darkTheme: Boolean = resolveDarkTheme(),
+    configureSystemBars: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val dynamicColor by ThemeManager.dynamicColorEnabled.collectAsStateWithLifecycle()
@@ -223,7 +224,7 @@ fun AppTheme(
     val snackbarController = rememberAppSnackbarController()
     val view = LocalView.current
 
-    if (!view.isInEditMode) {
+    if (configureSystemBars && !view.isInEditMode) {
         LaunchedEffect(view, darkTheme) {
             val window = (view.context as? Activity)?.window ?: return@LaunchedEffect
             WindowCompat.getInsetsController(window, view).apply {

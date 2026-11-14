@@ -111,8 +111,10 @@ internal val FieldVerticalPad = 4.dp
 
 ## 8. Edge-to-edge 与 insets
 
-- `BaseActivity` 已 `enableEdgeToEdge()`；状态栏/导航栏图标颜色由 `AppTheme` 里的
-  `WindowCompat.getInsetsController` 跟随深浅色。
+- `BaseActivity` 默认 `enableEdgeToEdge()`；状态栏/导航栏图标颜色由 `AppTheme` 里的
+  `WindowCompat.getInsetsController` 跟随深浅色。无界面的 `ScServiceActivity` 设置
+  `configureSystemBars = false`，同时跳过 edge-to-edge 和主题的系统栏更新，保留透明主题的系统栏，
+  避免 Android 8/9 的浅色导航栏 scrim 显示为白色横条；Composition 仍保留以消费服务与关闭事件。
 - `BaseScreen` 的 `Scaffold` 使用 `contentWindowInsets = WindowInsets(0)`（inset0），
   即**不自动吸收系统栏 inset**，`innerPadding` 只反映 topBar / bottomBar。
 - 需要自己处理时用 `Modifier.windowInsetsPadding(WindowInsets.navigationBars)`

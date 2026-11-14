@@ -31,6 +31,9 @@ class ScStopActivity : ScServiceActivity(ShortcutCommand.STOP)
  */
 abstract class ScServiceActivity(private val command: ShortcutCommand) : BaseActivity() {
 
+    // Android 8/9 edge-to-edge adds a light navigation-bar scrim even to a transparent window.
+    override val configureSystemBars: Boolean = false
+
     /**
      * The command is not an Intent extra, so it travels through Hilt's assisted-injection
      * callback instead of the SavedStateHandle.
