@@ -69,11 +69,9 @@ private fun rememberBottomState(viewModel: MainViewModel): State<MainBottomState
 同样地，content 层再把 state 拆成 `@Immutable` 的参数包
 （`MainPagerArgs`），让下游只依赖它真正用到的字段。
 
-主屏波动阴影封装在 `MainBottomBar` 的状态区内，用软边径向渐变绘制一次扩散阴影，每帧一次
-圆形绘制，不维护粒子或轨迹列表，不需要屏幕级装饰节点或全局边界状态。动画进度与点击坐标
-只在绘制块中读取，不会逐帧重组主列表。仅实际状态区点击启动一次有限动画；进度初始为完成态，
-空闲与结束后跳过绘制。触摸坐标观察不消费事件，也不启动动画。列表 bottom padding 使用底栏
-实测总高度（含外边距与系统 inset）。
+主屏底栏状态区与服务按钮仅保留原生点击水波纹，关闭整块 focus/hover/drag 状态遮罩，
+不维护自定义阴影、缩放、颜色或图标过渡动画以及点击坐标状态。
+列表 bottom padding 使用底栏实测总高度（含外边距与系统 inset）。
 
 ## 3. 稳定性
 

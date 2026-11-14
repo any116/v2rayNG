@@ -131,18 +131,10 @@ internal val FieldVerticalPad = 4.dp
   后者会缩短列表视口。列表 bottom padding 使用底栏实测总高度
   （含外边距与 navigation bars inset）加 `ListBottomGap`，避免大字体改变底栏高度后遮住末行。
 - 主屏悬浮底栏左右外边距为 8.dp。状态文字的 start padding 放在 clickable 内部，
-  让点击区域延伸到外侧圆弧，再由底栏 Surface 统一裁剪。状态区禁用 indication，FAB 局部
-  使用 `LocalRippleConfiguration provides null` 禁用内部波纹；两者均用细边框保留键盘焦点反馈。
-- `MainWaveShadow` 仅在底栏状态区的实际 `onClick` 后显示波动阴影，Surface / FAB 的 shadow
-  elevation 均为 0.dp。阴影使用主题 `scrim` 色与软边径向渐变，从点击位置向四周扩散，
-  使用 motion scheme 的 spatial/effects spec 分别驱动扩散和淡出。动画结束后保持隐藏，
-  空闲时没有纹理或动画循环。
-  修饰符放在状态区 Box 上，位于内容 padding 之前；绘制顺序是实色底栏背景、波动阴影、状态文字。
-  `clipRect` 将阴影限制在状态区自己的边界内，Surface 进一步裁剪面板外侧圆角；
-  阴影不进入状态区与 FAB 的间隙或 FAB 区域，FAB 点击不触发阴影波动。
-  坐标在 pointer input 的 Initial 阶段记录、Final 阶段清理，不消费触摸事件；标准 clickable
-  仍负责点击与无障碍语义。键盘/无障碍点击使用状态区中心，取消按压或禁用状态区不会触发。
-  阴影渐变内外边缘均渐隐，每帧一次圆形绘制，不需要粒子、轨迹列表或全局边界转换。
+  让点击区域延伸到外侧圆弧，再由底栏 Surface 统一裁剪。状态区与服务按钮仅保留 Material3
+  点击水波纹，局部 RippleConfiguration 将 focus/hover/drag 状态层透明度设为 0；键盘焦点用细边框提示。
+  服务按钮使用固定尺寸 Surface，不做整体缩放、颜色渐变或图标淡入淡出/旋转动画；
+  底栏与按钮的 tonal/shadow elevation 均为 0.dp，按压不改变背景或阴影。
 - 底栏统一使用 Android 12 以下方案的实色回退背景，不创建用于背景采样的 `GraphicsLayer`，不使用
   `BlurEffect`，也不捕获列表绘制命令。背景使用 `colorScheme.primaryContainer` 的 95% 不透明度，状态文字使用
   配对的 `onPrimaryContainer`；颜色由当前深浅色/动态主题提供。

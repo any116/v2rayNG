@@ -222,13 +222,11 @@ private fun MainBottomBarOverlay(
 ) {
     // Read the narrow slice here, so test progress doesn't recompose the server pager.
     val bottom by bottomState
-    val suppressAnimations = LocalPredictiveBackProgress.current?.isInProgress == true
     MainBottomBar(
         statusText = bottom.status.asText(),
         isRunning = bottom.isRunning,
         isTesting = bottom.isTesting,
         onAction = onAction,
-        suppressAnimations = suppressAnimations,
         modifier = modifier
     )
 }
