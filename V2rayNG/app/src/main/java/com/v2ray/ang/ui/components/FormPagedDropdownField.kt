@@ -1,5 +1,7 @@
 package com.v2ray.ang.ui.components
 
+import android.graphics.Rect
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -9,7 +11,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +35,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -53,7 +55,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
@@ -302,7 +304,16 @@ fun FormPagedDropdownField(
         },
         modifier = modifier
             .fillMaxWidth()
+            .then(rememberFormFieldVisibilityModifier())
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
+            .onGloballyPositioned { coords ->
+                if (!coords.isAttached) return@onGloballyPositioned
+                val origin = coords.positionInWindow()
+                val left = origin.x.roundToInt()
+                val top = origin.y.roundToInt()
+                val rect = IntRect(left, top, left + coords.size.width, top + coords.size.height)
+                if (rect != anchorRect) anchorRect = rect
+            }
     ) {
         OutlinedTextField(
             state = state,
@@ -320,14 +331,6 @@ fun FormPagedDropdownField(
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable, enabled = enabled)
                 .fillMaxWidth()
-                .onGloballyPositioned { coords ->
-                    if (!coords.isAttached) return@onGloballyPositioned
-                    val origin = coords.positionInWindow()
-                    val left = origin.x.roundToInt()
-                    val top = origin.y.roundToInt()
-                    val rect = IntRect(left, top, left + coords.size.width, top + coords.size.height)
-                    if (rect != anchorRect) anchorRect = rect
-                }
         )
 
         val rect = anchorRect
@@ -356,6 +359,41 @@ fun FormPagedDropdownField(
     }
 }
 
+/** The visible display frame already excludes the IME; convert it to the anchor's window space. */
+@Composable
+private fun rememberVisibleWindowBounds(): IntRect {
+    val view = LocalView.current
+    var bounds by remember(view) { mutableStateOf(IntRect.Zero) }
+
+    DisposableEffect(view) {
+        val frame = Rect()
+        val screenLocation = IntArray(2)
+        val windowLocation = IntArray(2)
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            view.getWindowVisibleDisplayFrame(frame)
+            view.getLocationOnScreen(screenLocation)
+            view.getLocationInWindow(windowLocation)
+            val offsetX = windowLocation[0] - screenLocation[0]
+            val offsetY = windowLocation[1] - screenLocation[1]
+            bounds = IntRect(
+                frame.left + offsetX,
+                frame.top + offsetY,
+                frame.right + offsetX,
+                frame.bottom + offsetY
+            )
+        }
+        val observer = view.viewTreeObserver
+        observer.addOnGlobalLayoutListener(listener)
+        listener.onGlobalLayout()
+        onDispose {
+            val currentObserver = if (observer.isAlive) observer else view.viewTreeObserver
+            if (currentObserver.isAlive) currentObserver.removeOnGlobalLayoutListener(listener)
+        }
+    }
+
+    return bounds
+}
+
 @Composable
 private fun PagedDropdownPopup(
     anchor: IntRect,
@@ -366,30 +404,33 @@ private fun PagedDropdownPopup(
 ) {
     val density = LocalDensity.current
     val colorScheme = MaterialTheme.colorScheme
-    val windowSize = LocalWindowInfo.current.containerSize
-    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val visibleBounds = rememberVisibleWindowBounds()
     val marginPx = with(density) { PagedDropdownMargin.roundToPx() }
-
-    // Visible bottom edge after IME.
-    val bottomLimit = (windowSize.height - imeBottomPx).coerceAtLeast(0)
-    val spaceBelow = bottomLimit - anchor.bottom - marginPx
-    val spaceAbove = anchor.top - marginPx
-    val minHeightPx = with(density) { PagedDropdownMinHeight.roundToPx() }
-    val availablePx = max(max(spaceBelow, spaceAbove), minHeightPx)
+    val horizontalMargin = minOf(marginPx, visibleBounds.width.coerceAtLeast(0) / 2)
+    val verticalMargin = minOf(marginPx, visibleBounds.height.coerceAtLeast(0) / 2)
+    val viewport = IntRect(
+        visibleBounds.left + horizontalMargin,
+        visibleBounds.top + verticalMargin,
+        visibleBounds.right - horizontalMargin,
+        visibleBounds.bottom - verticalMargin
+    )
+    val spaceBelow = (viewport.bottom - maxOf(anchor.bottom, viewport.top)).coerceAtLeast(0)
+    val spaceAbove = (minOf(anchor.top, viewport.bottom) - viewport.top).coerceAtLeast(0)
+    val availablePx = max(spaceBelow, spaceAbove)
+    // Never force a minimum height that exceeds the actual space above the keyboard.
+    if (availablePx == 0 || viewport.width <= 0) return
     val maxMenuHeight = with(density) {
         minOf(availablePx, PagedDropdownMaxHeight.roundToPx()).toDp()
     }
 
-    val maxMenuWidth = with(density) {
-        (windowSize.width - marginPx * 2).coerceAtLeast(1).toDp()
-    }
+    val maxMenuWidth = with(density) { viewport.width.toDp() }
     val anchorWidth = with(density) { anchor.width.toDp() }
     val menuWidth = anchorWidth
         .coerceAtLeast(minOf(PagedDropdownMinWidth, maxMenuWidth))
         .coerceAtMost(maxMenuWidth)
 
-    val positionProvider = remember(anchor, bottomLimit, marginPx) {
-        AnchoredDropdownPositionProvider(anchor, bottomLimit, marginPx)
+    val positionProvider = remember(viewport) {
+        AnchoredDropdownPositionProvider(viewport)
     }
     val currentOnDismiss by rememberUpdatedState(onDismiss)
 
@@ -497,14 +538,9 @@ private fun PagedDropdownPopup(
     }
 }
 
-/**
- * Positions using the caller-captured anchor rect (window coordinates), ignoring
- * anchorBounds. bottomLimit already accounts for the IME height.
- */
+/** Use Popup's live anchor bounds so scrolling during IME resize cannot leave a stale position. */
 private class AnchoredDropdownPositionProvider(
-    private val anchor: IntRect,
-    private val bottomLimit: Int,
-    private val margin: Int
+    private val viewport: IntRect
 ) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -513,22 +549,23 @@ private class AnchoredDropdownPositionProvider(
         popupContentSize: IntSize
     ): IntOffset {
         val rawX = if (layoutDirection == LayoutDirection.Ltr) {
-            anchor.left
+            anchorBounds.left
         } else {
-            anchor.right - popupContentSize.width
+            anchorBounds.right - popupContentSize.width
         }
-        val maxX = (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)
-        val x = rawX.coerceIn(margin.coerceAtMost(maxX), maxX)
+        val maxX = (viewport.right - popupContentSize.width).coerceAtLeast(viewport.left)
+        val x = rawX.coerceIn(viewport.left, maxX)
 
-        val spaceBelow = bottomLimit - anchor.bottom
-        val spaceAbove = anchor.top
-        val y = when {
-            popupContentSize.height <= spaceBelow -> anchor.bottom
-            popupContentSize.height <= spaceAbove -> anchor.top - popupContentSize.height
-            spaceBelow >= spaceAbove -> (bottomLimit - popupContentSize.height).coerceAtLeast(0)
-            else -> 0
+        val spaceBelow = (viewport.bottom - maxOf(anchorBounds.bottom, viewport.top)).coerceAtLeast(0)
+        val spaceAbove = (minOf(anchorBounds.top, viewport.bottom) - viewport.top).coerceAtLeast(0)
+        val rawY = when {
+            popupContentSize.height <= spaceBelow -> anchorBounds.bottom
+            popupContentSize.height <= spaceAbove -> anchorBounds.top - popupContentSize.height
+            spaceBelow >= spaceAbove -> viewport.bottom - popupContentSize.height
+            else -> viewport.top
         }
-        return IntOffset(x, y)
+        val maxY = (viewport.bottom - popupContentSize.height).coerceAtLeast(viewport.top)
+        return IntOffset(x, rawY.coerceIn(viewport.top, maxY))
     }
 }
 

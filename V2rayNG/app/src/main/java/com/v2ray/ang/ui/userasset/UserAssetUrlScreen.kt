@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
@@ -24,6 +26,7 @@ import com.v2ray.ang.ui.components.AppTheme
 import com.v2ray.ang.ui.components.AppTopBar
 import com.v2ray.ang.ui.components.DeleteConfirmDialog
 import com.v2ray.ang.ui.components.FormTextField
+import com.v2ray.ang.ui.components.verticalScrollbar
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
@@ -119,6 +122,7 @@ private fun UserAssetUrlForm(
     fieldErrors: Map<AssetField, AssetFieldError>,
     modifier: Modifier = Modifier
 ) {
+    val scrollState = rememberScrollState()
     val remarksError = editor.error(AssetField.REMARKS, fieldErrors[AssetField.REMARKS])
     val urlError = editor.error(AssetField.URL, fieldErrors[AssetField.URL])
 
@@ -127,6 +131,8 @@ private fun UserAssetUrlForm(
             .fillMaxSize()
             .imePadding()
             .navigationBarsPadding()
+            .verticalScrollbar(scrollState)
+            .verticalScroll(scrollState)
             .padding(vertical = FormVerticalPad)
     ) {
         FormTextField(

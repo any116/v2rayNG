@@ -3,8 +3,14 @@ package com.v2ray.ang.ui.components
 import android.content.res.Configuration
 import androidx.annotation.ArrayRes
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
@@ -32,9 +38,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,10 +51,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal val FieldHorizontalPad = 16.dp
 internal val FieldVerticalPad = 4.dp
 private const val SelectionAlpha = 0.4f
+private const val FormFieldImeLayoutTimeoutMillis = 1_000L
 
 @Immutable
 class StringOptions(val values: List<String>) {
@@ -115,6 +127,34 @@ internal fun appFieldColors(
     )
 }
 
+/** Keep the whole field visible after IME animation without restarting scrolling on every frame. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun rememberFormFieldVisibilityModifier(): Modifier {
+    val requester = remember { BringIntoViewRequester() }
+    var focused by remember { mutableStateOf(false) }
+    val density = LocalDensity.current
+    val ime = WindowInsets.ime
+    val targetBottom = WindowInsets.imeAnimationTarget.getBottom(density)
+
+    LaunchedEffect(focused, ime, targetBottom, density) {
+        if (focused && targetBottom > 0) {
+            val settled = withTimeoutOrNull(FormFieldImeLayoutTimeoutMillis) {
+                snapshotFlow { ime.getBottom(density) }.first { it == targetBottom }
+            } ?: return@LaunchedEffect
+            if (settled > 0) {
+                // Give imePadding a layout pass before revealing the label and supporting text.
+                withFrameNanos { }
+                requester.bringIntoView()
+            }
+        }
+    }
+
+    return Modifier
+        .bringIntoViewRequester(requester)
+        .onFocusChanged { focused = it.hasFocus }
+}
+
 /** Renders the caller-owned editing state; saving reads that same state directly. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -141,6 +181,7 @@ fun FormTextField(
         colors = appFieldColors(isError = isError),
         modifier = modifier
             .fillMaxWidth()
+            .then(rememberFormFieldVisibilityModifier())
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
     )
 }
@@ -183,6 +224,7 @@ fun FormDropdownField(
         },
         modifier = modifier
             .fillMaxWidth()
+            .then(rememberFormFieldVisibilityModifier())
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
     ) {
         OutlinedTextField(

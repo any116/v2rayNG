@@ -1,12 +1,12 @@
 package com.v2ray.ang.ui.components
 
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.ScrollIndicatorState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +35,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 private const val ThumbAlpha = 0.7f
-private const val ThumbMaxLengthFraction = 0.5f
+// A half-track cap can fall below the minimum thumb length when the IME shrinks the viewport.
+private const val ThumbMaxLengthFraction = 1f
 private val FastScrollTouchTarget = 48.dp
 
 @Immutable
@@ -174,12 +175,17 @@ private fun Modifier.fastScrollbarInput(
     coroutineScope {
         var scrollJob: Job? = null
         detectFastScrollGestures(state, orientation, config, density, layoutDirection) { targetOffset ->
-            // Keep scrollBy outside awaitEachGesture's restricted scope; newer targets replace old ones.
+            val targetSize = size
+            val targetViewport = state.viewportSize
+            // User dragging must win over automatic field/IME bring-into-view requests.
             scrollJob?.cancel()
             scrollJob = launch {
-                val scrollDelta = targetOffset - state.scrollOffset
-                if (abs(scrollDelta) > 0.5f) {
-                    scrollableState.scrollBy(scrollDelta)
+                scrollableState.scroll(MutatePriority.UserInput) {
+                    // A queued target belongs to the geometry of the event that produced it.
+                    if (size == targetSize && state.viewportSize == targetViewport) {
+                        val scrollDelta = targetOffset - state.scrollOffset
+                        if (abs(scrollDelta) > 0.5f) scrollBy(scrollDelta)
+                    }
                 }
             }
         }
@@ -196,7 +202,12 @@ private suspend fun PointerInputScope.detectFastScrollGestures(
 ) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val mainAxisSize = if (orientation == Orientation.Vertical) size.height else size.width
+        // The wide thumb hit area overlaps form editors; let their press handling take precedence.
+        awaitPointerEvent(PointerEventPass.Final)
+        if (down.isConsumed) return@awaitEachGesture
+        var gestureSize = size
+        var gestureViewport = state.viewportSize
+        val mainAxisSize = if (orientation == Orientation.Vertical) gestureSize.height else gestureSize.width
         val crossAxisSize = if (orientation == Orientation.Vertical) size.width else size.height
         val geometry =
             calculateScrollbarGeometry(
@@ -231,7 +242,7 @@ private suspend fun PointerInputScope.detectFastScrollGestures(
         val isOnThumb =
             downPosition >= geometry.thumbStart &&
                 downPosition <= geometry.thumbStart + geometry.thumbLength
-        val grabOffset =
+        var grabOffset =
             if (isOnThumb) {
                 downPosition - geometry.thumbStart
             } else {
@@ -248,13 +259,10 @@ private suspend fun PointerInputScope.detectFastScrollGestures(
                 break
             }
 
-            if (!dragging) {
-                if (change.isConsumed) break
-                val mainAxisDelta = mainAxisPosition(change.position, orientation) - downPosition
-                if (abs(mainAxisDelta) < viewConfiguration.touchSlop) continue
-                dragging = true
-            }
-
+            val currentSize = size
+            val currentViewport = state.viewportSize
+            val currentMainAxisSize =
+                if (orientation == Orientation.Vertical) currentSize.height else currentSize.width
             val currentGeometry =
                 calculateScrollbarGeometry(
                     state = state,
@@ -262,12 +270,30 @@ private suspend fun PointerInputScope.detectFastScrollGestures(
                     config = config,
                     density = density,
                     layoutDirection = layoutDirection,
-                    mainAxisSize = mainAxisSize
+                    mainAxisSize = currentMainAxisSize
                 ) ?: break
+            val position = mainAxisPosition(change.position, orientation)
+            if (currentSize != gestureSize || currentViewport != gestureViewport) {
+                if (!dragging) break
+                // Rebase on the resized thumb without turning IME layout into a scroll delta.
+                grabOffset = position - currentGeometry.thumbStart
+                gestureSize = currentSize
+                gestureViewport = currentViewport
+                change.consume()
+                continue
+            }
+
+            if (!dragging) {
+                if (change.isConsumed) break
+                val mainAxisDelta = position - downPosition
+                if (abs(mainAxisDelta) < viewConfiguration.touchSlop) continue
+                dragging = true
+            }
+
             change.consume()
             onScrollTarget(
                 calculateScrollbarTargetOffset(
-                    position = mainAxisPosition(change.position, orientation),
+                    position = position,
                     grabOffset = grabOffset,
                     geometry = currentGeometry,
                     orientation = orientation,
