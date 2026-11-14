@@ -51,7 +51,8 @@ feature 目录，宁可以后再上提，不要预先泛化。
 - 私有 Composable 一律 `private`；跨文件同 feature 用 `internal`。
 - 单文件超过约 600 行就按上表拆分。`MainScreen` + `MainServerPager` + `MainTopBar` /
   `MainBottomBar` / `MainDrawer` / `MainGroupTab` / `MainDialogs` / `MainImportMenu` /
-  `MainStateHolders` 是标准拆法。
+  `MainStateHolders` 是标准拆法。侧栏容器、菜单与手势集中在 `MainDrawer.kt`，
+  开合状态、Saver 与纯计算辅助集中在 `MainPushDrawerState.kt`。
 
 ## 3. Composable 参数契约
 

@@ -83,7 +83,7 @@ UI Saver 保存，返回主页后仍显示已展开侧栏。应用内导航请�
 
 - `progress` 只由页面自己的 `PredictiveBackHandler` 提供，是每帧高频值，只能在 draw/layout lambda
   中读取，不能让 MAIN 根节点订阅；
-- `isInProgress` 是低频的开始/取消/提交信号，用于在 MAIN 的顶栏、底栏和波形/FAB 绘制期间降载；
+- `isInProgress` 是低频的开始/取消/提交信号，用于在 MAIN 的顶栏绘制期间降载；底栏已无自定义过渡动画；
 - Android 16+ 使用 `PRIORITY_SYSTEM_NAVIGATION_OBSERVER` 观察根 Activity 的**提交**，observer 不消费返回，
   因而保留系统 home preview；该 observer 不提供 `onBackStarted/onBackProgressed`；
 - Android 14/15 没有公开的等价非消费进度观察 API，不能在根页面启用一个空的
