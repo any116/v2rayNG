@@ -32,7 +32,9 @@ val gitCommitTime = gitValue("unknown", "show", "-s", "--format=%ct", "HEAD")
 android {
     namespace = "com.v2ray.ang"
     compileSdk {
-        version = release(37)
+        version = release(37) {
+            minorApiLevel = 1
+        }
     }
     ndkVersion = providers.gradleProperty("NDK_VERSION").getOrElse("30.0.16248370")
     val abiFilterList = providers.gradleProperty("ABI_FILTERS")
@@ -274,7 +276,6 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
-    testImplementation(libs.org.mockito.mockito.inline)
     testImplementation(libs.mockito.kotlin)
 
     // DAO / Paging tests

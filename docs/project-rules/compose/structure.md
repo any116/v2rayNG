@@ -1,6 +1,6 @@
 # Compose 规范 · 目录、命名与结构
 
-适用环境：Compose BOM `2026.09.00`，Material3 `1.5.0-beta02`（显式覆盖 BOM），
+适用环境：Compose BOM `2026.11.01`，Material3 `1.5.0`，
 Kotlin `2.4.21` + `org.jetbrains.kotlin.plugin.compose`。
 
 ## 1. 目录

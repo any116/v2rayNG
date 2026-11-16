@@ -42,12 +42,12 @@
 
 | 项 | 版本 |
 | --- | --- |
-| Kotlin / AGP | 2.4.21 / 9.4.1（KSP 2.3.12） |
-| Compose BOM / Material3 | 2026.09.00 / 1.5.0-beta02（显式覆盖 BOM） |
+| Kotlin / AGP | 2.4.21 / 9.5.2（KSP 2.3.14） |
+| Compose BOM / Material3 | 2026.11.01 / 1.5.0 |
 | Hilt / androidx.hilt | 2.60.1 / 1.4.0 |
 | Room 3 / SQLite driver | 3.0.3 / sqlite-bundled 2.7.1 |
 | Paging | 3.5.3 |
 | Glance | 1.3.0-alpha02 |
-| compileSdk / targetSdk / minSdk | 37 / 37 / 24 |
+| compileSdk / targetSdk / minSdk | 37.1 / 37 / 24 |
 
 全部版本收敛在 `V2rayNG/gradle/libs.versions.toml`，`build.gradle.kts` 一律用 `libs.xxx`。

@@ -41,8 +41,8 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 
 ## SDK / 版本
 
-- `compileSdk 37`、`targetSdk 37`、`minSdk 24`、JVM 17（`coreLibraryDesugaring` 已开启）
-- Kotlin 2.4.21、AGP 9.4.1、KSP 2.3.12
+- `compileSdk 37.1`、`targetSdk 37`、`minSdk 24`、JVM 17（`coreLibraryDesugaring` 已开启）
+- Kotlin 2.4.21、AGP 9.5.2、KSP 2.3.14
 - `versionCode 746` / `versionName 2.3.6`（`app/build.gradle.kts`）
 - 渠道维度 `distribution`：`fdroid`（`applicationIdSuffix .fdroid`）与 `playstore`
 - `generateLocaleConfig = true`，`localeFilters` = en / zh-rCN / zh-rTW / vi / ru / fa / ar / bn / bqi-rIR
@@ -57,8 +57,8 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 
 | 依赖 | 版本 | 说明 |
 | --- | --- | --- |
-| Compose BOM | `2026.09.00` | foundation / ui / tooling 都由 BOM 定版 |
-| Material3 | `1.5.0-beta02` | **显式覆盖 BOM**，因为用到 `nonInteractiveScrollbar` 等 beta API |
+| Compose BOM | `2026.11.01` | foundation / ui / tooling 都由 BOM 定版 |
+| Material3 | `1.5.0` | |
 | Room 3 | `3.0.3` | `androidx.room3:room3-runtime/compiler/paging/testing`，KSP only |
 | SQLite driver | `sqlite-bundled` `2.7.1` | `BundledSQLiteDriver`；单测用 `sqlite-bundled-jvm` |
 | Paging | `3.5.3` | runtime / compose / common / testing |
@@ -68,12 +68,12 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 | AboutLibraries | `15.3.0` | 许可页；固定提交 `app/src/main/assets/aboutlibraries.json`，运行时读取 |
 | OkHttp | `5.5.1` | 订阅拉取、测速、更新检查 |
 | Coroutines | `1.11.0` | |
-| Serialization | `1.11.0` | `kotlinx-serialization-core` + `kotlin-serialization` 插件，类型安全导航路由用 |
+| Serialization | `1.13.0` | `kotlinx-serialization-core` + `kotlin-serialization` 插件，类型安全导航路由用 |
 | WorkManager | `2.12.0` | 含 `work-multiprocess` |
-| CameraX | `1.6.2` | 扫码，配合 zxing core 3.5.4 |
+| CameraX | `1.7.0` | 扫码，配合 zxing core 3.5.4 |
 | Coil | `3.6.3` | `io.coil-kt.coil3:coil-compose`，只用于分应用代理的应用图标 |
 | reorderable | `3.1.0` | `sh.calvin.reorderable`，列表拖拽排序 |
-| Lifecycle | `2.11.0` | 含 `lifecycle-runtime-compose` |
+| Lifecycle | `2.11.1` | 含 `lifecycle-runtime-compose` |
 
 开源许可数据固定在 `V2rayNG/app/src/main/assets/aboutlibraries.json`，由
 `context.assets` 读取；不接入 AboutLibraries Gradle 插件或构建期生成任务。
@@ -286,7 +286,7 @@ UI 侧的接收点只有一个：`MainRepository` 内部的 `BroadcastReceiver` 
 
 ## Testing Strategy
 
-- 单元测试：`app/src/test/java/`，JUnit 6 + `mockito-inline` + `mockito-kotlin` +
+- 单元测试：`app/src/test/java/`，JUnit 6 + `mockito-kotlin` +
   `kotlinx-coroutines-test` + `room3-testing` + `paging-testing` + `sqlite-bundled-jvm`。
   现有样例：`UtilsTest`、`HttpUtilTest`、`ShadowsocksFmtTest`、`ListExtTest`、
   `MainImportMenuTest`、`AppPickerViewModelTest`、`ScannerActivityTest`、
@@ -301,7 +301,7 @@ UI 侧的接收点只有一个：`MainRepository` 内部的 `BroadcastReceiver` 
 ## CI/CD
 
 `.github/workflows/build.yml`（触发分支为 `new`，可 `workflow_dispatch`）：
-拉取子模块 → 装 SDK 37 / build-tools 37.0.0 / NDK 29.0.14206865 →
+拉取子模块 → 装 SDK 37.1 / build-tools 37.0.0 / NDK 29.0.14206865 →
 `compile-hevtun.sh`（带 cache）→ AAR 拷进 `app/libs/` →
 `./gradlew assembleRelease --build-cache --parallel --daemon --warning-mode all` → 发 Release。
 CI 不跑 `test`、不跑 `lint`，所以**本地必须自己跑**。
