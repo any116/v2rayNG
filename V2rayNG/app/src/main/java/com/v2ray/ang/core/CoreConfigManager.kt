@@ -736,50 +736,65 @@ object CoreConfigManager {
         remoteDns.forEach { servers.add(it) }
 
         val hosts = buildDnsHostsFromRoutingRules(configContext)
-        val cnDomesticDnsTags = buildDnsCnModeFromRoutingRules(configContext, servers, domesticDns)
-        val domesticDnsTags = buildDnsFromRoutingRules(
+        val cnModeAddedDomestic = buildDnsCnModeFromRoutingRules(
             configContext = configContext,
             servers = servers,
             remoteDns = remoteDns,
             domesticDns = domesticDns
         )
-        domesticDnsTags.addAll(cnDomesticDnsTags)
+        val ruleAddedDomestic = buildDnsFromRoutingRules(
+            configContext = configContext,
+            servers = servers,
+            remoteDns = remoteDns,
+            domesticDns = domesticDns
+        )
+        val hasDomesticDns = cnModeAddedDomestic || ruleAddedDomestic
 
         v2rayConfig.dns = V2rayConfig.DnsBean(
-            servers = servers,
+            servers = deduplicateDnsServers(servers),
             hosts = hosts,
             tag = AppConfig.TAG_DNS,
+            // Keep all matching policy groups, but do not query unmatched default resolvers.
+            // If every matching group fails, resolution intentionally fails as well.
+            disableFallbackIfMatch = true,
             enableParallelQuery = if ((domesticDns.size + remoteDns.size) > 2) true else null
         )
 
-        if (domesticDnsTags.isNotEmpty()) {
-            v2rayConfig.routing.rules.add(
+        // Both DNS routing rules go ahead of every user rule, in this order. The bundled rule
+        // sets end with a port-only catch-all (direct in blacklist, proxy in global) that
+        // matches DNS module traffic too; left behind it, domestic queries would be swallowed
+        // before the domestic rule is reached, and remote DoH/DoT queries would leave through
+        // whatever that catch-all picks instead of the proxy. The port 53 hijack rules prepend
+        // at index 0 later in the pipeline, so they still take precedence over both.
+        val dnsRoutingRules = ArrayList<V2rayConfig.RoutingBean.RulesBean>()
+        // Skipped when no server carries TAG_DOMESTIC_DNS, which happens for rule sets whose
+        // direct rules carry IPs only; a rule for a tag nobody owns would never match.
+        if (hasDomesticDns) {
+            dnsRoutingRules.add(
                 V2rayConfig.RoutingBean.RulesBean(
                     outboundTag = AppConfig.TAG_DIRECT,
-                    inboundTag = ArrayList(domesticDnsTags),
+                    inboundTag = arrayListOf(AppConfig.TAG_DOMESTIC_DNS),
                     domain = null
                 )
             )
         }
-
         val dnsProxyBalancerTag = policyGroupBalancerTags[AppConfig.TAG_PROXY]
-        if (dnsProxyBalancerTag != null) {
-            v2rayConfig.routing.rules.add(
+        dnsRoutingRules.add(
+            if (dnsProxyBalancerTag != null) {
                 V2rayConfig.RoutingBean.RulesBean(
                     balancerTag = dnsProxyBalancerTag,
                     inboundTag = arrayListOf(AppConfig.TAG_DNS),
                     domain = null
                 )
-            )
-        } else {
-            v2rayConfig.routing.rules.add(
+            } else {
                 V2rayConfig.RoutingBean.RulesBean(
                     outboundTag = AppConfig.TAG_PROXY,
                     inboundTag = arrayListOf(AppConfig.TAG_DNS),
                     domain = null
                 )
-            )
-        }
+            }
+        )
+        v2rayConfig.routing.rules.addAll(0, dnsRoutingRules)
     }
 
     private fun buildDnsHostsFromRoutingRules(configContext: CoreConfigContext): MutableMap<String, Any> {
@@ -827,7 +842,17 @@ object CoreConfigManager {
         return hosts
     }
 
-    private fun buildDnsCnModeFromRoutingRules(configContext: CoreConfigContext, servers: ArrayList<Any>, domesticDns: List<String>): List<String> {
+    /**
+     * Adds CN-filtered domestic and remote groups before the ordinary routing-derived groups.
+     * All domestic servers share a tag so equivalent policies can race within one Xray group.
+     * Returns whether a domestic server was added, for the matching routing rule.
+     */
+    private fun buildDnsCnModeFromRoutingRules(
+        configContext: CoreConfigContext,
+        servers: ArrayList<Any>,
+        remoteDns: List<String>,
+        domesticDns: List<String>
+    ): Boolean {
         val cnRegionFilter = { domain: String ->
             domain.startsWith("geosite:") && (domain.endsWith("-cn") || domain.endsWith("@cn"))
                     || domain == AppConfig.GEOSITE_CN
@@ -839,7 +864,7 @@ object CoreConfigManager {
             .any { it == AppConfig.GEOSITE_CN }
 
         if (!isCnRoutingMode) {
-            return emptyList()
+            return false
         }
 
         val geoipCn = arrayListOf(AppConfig.GEOIP_CN)
@@ -848,64 +873,102 @@ object CoreConfigManager {
             .filter { it.outboundTag == AppConfig.TAG_DIRECT }
             .flatMap { it.domain.asSequence() }
             .filter { cnRegionFilter(it) }
+            .distinct()
             .toList()
         if (cnDomains.isEmpty()) {
-            return emptyList()
+            return false
         }
 
-        val cnDomesticDnsTags = mutableListOf<String>()
-        domesticDns.forEachIndexed { index, address ->
-            val cnDomesticDnsTag = "${AppConfig.TAG_DOMESTIC_DNS}_cn_expect_${index}"
+        domesticDns.forEach { address ->
             servers.add(
                 V2rayConfig.DnsBean.ServersBean(
                     address = address,
                     domains = cnDomains,
                     expectIPs = geoipCn,
                     skipFallback = true,
-                    tag = cnDomesticDnsTag
+                    tag = AppConfig.TAG_DOMESTIC_DNS
                 )
             )
-            cnDomesticDnsTags.add(cnDomesticDnsTag)
         }
-        return cnDomesticDnsTags
+        remoteDns.forEach { address ->
+            servers.add(
+                V2rayConfig.DnsBean.ServersBean(
+                    address = address,
+                    domains = cnDomains,
+                    expectIPs = geoipCn,
+                    skipFallback = true
+                )
+            )
+        }
+        return domesticDns.isNotEmpty()
     }
 
+    /**
+     * Direct rules use all domestic resolvers; other non-blocked rules use all remote resolvers.
+     * Keep unfiltered CN entries: unlike the preceding expectIPs groups, they can accept
+     * non-CN addresses. Sharing a domain and address does not make those policies equivalent.
+     * Returns whether a domestic server was added, for the matching routing rule.
+     */
     private fun buildDnsFromRoutingRules(
         configContext: CoreConfigContext,
         servers: ArrayList<Any>,
         remoteDns: List<String>,
-        domesticDns: List<String>,
-    ): MutableList<String> {
-        val domesticDnsTags = mutableListOf<String>()
-        configContext.routingDomainRules.forEachIndexed { ruleIndex, rule ->
+        domesticDns: List<String>
+    ): Boolean {
+        var hasDomestic = false
+        configContext.routingDomainRules.forEach { rule ->
+            val domains = rule.domain.distinct()
+            if (domains.isEmpty()) {
+                return@forEach
+            }
             when (rule.outboundTag) {
                 AppConfig.TAG_DIRECT -> {
-                    domesticDns.forEachIndexed { dnsIndex, address ->
-                        val tag = "${AppConfig.TAG_DOMESTIC_DNS}_${ruleIndex}_$dnsIndex"
+                    domesticDns.forEach { address ->
                         servers.add(
                             V2rayConfig.DnsBean.ServersBean(
                                 address = address,
-                                domains = rule.domain,
+                                domains = domains,
                                 skipFallback = true,
-                                tag = tag
+                                // Xray's policyID includes tag; per-address tags prevent group races.
+                                tag = AppConfig.TAG_DOMESTIC_DNS
                             )
                         )
-                        domesticDnsTags.add(tag)
                     }
+                    hasDomestic = hasDomestic || domesticDns.isNotEmpty()
                 }
 
                 AppConfig.TAG_BLOCKED -> Unit
                 else -> {
-                    servers.add(
-                        V2rayConfig.DnsBean.ServersBean(
-                            address = remoteDns.first(),
-                            domains = rule.domain,
+                    remoteDns.forEach { address ->
+                        servers.add(
+                            V2rayConfig.DnsBean.ServersBean(
+                                address = address,
+                                domains = domains
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
-        return domesticDnsTags
+        return hasDomestic
+    }
+
+    /**
+     * Removes equivalent entries while retaining the first occurrence and query-policy order.
+     * Compare complete server settings, with rule lists normalized only for equality; different
+     * expectIPs, tags or fallback settings must remain separate policies, even for one address.
+     */
+    private fun deduplicateDnsServers(servers: List<Any>): ArrayList<Any> {
+        return ArrayList(servers.distinctBy { server ->
+            if (server is V2rayConfig.DnsBean.ServersBean) {
+                server.copy(
+                    domains = server.domains?.distinct()?.sorted(),
+                    expectIPs = server.expectIPs?.distinct()?.sorted()
+                )
+            } else {
+                server
+            }
+        })
     }
 
     //endregion
