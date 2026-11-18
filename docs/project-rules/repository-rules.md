@@ -10,7 +10,7 @@
 | `profiles` | `ProfileMetadataItem` | 配置元数据；列表查询不读取协议 payload |
 | `profile_payload` | `ProfilePayloadItem` | 完整协议对象 JSON + 去重摘要；与 profiles 在 DAO 事务内聚合 |
 | `profile_stats` | `ServerAffiliationInfo` | 测速延迟 |
-| `profile_raw` | `ProfileRaw` | CUSTOM 配置原文（单独表，无外键） |
+| `profile_raw` | `ProfileRaw` | CUSTOM / CUSTOM_OUTBOUND 配置原文（单独表，无外键） |
 | `subscriptions` | `SubscriptionItem` | 订阅 / 分组 |
 | `assets` | `AssetUrlItem` | 用户资源 URL |
 | `routing_rules` | `RulesetItem` | 路由规则（含顺序） |
@@ -139,7 +139,7 @@ open class XxxRepository @Inject constructor(
   DAO 的删除、写入所有批次及修复选中节点仍必须在**同一个事务**中；空结果保留原订阅，任一批失败/取消全部回滚。
   预取只缩短 JSON-lines 解析阻塞写入的等待，不是事务边界；禁止改成每批提交或把 selected/raw 修复移出事务。
 - 网络响应有 `AppConfig.MAX_IMPORT_CONTENT_CHARS` 上限；超限下载失败并清理临时文件。
-- WireGuard 文本配置有独立的 1 MiB 上限；JSON 数组按元素流式处理，CUSTOM 原文仍随单个配置暂存。
+- WireGuard 文本配置有独立的 1 MiB 上限；JSON 数组按元素流式处理，CUSTOM / CUSTOM_OUTBOUND 原文仍随单个配置暂存。
 - 普通链接去重仅保留 SHA-256 摘要；`v2rayn` 只保留 ID/备注索引，完整分享对象暂存到文件，第二遍逐个解析跨条目引用。
 - Profile parser 在转换阶段生成临时 guid，最终 Room 导入边界仍会重新生成 guid，避免任何 parser 的默认主键覆盖其他导入行。
 - `ConfigImportContent.lines()` 保证规范化和去重；订阅 URL 写入边界仍独立去重，避免未来调用点依赖上游实现细节。

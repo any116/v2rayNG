@@ -19,6 +19,7 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.normalizeLike
 import com.v2ray.ang.fmt.CustomFmt
+import com.v2ray.ang.fmt.CustomOutboundFmt
 import com.v2ray.ang.handler.AngConfigManager
 import com.v2ray.ang.handler.CertificateFingerprintManager
 import com.v2ray.ang.ui.components.DropdownOption
@@ -46,7 +47,7 @@ open class ServerRepository @Inject constructor(
         val isSelected = guid.isNotEmpty() && guid == profileDao.selectedGuid()
 
         when (configType) {
-            EConfigType.CUSTOM -> ServerEditData(
+            EConfigType.CUSTOM, EConfigType.CUSTOM_OUTBOUND -> ServerEditData(
                 profile = stored,
                 isSelected = isSelected,
                 rawContent = if (guid.isEmpty()) "" else profileDao.raw(guid).orEmpty(),
@@ -147,6 +148,10 @@ open class ServerRepository @Inject constructor(
 
     open suspend fun parseCustomConfig(content: String): ProfileItem? = withIO {
         CustomFmt.parse(content)
+    }
+
+    open suspend fun parseCustomOutbound(content: String): Pair<ProfileItem, String> = withIO {
+        CustomOutboundFmt.parse(content)
     }
 
     open suspend fun fetchCertSha256(profile: ProfileItem): String? = withIO {

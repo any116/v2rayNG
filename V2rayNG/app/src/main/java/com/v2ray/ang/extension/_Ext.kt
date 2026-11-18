@@ -70,12 +70,15 @@ fun EConfigType.isGroupType(): Boolean {
 }
 
 /**
- * Checks if the config type is a complex type (Custom, PolicyGroup, or ProxyChain).
+ * Checks if the config type is a complex type (Custom, CustomOutbound, PolicyGroup, or ProxyChain).
  *
- * @return True if the config type is Custom, PolicyGroup, or ProxyChain, false otherwise.
+ * @return True if the config type is Custom, CustomOutbound, PolicyGroup, or ProxyChain, false otherwise.
  */
 fun EConfigType.isComplexType(): Boolean {
-    return this == EConfigType.CUSTOM || this == EConfigType.POLICYGROUP || this == EConfigType.PROXYCHAIN
+    return this == EConfigType.CUSTOM_OUTBOUND ||
+        this == EConfigType.CUSTOM ||
+        this == EConfigType.POLICYGROUP ||
+        this == EConfigType.PROXYCHAIN
 }
 
 /**

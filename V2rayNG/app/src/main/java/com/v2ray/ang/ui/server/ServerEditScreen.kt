@@ -240,7 +240,7 @@ private fun ServerEditContent(
 ) {
     Column(modifier = modifier) {
         when (configType) {
-            EConfigType.CUSTOM -> {
+            EConfigType.CUSTOM, EConfigType.CUSTOM_OUTBOUND -> {
                 ServerJsonEditor(
                     remarks = editor[ServerField.REMARKS],
                     remarksError = fieldErrors[ServerField.REMARKS],

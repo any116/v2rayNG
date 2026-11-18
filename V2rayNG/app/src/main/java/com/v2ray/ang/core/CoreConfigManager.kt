@@ -308,7 +308,7 @@ object CoreConfigManager {
             LogUtil.w(AppConfig.TAG, "NORMAL resolved outbound '${resolvedOutbound.tag}' has empty resolvedProfiles, skipping")
             return
         }
-        val outbound = convertProfile2Outbound(profile) ?: run {
+        val outbound = convertProfile2Outbound(profile, resolvedOutbound.rawConfig) ?: run {
             LogUtil.w(AppConfig.TAG, "Could not convert NORMAL resolved outbound '${resolvedOutbound.tag}' profile to outbound, skipping")
             return
         }
@@ -331,7 +331,12 @@ object CoreConfigManager {
         v2rayConfig: V2rayConfig,
     ) {
         val chainOutbounds = resolvedOutbound.resolvedProfiles
-            .mapNotNull { convertProfile2Outbound(it) }
+            .mapNotNull { profile ->
+                convertProfile2Outbound(
+                    profile,
+                    resolvedOutbound.rawConfig.takeIf { profile.guid == resolvedOutbound.profile.guid }
+                )
+            }
             .toMutableList()
         if (chainOutbounds.isEmpty()) {
             LogUtil.w(AppConfig.TAG, "PROXYCHAIN resolved outbound '${resolvedOutbound.tag}' has no valid profiles, skipping")
@@ -1032,7 +1037,13 @@ object CoreConfigManager {
     /**
      * Convert one profile object into one outbound object.
      */
-    private fun convertProfile2Outbound(profileItem: ProfileItem): V2rayConfig.OutboundBean? {
+    private fun convertProfile2Outbound(
+        profileItem: ProfileItem,
+        rawConfig: String? = null,
+    ): V2rayConfig.OutboundBean? {
+        if (profileItem.configType == EConfigType.CUSTOM_OUTBOUND) {
+            return rawConfig?.let { JsonUtil.fromJsonSafe(it, V2rayConfig.OutboundBean::class.java) }
+        }
         return CoreOutboundBuilder.convert(profileItem)
     }
 

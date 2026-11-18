@@ -27,6 +27,7 @@ import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.extension.isComplexType
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.fmt.CustomFmt
+import com.v2ray.ang.fmt.CustomOutboundFmt
 import com.v2ray.ang.fmt.Hysteria2Fmt
 import com.v2ray.ang.fmt.MasqueFmt
 import com.v2ray.ang.fmt.ShadowsocksFmt
@@ -460,14 +461,24 @@ object AngConfigManager {
     ) {
         if (!element.isJsonObject) return
         val json = element.asJsonObject
-        if (!json.has("inbounds") || !json.has("outbounds") || !json.has("routing")) return
-        // Preserve the former JSON-array number normalization, but materialize only one entry.
-        val value = if (normalizeNumbers) JsonUtil.fromJson(element.toString(), Any::class.java) else element
-        val raw = JsonUtil.toJsonPretty(value) ?: return
-        val profile = CustomFmt.parse(raw)
-        profile.subscriptionId = subid
-        profile.description = generateDescription(profile)
-        profiles.append(ProfileImportRecord(profile, raw))
+        when {
+            json.has("inbounds") && json.has("outbounds") && json.has("routing") -> {
+                // Preserve the former JSON-array number normalization, but materialize only one entry.
+                val value = if (normalizeNumbers) JsonUtil.fromJson(element.toString(), Any::class.java) else element
+                val raw = JsonUtil.toJsonPretty(value) ?: return
+                val profile = CustomFmt.parse(raw)
+                profile.subscriptionId = subid
+                profile.description = generateDescription(profile)
+                profiles.append(ProfileImportRecord(profile, raw))
+            }
+
+            !json.has("outbounds") && json.has("protocol") -> {
+                val (profile, raw) = CustomOutboundFmt.parse(element.toString())
+                profile.subscriptionId = subid
+                profile.description = generateDescription(profile)
+                profiles.append(ProfileImportRecord(profile, raw))
+            }
+        }
     }
 
     private suspend fun commitProfiles(

@@ -452,7 +452,9 @@ interface ProfileDao {
                 profile.copy(dedupeKey = "").toPayloadItem()
             }
         )
-        profiles.filter { it.configType != EConfigType.CUSTOM }
+        profiles.filter {
+            it.configType != EConfigType.CUSTOM && it.configType != EConfigType.CUSTOM_OUTBOUND
+        }
             .map { it.guid }
             .chunked(SQLITE_VAR_LIMIT)
             .forEach { deleteRawRows(it) }
@@ -468,7 +470,9 @@ interface ProfileDao {
             "Cannot rewrite unsupported payload version ${existing?.payloadVersion} for ${profile.guid}"
         }
         upsertPayload(profile.copy(dedupeKey = "").toPayloadItem(existing?.content))
-        if (profile.configType != EConfigType.CUSTOM) deleteRaw(profile.guid)
+        if (profile.configType != EConfigType.CUSTOM && profile.configType != EConfigType.CUSTOM_OUTBOUND) {
+            deleteRaw(profile.guid)
+        }
     }
 
     @Transaction
@@ -487,7 +491,9 @@ interface ProfileDao {
                 profile.copy(dedupeKey = "").toPayloadItem(existingPayloads[profile.guid]?.content)
             }
         )
-        profiles.filter { it.configType != EConfigType.CUSTOM }
+        profiles.filter {
+            it.configType != EConfigType.CUSTOM && it.configType != EConfigType.CUSTOM_OUTBOUND
+        }
             .map { it.guid }
             .chunked(SQLITE_VAR_LIMIT)
             .forEach { deleteRawRows(it) }
@@ -829,7 +835,7 @@ interface ProfileDao {
     @Query("UPDATE profile_stats SET testDelayMillis = 0 WHERE guid IN (:guids)")
     suspend fun clearDelays(guids: List<String>)
 
-    // ---- Raw config (CUSTOM) ----
+    // ---- Raw JSON config (CUSTOM / CUSTOM_OUTBOUND) ----
 
     @Query("SELECT content FROM profile_raw WHERE guid = :guid")
     suspend fun raw(guid: String): String?

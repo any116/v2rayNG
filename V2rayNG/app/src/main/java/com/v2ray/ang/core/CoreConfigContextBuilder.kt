@@ -96,11 +96,17 @@ object CoreConfigContextBuilder {
             }
         }
 
+        val rawConfig = if (config.configType == EConfigType.CUSTOM_OUTBOUND) {
+            scope.profileDao.raw(config.guid)
+        } else {
+            null
+        }
         return CoreConfigContext.ResolvedOutbound(
             tag = tag,
             profile = config,
             resolvedProfiles = resolvedProfiles,
             resolvedType = resolvedType,
+            rawConfig = rawConfig,
         )
     }
 

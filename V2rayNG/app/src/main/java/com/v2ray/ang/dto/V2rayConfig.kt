@@ -112,7 +112,9 @@ data class V2rayConfig(
 
         data class StreamSettingsBean(
             var network: String? = AppConfig.DEFAULT_NETWORK,
+            var method: String? = null,
             var security: String? = null,
+            var rawSettings: TcpSettingsBean? = null,
             var tcpSettings: TcpSettingsBean? = null,
             var kcpSettings: KcpSettingsBean? = null,
             var wsSettings: WsSettingsBean? = null,
@@ -204,6 +206,7 @@ data class V2rayConfig(
                 var mark: Int? = null,
                 var dialerProxy: String? = null,
                 var domainStrategy: String? = null,
+                var addressPortStrategy: String? = null,
                 var happyEyeballs: HappyEyeballsBean? = null,
             )
 
@@ -226,6 +229,9 @@ data class V2rayConfig(
                 var certificates: List<CertificateBean>? = null,
                 var disableSystemRoot: Boolean? = null,
                 var useSystemCA: Boolean? = null,
+                val rejectUnknownSni: Boolean? = null,
+                val curvePreferences: List<String>? = null,
+                val echSockopt: SockoptBean? = null,
                 val enableSessionResumption: Boolean? = null,
                 var echConfigList: String? = null,
                 var verifyPeerCertByName: String? = null,
@@ -280,9 +286,25 @@ data class V2rayConfig(
                 var remoteFolder: String? = null,
                 var service: String? = null,
                 var secrets: List<String>? = null,
+                var concurrency: Int? = null,
+                var flushIntervalMs: Int? = null,
+                var maxPollIntervalMs: Int? = null,
+                var eagerWindowMs: Int? = null,
+                var segmentBytes: Int? = null,
+                var pollIntervalMs: Int? = null,
+                var xmux: XmuxSettingsBean? = null,
                 var template: JsonObject? = null,
                 var s3: JsonObject? = null
-            )
+            ) {
+                data class XmuxSettingsBean(
+                    var maxConnections: Any? = null,
+                    var maxConcurrency: Any? = null,
+                    var cMaxReuseTimes: Any? = null,
+                    var hMaxRequestTimes: Any? = null,
+                    var hMaxReusableSecs: Any? = null,
+                    var hKeepAlivePeriod: Any? = null
+                )
+            }
 
             //https://xtls.github.io/config/transport.html#finalmaskobject
             data class FinalMaskBean(

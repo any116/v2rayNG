@@ -141,7 +141,9 @@ class ServerEditViewModel @Inject constructor(
         } else {
             ServerForm.from(data.profile)
         }
-        val rawContent = if (configType == EConfigType.CUSTOM) data.rawContent else ""
+        val rawContent = if (
+            configType == EConfigType.CUSTOM || configType == EConfigType.CUSTOM_OUTBOUND
+        ) data.rawContent else ""
 
         setState {
             copy(
@@ -210,7 +212,7 @@ class ServerEditViewModel @Inject constructor(
     private suspend fun saveSnapshot(form: ServerForm, rawContent: String): BaseResult? {
         if (!awaitLoad()) return null
         return when (state.configType) {
-            EConfigType.CUSTOM -> saveCustom(form, rawContent)
+            EConfigType.CUSTOM, EConfigType.CUSTOM_OUTBOUND -> saveCustom(form, rawContent)
             EConfigType.POLICYGROUP -> savePolicyGroup(form)
             EConfigType.PROXYCHAIN -> saveProxyChain(form)
             else -> saveStandard(form)
@@ -261,8 +263,12 @@ class ServerEditViewModel @Inject constructor(
         }
         if (state.fieldErrors.isNotEmpty()) setState { copy(fieldErrors = emptyMap()) }
 
-        val parsed = try {
-            repository.parseCustomConfig(content)
+        val (parsed, contentToSave) = try {
+            if (state.configType == EConfigType.CUSTOM_OUTBOUND) {
+                repository.parseCustomOutbound(content)
+            } else {
+                repository.parseCustomConfig(content) to content
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
@@ -270,14 +276,14 @@ class ServerEditViewModel @Inject constructor(
         }
 
         val profile = initialProfile.copy().takeIf { state.isEdit }
-            ?: ProfileItem.create(EConfigType.CUSTOM)
+            ?: ProfileItem.create(state.configType)
         profile.remarks = form.remarks.ifEmpty { parsed?.remarks.orEmpty() }
         profile.server = parsed?.server
         profile.serverPort = parsed?.serverPort
         profile.description = repository.generateDescription(profile)
         applySubscriptionId(profile)
 
-        val savedGuid = repository.saveProfile(state.guid, profile, content)
+        val savedGuid = repository.saveProfile(state.guid, profile, contentToSave)
         return BaseResult.Saved(id = savedGuid, restartService = state.isRunning)
     }
 
