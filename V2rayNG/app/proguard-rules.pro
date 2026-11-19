@@ -82,24 +82,6 @@
     !static !transient <fields>;
 }
 
-# Editor forms are serialized to JSON for saved-state restoration after process death.
--keep class com.v2ray.ang.ui.server.ServerForm {
-    <init>(...);
-    !static !transient <fields>;
-}
--keep class com.v2ray.ang.ui.server.ChainMember {
-    <init>(...);
-    !static !transient <fields>;
-}
--keep class com.v2ray.ang.ui.subscription.SubEditForm {
-    <init>(...);
-    !static !transient <fields>;
-}
--keep class com.v2ray.ang.ui.routing.RoutingForm {
-    <init>(...);
-    !static !transient <fields>;
-}
-
 # Cross-process Intent messages and saved-state objects use Java serialization.
 -keep class com.v2ray.ang.** implements java.io.Serializable {
     !static !transient <fields>;
