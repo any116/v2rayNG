@@ -523,6 +523,8 @@
     <string name="acc_edit">Изменить</string>
     <string name="acc_delete">Удалить</string>
     <string name="acc_save">Сохранить</string>
+    <string name="acc_show_password">Показать пароль</string>
+    <string name="acc_hide_password">Скрыть пароль</string>
     <string name="acc_per_app_proxy_information">Сведения о прокси для приложений</string>
     <string name="permission_camera">Камера</string>
     <string name="permission_notification">Уведомления</string>

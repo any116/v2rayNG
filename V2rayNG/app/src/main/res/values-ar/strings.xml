@@ -523,6 +523,8 @@
     <string name="acc_edit">تعديل</string>
     <string name="acc_delete">حذف</string>
     <string name="acc_save">حفظ</string>
+    <string name="acc_show_password">إظهار كلمة المرور</string>
+    <string name="acc_hide_password">إخفاء كلمة المرور</string>
     <string name="acc_per_app_proxy_information">معلومات الوكيل لكل تطبيق</string>
     <string name="permission_camera">الكاميرا</string>
     <string name="permission_notification">الإشعارات</string>

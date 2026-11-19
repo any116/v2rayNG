@@ -523,6 +523,8 @@
     <string name="acc_edit">编辑</string>
     <string name="acc_delete">删除</string>
     <string name="acc_save">保存</string>
+    <string name="acc_show_password">显示密码</string>
+    <string name="acc_hide_password">隐藏密码</string>
     <string name="acc_per_app_proxy_information">分应用代理信息</string>
     <string name="permission_camera">相机</string>
     <string name="permission_notification">通知</string>

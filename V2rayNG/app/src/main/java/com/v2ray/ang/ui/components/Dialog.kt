@@ -26,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedSecureTextField
 import androidx.compose.material3.OutlinedTextField
@@ -34,8 +35,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -185,10 +190,32 @@ private fun InputDialogField(field: InputField) {
     val keyboardOptions = KeyboardOptions(keyboardType = field.keyboardType)
     val modifier = Modifier.fillMaxWidth()
     if (field.isPassword) {
+        var passwordVisible by remember { mutableStateOf(false) }
+        val visibilityAction = stringResource(
+            if (passwordVisible) R.string.acc_hide_password else R.string.acc_show_password
+        )
         OutlinedSecureTextField(
             state = field.state,
             label = { Text(field.label) },
-            textObfuscationMode = TextObfuscationMode.Hidden,
+            trailingIcon = {
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(
+                        painter = painterResource(
+                            if (passwordVisible) {
+                                R.drawable.ic_visibility_off_24dp
+                            } else {
+                                R.drawable.ic_visibility_24dp
+                            }
+                        ),
+                        contentDescription = visibilityAction
+                    )
+                }
+            },
+            textObfuscationMode = if (passwordVisible) {
+                TextObfuscationMode.Visible
+            } else {
+                TextObfuscationMode.Hidden
+            },
             keyboardOptions = keyboardOptions,
             colors = appFieldColors(),
             modifier = modifier

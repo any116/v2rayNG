@@ -523,6 +523,8 @@
     <string name="acc_edit">آلشتکاری</string>
     <string name="acc_delete">پاک کردن</string>
     <string name="acc_save">زفت کردن</string>
+    <string name="acc_show_password">نمایش رزم</string>
+    <string name="acc_hide_password">پنهان کردن رزم</string>
     <string name="acc_per_app_proxy_information">دووسمندی پروکسی و ری برنومه</string>
     <string name="permission_camera">دوربیݩ</string>
     <string name="permission_notification">وارسۊوی</string>

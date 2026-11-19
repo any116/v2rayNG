@@ -523,6 +523,8 @@
     <string name="acc_edit">Chỉnh sửa</string>
     <string name="acc_delete">Xóa</string>
     <string name="acc_save">Lưu</string>
+    <string name="acc_show_password">Hiện mật khẩu</string>
+    <string name="acc_hide_password">Ẩn mật khẩu</string>
     <string name="acc_per_app_proxy_information">Thông tin proxy theo ứng dụng</string>
     <string name="permission_camera">Máy ảnh</string>
     <string name="permission_notification">Thông báo</string>
