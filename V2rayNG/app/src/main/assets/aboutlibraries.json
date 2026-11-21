@@ -1390,6 +1390,28 @@
       ]
     },
     {
+      "uniqueId": "androidx.hilt:hilt-lifecycle-viewmodel-compose",
+      "artifactVersion": "1.4.0",
+      "name": "Hilt Lifecycle ViewModel Compose",
+      "description": "Compose integration with Hilt Lifecycle ViewModel",
+      "website": "https://developer.android.com/jetpack/androidx/releases/hilt#1.4.0",
+      "developers": [
+        {
+          "name": "The Android Open Source Project"
+        }
+      ],
+      "organization": {
+        "name": "The Android Open Source Project"
+      },
+      "scm": {
+        "connection": "scm:git:https://android.googlesource.com/platform/frameworks/support",
+        "url": "https://cs.android.com/androidx/platform/frameworks/support"
+      },
+      "licenses": [
+        "Apache-2.0"
+      ]
+    },
+    {
       "uniqueId": "androidx.hilt:hilt-work",
       "artifactVersion": "1.4.0",
       "name": "WorkManager Hilt Extension",

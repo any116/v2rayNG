@@ -416,7 +416,7 @@ class SubscriptionUpdateWorker @AssistedInject constructor(
     }
 
     private fun inputSubIds(): List<String> = buildList {
-        inputData.getStringArray(KEY_SUB_IDS)?.forEach(::add)
+        inputData.getNullableStringArray(KEY_SUB_IDS)?.filterNotNull()?.forEach(::add)
         inputData.getString(KEY_SUB_ID)?.let(::add)
     }.filter(String::isNotBlank).distinct()
 

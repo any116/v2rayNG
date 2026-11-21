@@ -127,7 +127,7 @@ class QSTileService : TileService() {
 
                 AppConfig.MSG_LOCALE_CHANGED -> {
                     val service = context ?: return
-                    val code = intent?.getStringExtra("content")
+                    val code = intent.getStringExtra("content")
                     service.setState(
                         if (CoreServiceManager.isRunning()) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE,
                         code

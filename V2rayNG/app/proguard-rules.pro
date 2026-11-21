@@ -3,6 +3,9 @@
 -dontobfuscate
 -dontoptimize
 
+# Guava uses this optional J2ObjC annotation only for Objective-C memory management, not on Android.
+-dontwarn com.google.j2objc.annotations.RetainedWith
+
 # Gson reads generic signatures, annotations and TypeToken subclasses at runtime.
 -keepattributes Signature,RuntimeVisibleAnnotations,AnnotationDefault,InnerClasses,EnclosingMethod
 -keep class com.google.gson.reflect.TypeToken

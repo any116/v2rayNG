@@ -504,7 +504,7 @@ object CoreServiceManager {
                 AppConfig.MSG_UNREGISTER_CLIENT -> Unit
 
                 AppConfig.MSG_LOCALE_CHANGED -> {
-                    val localeCode = intent?.getStringExtra("content")
+                    val localeCode = intent.getStringExtra("content")
                     NotificationManager.refreshNotification(localeCode)
                 }
 
