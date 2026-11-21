@@ -1,8 +1,10 @@
 package com.v2ray.ang.ui.apppicker
 
-import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
 import androidx.navigation.toRoute
+import androidx.savedstate.SavedState
+import androidx.savedstate.read
+import androidx.savedstate.savedState
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.dto.AppInfo
 import com.v2ray.ang.extension.delay
@@ -27,7 +29,7 @@ class AppPickerViewModel @Inject constructor(
     private var allApps: List<AppInfo> = emptyList()
 
     /**
-     * Taken from the Intent before [restoreSavedState] runs, hence the entry state to diff the
+     * Taken from the route before [restoreSavedState] runs, hence the entry state to diff the
      * result against. Declared above `init` on purpose: property initializers run first.
      */
     private val initialSelected: Set<String> = state.selected
@@ -38,9 +40,7 @@ class AppPickerViewModel @Inject constructor(
     init {
         restoreSavedState()
         handle.setSavedStateProvider(KEY_SAVED) {
-            Bundle().apply {
-                putStringArrayList(KEY_SELECTED, ArrayList(state.selected))
-            }
+            savedState { putStringList(KEY_SELECTED, state.selected.toList()) }
         }
         load()
     }
@@ -69,8 +69,8 @@ class AppPickerViewModel @Inject constructor(
     }
 
     private fun restoreSavedState() {
-        val saved = handle.get<Bundle>(KEY_SAVED) ?: return
-        val selected = saved.getStringArrayList(KEY_SELECTED)?.toSet() ?: return
+        val selected = handle.get<SavedState>(KEY_SAVED)
+            ?.read { getStringListOrNull(KEY_SELECTED) }?.toSet() ?: return
         setState { copy(selected = selected) }
     }
 

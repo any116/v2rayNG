@@ -1,6 +1,7 @@
 package com.v2ray.ang.handler
 
 import android.content.Context
+import androidx.concurrent.futures.await
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -22,13 +23,9 @@ import com.v2ray.ang.di.PlatformDependencies
 import com.v2ray.ang.util.LogUtil
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 object SubscriptionUpdater {
 
@@ -111,7 +108,7 @@ object SubscriptionUpdater {
                             )
                             .build(),
                     )
-                    .awaitRemote()
+                    .await()
                 return true
             } catch (e: CancellationException) {
                 throw e
@@ -194,7 +191,7 @@ object SubscriptionUpdater {
                         .build()
                     requests += request
                 }
-                rw.enqueue(requests).awaitRemote()
+                rw.enqueue(requests).await()
                 true
             } catch (e: CancellationException) {
                 throw e
@@ -332,7 +329,7 @@ object SubscriptionUpdater {
                 taskName(subId),
                 existingWorkPolicy,
                 request
-            ).awaitRemote()
+            ).await()
 
             LogUtil.i(
                 AppConfig.TAG,
@@ -352,7 +349,7 @@ object SubscriptionUpdater {
         return try {
             RemoteWorkManager.getInstance(context)
                 .cancelUniqueWork(taskName(subId))
-                .awaitRemote()
+                .await()
             true
         } catch (e: CancellationException) {
             throw e
@@ -371,25 +368,10 @@ object SubscriptionUpdater {
     private fun legacyManualTaskName(subId: String) = "${MANUAL_BATCH_TASK_NAME}_$subId"
 }
 
-private suspend fun <T> ListenableFuture<T>.awaitRemote(): T = suspendCancellableCoroutine { continuation ->
-    addListener({
-        try {
-            continuation.resume(get())
-        } catch (e: java.util.concurrent.ExecutionException) {
-            continuation.resumeWithException(e.cause ?: e)
-        } catch (e: CancellationException) {
-            continuation.cancel(e)
-        } catch (e: Throwable) {
-            continuation.resumeWithException(e)
-        }
-    }, Executor { command -> command.run() })
-    continuation.invokeOnCancellation { cancel(true) }
-}
-
 /** Scheduling is best effort and must never block a database mutation such as subscription delete. */
 private suspend fun ListenableFuture<*>.awaitQuietly(operation: String) {
     try {
-        awaitRemote()
+        await()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Throwable) {

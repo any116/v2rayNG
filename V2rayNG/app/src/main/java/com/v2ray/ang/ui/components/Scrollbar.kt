@@ -46,7 +46,6 @@ data class ScrollbarConfig(
     val thumbColor: Color = Color.Unspecified,
     val trackColor: Color = Color.Transparent,
     val padding: Dp = 2.dp,
-    val cornerRadius: Dp = 2.dp,
     val fadeOutDurationMs: Int = 1500,
     val fadeAnimDurationMs: Int = 300,
     val isFadeEnabled: Boolean = true
@@ -78,8 +77,8 @@ private fun Modifier.m3Scrollbar(
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
 
-    return this.then(
-        Modifier.nonInteractiveScrollbar(
+    return this
+        .nonInteractiveScrollbar(
             state = resolvedState,
             orientation = orientation,
             thumbColor = thumbColor,
@@ -93,8 +92,7 @@ private fun Modifier.m3Scrollbar(
             mainAxisTrackInset = config.padding,
             crossAxisTrackInset = config.padding
         )
-    ).then(
-        Modifier.fastScrollbarInput(
+        .fastScrollbarInput(
             state = resolvedState,
             orientation = orientation,
             config = config,
@@ -102,7 +100,6 @@ private fun Modifier.m3Scrollbar(
             density = density,
             layoutDirection = layoutDirection
         )
-    )
 }
 
 private data class ScrollbarGeometry(

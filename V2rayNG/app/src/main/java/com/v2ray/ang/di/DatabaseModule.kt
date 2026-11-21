@@ -5,6 +5,7 @@ import androidx.room3.Room
 import androidx.room3.RoomDatabase
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import com.v2ray.ang.data.AppDatabase
 import com.v2ray.ang.data.dao.AssetDao
 import com.v2ray.ang.data.GROUP_ORDER_TRIGGERS
@@ -62,12 +63,8 @@ object DatabaseModule {
         })
         .build()
 
-    private suspend fun installGroupOrderTriggers(connection: SQLiteConnection) {
-        GROUP_ORDER_TRIGGERS.forEach { sql ->
-            connection.prepare(sql).use { statement ->
-                statement.step()
-            }
-        }
+    private fun installGroupOrderTriggers(connection: SQLiteConnection) {
+        GROUP_ORDER_TRIGGERS.forEach { sql -> connection.execSQL(sql) }
     }
 
     @Provides

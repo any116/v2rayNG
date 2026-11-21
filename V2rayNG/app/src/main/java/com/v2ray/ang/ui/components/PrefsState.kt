@@ -8,7 +8,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import com.v2ray.ang.data.Prefs
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 
 /**
@@ -23,7 +22,6 @@ fun rememberSettingBool(key: String, default: Boolean = false): MutableState<Boo
     LaunchedEffect(key) {
         snapshotFlow { state.value }
             .drop(1)
-            .distinctUntilChanged()
             .collectLatest { Prefs.putBool(key, it) }
     }
     return state
@@ -35,7 +33,6 @@ fun rememberSettingString(key: String, default: String = ""): MutableState<Strin
     LaunchedEffect(key) {
         snapshotFlow { state.value }
             .drop(1)
-            .distinctUntilChanged()
             .collectLatest { Prefs.putString(key, it) }
     }
     return state

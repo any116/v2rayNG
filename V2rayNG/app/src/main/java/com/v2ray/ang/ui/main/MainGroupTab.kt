@@ -4,7 +4,6 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
@@ -31,7 +30,6 @@ import com.v2ray.ang.dto.GroupMapItem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.time.Duration.Companion.milliseconds
 
 private val TabRowEdgePadding = 16.dp
@@ -140,7 +138,6 @@ private fun GroupTabItem(
  * Default-priority animation (same priority, latest wins) and waits out any UserInput drag/fling.
  * One takeover, one motion - no manual stop needed.
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun KeepSelectedTabFullyVisible(
     scrollState: ScrollState,
@@ -164,7 +161,6 @@ private fun KeepSelectedTabFullyVisible(
                 maxValue = scrollState.maxValue,
             )
         }
-            .distinctUntilChanged()
             // collectLatest cancels the pending delay on every further layout change, so the
             // correction runs once, after the strip has stopped resizing.
             .collectLatest { metrics ->

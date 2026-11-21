@@ -257,6 +257,7 @@ dependencies {
     // Background Task Libraries
     implementation(libs.work.runtime.ktx)
     implementation(libs.work.multiprocess)
+    implementation(libs.androidx.concurrent.futures.ktx)
 
     // Hilt
     implementation(libs.hilt.android)

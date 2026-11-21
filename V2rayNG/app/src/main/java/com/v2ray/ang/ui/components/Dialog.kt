@@ -24,7 +24,6 @@ import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -145,7 +144,6 @@ internal fun snapshotInputFields(fields: List<InputField>): List<String> =
  * Renders caller-owned fields and reads them synchronously on confirmation.
  * The caller owns saveable state and decides when a new dialog seeds committed values.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InputDialog(
     title: String,
@@ -184,7 +182,6 @@ fun InputDialog(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun InputDialogField(field: InputField) {
     val keyboardOptions = KeyboardOptions(keyboardType = field.keyboardType)

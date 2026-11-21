@@ -4,10 +4,8 @@ import android.graphics.Rect
 import android.view.ViewTreeObserver
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -26,7 +24,6 @@ import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
@@ -50,8 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onLayoutRectChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -76,10 +72,8 @@ import androidx.paging.compose.itemKey
 import com.v2ray.ang.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 private val PagedDropdownMaxHeight = 320.dp
 private val PagedDropdownMinHeight = 96.dp
@@ -201,7 +195,6 @@ internal suspend fun observeDropdownQueries(
         val text = state.text.toString()
         Triple(text, queries.queryFor(text), queries.pickGeneration)
     }
-        .distinctUntilChanged()
         .collectLatest { (text, _, _) ->
             if (text != state.text.toString()) return@collectLatest
             queries.observeText(text)
@@ -250,7 +243,6 @@ internal suspend fun observeDropdownQueries(
  * everything except what is intrinsic to paging (loading / empty / append states
  * and the debounced filter).
  */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun FormPagedDropdownField(
     label: String,
@@ -306,13 +298,8 @@ fun FormPagedDropdownField(
             .fillMaxWidth()
             .then(rememberFormFieldVisibilityModifier())
             .padding(horizontal = FieldHorizontalPad, vertical = FieldVerticalPad)
-            .onGloballyPositioned { coords ->
-                if (!coords.isAttached) return@onGloballyPositioned
-                val origin = coords.positionInWindow()
-                val left = origin.x.roundToInt()
-                val top = origin.y.roundToInt()
-                val rect = IntRect(left, top, left + coords.size.width, top + coords.size.height)
-                if (rect != anchorRect) anchorRect = rect
+            .onLayoutRectChanged(throttleMillis = 0, debounceMillis = 0) { bounds ->
+                anchorRect = bounds.boundsInWindow
             }
     ) {
         OutlinedTextField(

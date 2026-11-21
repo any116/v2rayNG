@@ -3,12 +3,13 @@ package com.v2ray.ang.data
 import androidx.room3.migration.Migration
 import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.SQLiteStatement
+import androidx.sqlite.execSQL
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.enums.EConfigType
 
 /** Adds the Xray WireGuard options without rewriting existing profile rows. */
 val MIGRATION_1_2 = Migration(1, 2) { connection ->
-    connection.prepare("ALTER TABLE `profiles` ADD COLUMN `remoteDNS` TEXT").use { it.step() }
+    connection.execSQL("ALTER TABLE `profiles` ADD COLUMN `remoteDNS` TEXT")
 }
 
 /**
@@ -22,11 +23,11 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
     // SQLite re-parses surviving subscriptions triggers while profiles is temporarily absent.
     // Drop all six first; DatabaseModule.onOpen recreates them after the rename completes.
     GROUP_ORDER_TRIGGER_NAMES.forEach { name ->
-        connection.prepare("DROP TRIGGER IF EXISTS `$name`").use { it.step() }
+        connection.execSQL("DROP TRIGGER IF EXISTS `$name`")
     }
 
     // Copy configType verbatim so protocol ids unknown to this build survive the migration.
-    connection.prepare(
+    connection.execSQL(
         """
         CREATE TABLE IF NOT EXISTS `profile_payload` (
             `guid` TEXT NOT NULL,
@@ -36,9 +37,9 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
             PRIMARY KEY(`guid`)
         )
         """.trimIndent()
-    ).use { it.step() }
+    )
 
-    connection.prepare(
+    connection.execSQL(
         """
         CREATE TABLE `profiles_new` (
             `guid` TEXT NOT NULL,
@@ -57,9 +58,9 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
             PRIMARY KEY(`guid`)
         )
         """.trimIndent()
-    ).use { it.step() }
+    )
 
-    connection.prepare(
+    connection.execSQL(
         """
         INSERT INTO `profiles_new`(
             `guid`, `sortOrder`, `groupSortOrder`, `configType`, `subscriptionId`, `addedTime`,
@@ -74,15 +75,13 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
                END
           FROM `profiles`
         """.trimIndent()
-    ).use { it.step() }
-    val payloadInsert = connection.prepare(
+    )
+    connection.prepare(
         """
         INSERT INTO `profile_payload`(`guid`, `payloadVersion`, `content`, `dedupeKey`)
         VALUES (?, ?, ?, ?)
         """.trimIndent()
-    )
-
-    try {
+    ).use { payloadInsert ->
         connection.prepare(
             """
             SELECT `guid`, `sortOrder`, `groupSortOrder`, `dedupeKey`, `configVersion`, `configType`,
@@ -115,28 +114,26 @@ val MIGRATION_2_3 = Migration(2, 3) { connection ->
                 payloadInsert.step()
             }
         }
-    } finally {
-        payloadInsert.close()
     }
 
-    connection.prepare("DROP TABLE `profiles`").use { it.step() }
-    connection.prepare("ALTER TABLE `profiles_new` RENAME TO `profiles`").use { it.step() }
-    connection.prepare(
+    connection.execSQL("DROP TABLE `profiles`")
+    connection.execSQL("ALTER TABLE `profiles_new` RENAME TO `profiles`")
+    connection.execSQL(
         "CREATE INDEX IF NOT EXISTS `index_profiles_subscriptionId_groupSortOrder_sortOrder_guid` " +
             "ON `profiles` (`subscriptionId`, `groupSortOrder`, `sortOrder`, `guid`)"
-    ).use { it.step() }
-    connection.prepare(
+    )
+    connection.execSQL(
         "CREATE INDEX IF NOT EXISTS `index_profiles_groupSortOrder_sortOrder_guid` " +
             "ON `profiles` (`groupSortOrder`, `sortOrder`, `guid`)"
-    ).use { it.step() }
-    connection.prepare(
+    )
+    connection.execSQL(
         "CREATE INDEX IF NOT EXISTS `index_profiles_remarks` ON `profiles` (`remarks`)"
-    ).use { it.step() }
-    connection.prepare(
+    )
+    connection.execSQL(
         "CREATE INDEX IF NOT EXISTS `index_profile_payload_dedupeKey` ON `profile_payload` (`dedupeKey`)"
-    ).use { it.step() }
+    )
     GROUP_ORDER_TRIGGERS.forEach { sql ->
-        connection.prepare(sql).use { it.step() }
+        connection.execSQL(sql)
     }
 }
 

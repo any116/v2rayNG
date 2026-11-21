@@ -3,7 +3,6 @@ package com.v2ray.ang.ui.components
 import android.content.res.Configuration
 import androidx.annotation.ArrayRes
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
@@ -13,13 +12,13 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -49,8 +48,6 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -96,23 +93,16 @@ internal fun appFieldColors(
     val secondary = MaterialTheme.colorScheme.secondary
     val error = MaterialTheme.colorScheme.error
     val accent = if (isError) error else secondary
-    val defaultColors = OutlinedTextFieldDefaults.colors()
-    val border = if (borderless) Color.Transparent else Color.Unspecified
-    val focusedBorder = when {
-        borderless -> border
+    val border = when {
+        borderless -> Color.Transparent
         isError -> error
-        else -> defaultColors.focusedIndicatorColor
-    }
-    val unfocusedBorder = when {
-        borderless -> border
-        isError -> error
-        else -> defaultColors.unfocusedIndicatorColor
+        else -> Color.Unspecified
     }
     return OutlinedTextFieldDefaults.colors(
         focusedContainerColor = Color.Transparent,
         unfocusedContainerColor = Color.Transparent,
-        focusedBorderColor = focusedBorder,
-        unfocusedBorderColor = unfocusedBorder,
+        focusedBorderColor = border,
+        unfocusedBorderColor = border,
         errorBorderColor = error,
         errorLabelColor = error,
         errorSupportingTextColor = error,
@@ -128,7 +118,6 @@ internal fun appFieldColors(
 }
 
 /** Keep the whole field visible after IME animation without restarting scrolling on every frame. */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun rememberFormFieldVisibilityModifier(): Modifier {
     val requester = remember { BringIntoViewRequester() }
@@ -156,7 +145,6 @@ internal fun rememberFormFieldVisibilityModifier(): Modifier {
 }
 
 /** Renders the caller-owned editing state; saving reads that same state directly. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormTextField(
     label: String,
@@ -187,7 +175,6 @@ fun FormTextField(
 }
 
 /** Dropdown for small, non-paged option sets. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormDropdownField(
     label: String,
@@ -203,17 +190,10 @@ fun FormDropdownField(
     var expanded by rememberSaveable { mutableStateOf(false) }
     val menuScrollState = rememberScrollState()
     val focusManager = LocalFocusManager.current
-    // Observation metadata only: picks advance it synchronously so they cannot reopen the menu.
-    var lastObservedText by rememberSaveable(state) { mutableStateOf(state.text.toString()) }
-    LaunchedEffect(state, editable, enabled) {
-        snapshotFlow { state.text.toString() }
-            .distinctUntilChanged()
-            .collect { text ->
-                if (text != lastObservedText) {
-                    lastObservedText = text
-                    if (editable && enabled) expanded = true
-                }
-            }
+    val expandOnUserEdit = remember {
+        InputTransformation {
+            if (changes.changeCount > 0) expanded = true
+        }
     }
 
     ExposedDropdownMenuBox(
@@ -232,6 +212,7 @@ fun FormDropdownField(
             readOnly = !editable,
             enabled = enabled,
             lineLimits = TextFieldLineLimits.SingleLine,
+            inputTransformation = if (editable) expandOnUserEdit else null,
             isError = isError,
             label = { Text(label) },
             placeholder = placeholder?.let { { Text(it) } },
@@ -257,7 +238,6 @@ fun FormDropdownField(
                 DropdownMenuItem(
                     text = { Text(option) },
                     onClick = {
-                        lastObservedText = option
                         if (state.text.toString() != option) {
                             state.setTextAndPlaceCursorAtEnd(option)
                         }

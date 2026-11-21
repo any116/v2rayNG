@@ -13,6 +13,7 @@ okhttp = "5.5.1"
 kotlinxCoroutines = "1.11.0"
 core = "3.5.4"
 workRuntimeKtx = "2.12.0"
+concurrentFutures = "1.2.0"
 lifecycleViewmodelKtx = "2.11.1"
 mockitoKotlin = "6.4.0"
 camerax = "1.7.0"
@@ -46,6 +47,7 @@ kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-cor
 core = { module = "com.google.zxing:core", version.ref = "core" }
 work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
 work-multiprocess = { module = "androidx.work:work-multiprocess", version.ref = "workRuntimeKtx" }
+androidx-concurrent-futures-ktx = { module = "androidx.concurrent:concurrent-futures-ktx", version.ref = "concurrentFutures" }
 lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-viewmodel-ktx", version.ref = "lifecycleViewmodelKtx" }
 lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycleViewmodelKtx" }
 mockito-kotlin = { module = "org.mockito.kotlin:mockito-kotlin", version.ref = "mockitoKotlin" }

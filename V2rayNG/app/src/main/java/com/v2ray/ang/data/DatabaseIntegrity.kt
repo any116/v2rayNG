@@ -2,6 +2,7 @@ package com.v2ray.ang.data
 
 import android.app.Application
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import com.v2ray.ang.AppConfig
 import com.v2ray.ang.util.LogUtil
 
@@ -38,7 +39,7 @@ internal object DatabaseIntegrity {
             BundledSQLiteDriver().open(dbFile.absolutePath).use { conn ->
                 // Another process may hold a short-lived lock; wait instead of failing the
                 // check on the first busy result.
-                conn.prepare("PRAGMA busy_timeout = 3000").use { st -> st.step() }
+                conn.execSQL("PRAGMA busy_timeout = 3000")
 
                 // quick_check only emits more than one row when it found something to report,
                 // so a single "ok" is the healthy result.

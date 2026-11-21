@@ -9,7 +9,6 @@ import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -102,7 +101,6 @@ internal fun ServerDropdownField(
 }
 
 /** Store stable IDs directly; localized labels are a display transformation, never another draft. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ServerIdDropdownField(
     label: String,

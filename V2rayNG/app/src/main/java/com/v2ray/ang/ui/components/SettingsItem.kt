@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -178,7 +178,7 @@ fun SettingsEditItem(
     )
     if (showDialog) {
         // A new opening seeds the committed value; restoration keeps text and directed selection.
-        val editState = rememberSaveable(saver = TextFieldState.Saver) { TextFieldState(value) }
+        val editState = rememberTextFieldState(value)
         val fields = remember(editState, title, isPassword, keyboardNumber) {
             listOf(
                 InputField(

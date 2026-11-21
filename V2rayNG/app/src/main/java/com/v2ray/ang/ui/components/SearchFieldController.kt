@@ -2,6 +2,7 @@ package com.v2ray.ang.ui.components
 
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -55,9 +56,7 @@ fun rememberSearchFieldController(
     initialQuery: String,
     initialActive: Boolean
 ): SearchFieldController {
-    val input = rememberSaveable(saver = TextFieldState.Saver) {
-        TextFieldState(initialQuery)
-    }
+    val input = rememberTextFieldState(initialQuery)
     val activeState = rememberSaveable { mutableStateOf(initialActive) }
     return remember(input, activeState) { SearchFieldController(input, activeState) }
 }

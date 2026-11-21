@@ -5,7 +5,6 @@ import androidx.compose.animation.core.animate
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.DragScope
 import androidx.compose.foundation.gestures.DraggableState
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -154,7 +153,6 @@ internal class MainPushDrawerState(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun rememberMainPushDrawerState(initialOpen: Boolean = false): MainPushDrawerState {
     val spec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
