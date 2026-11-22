@@ -66,12 +66,19 @@
       "tag": "direct"
     },
     {
-      "protocol": "blackhole",
+      "protocol": "freedom",
       "tag": "block",
       "settings": {
-        "response": {
-          "type": "http"
-        }
+        "firewall": [
+          {
+            "action": "block",
+            "delay": 0,
+            "logLevel": "none",
+            "reply": {
+              "type": "http"
+            }
+          }
+        ]
       }
     }
   ],

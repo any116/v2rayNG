@@ -1,5 +1,6 @@
 package com.v2ray.ang.dto
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import com.v2ray.ang.AppConfig
@@ -102,6 +103,9 @@ data class V2rayConfig(
             var mtu: Int? = null,
             @SerializedName("remoteDNS")
             var remoteDNS: List<String>? = null,
+            /*Freedom*/
+            /** Preserve upstream match and reply fields when templates and custom outbounds are serialized. */
+            var firewall: JsonArray? = null
         ) {
             data class WireGuardBean(
                 var publicKey: String = "",
