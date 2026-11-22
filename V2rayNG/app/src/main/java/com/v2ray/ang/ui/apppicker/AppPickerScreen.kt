@@ -248,7 +248,6 @@ private fun AppPickerRow(
             appRow.appName
         },
         packageName = packageName,
-        icon = null,
         checked = checked,
         onCheckedChange = onCheckedChange,
         modifier = modifier

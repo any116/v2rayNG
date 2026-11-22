@@ -173,7 +173,7 @@ ui/                    # 全部 Compose UI
   base/                # BaseActivity / BaseHelperActivity / BaseContract / BaseScreen /
                        # BaseViewModel / BaseEditViewModel / BaseResult
   components/          # 跨屏共享组件：Theme / Common / Dialog / FormFields /
-                       # FormPagedDropdownField / TextEditorState / SearchFieldController / PrefsState /
+                       # FormPagedDropdownField / TextEditorState / SearchFieldController /
                        # SettingsItem / Menu / Scrollbar / SnackBar
   main/ settings/ server/ subscription/ routing/ perappproxy/ apppicker/
   userasset/ backup/ logcat/ scanner/ about/ checkupdate/ shortcut/ urlscheme/

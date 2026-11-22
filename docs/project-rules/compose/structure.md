@@ -22,8 +22,7 @@ ui/components/ 跨屏共享组件与主题
                                Popup + LazyColumn + 去抖，替代 ExposedDropdownMenu
   TextEditorState.kt          UI-owned TextFieldState 集合、一次初始化及 foundation Saver
   SearchFieldController.kt    四个列表屏共用的搜索 TextFieldState 生命周期、清空与单向查询观察
-  PrefsState.kt               rememberSettingBool / rememberSettingString（无 ViewModel 的小开关两向绑定）
-  SettingsItem.kt             PreferenceGroupHeader、SettingsSwitchItem/ListItem/EditItem/MenuItem
+  SettingsItem.kt             CollapsiblePreferenceGroupHeader、SettingsSwitchItem/ListItem/EditItem/MenuItem
   Menu.kt                     AppDropdownMenuItems
   Scrollbar.kt                verticalScrollbar / horizontalScrollbar（M3 滚动条与快速拖拽封装）
   SnackBar.kt                 AppSnackbarController / AppSnackbarHost / AppSnackbarManager / ToastType
@@ -134,8 +133,7 @@ fun XxxScreen(viewModel: XxxViewModel) {
 | 普通下拉选择 | `FormDropdownField` + `rememberStringOptions(@ArrayRes)` |
 | **大量/可搜索下拉（Paging）** | `FormPagedDropdownField(items = lazyPagingItems, …)` |
 | 设置项 | `SettingsSwitchItem` / `SettingsListItem` / `SettingsEditItem` / `SettingsMenuItem` |
-| 无 ViewModel 的小开关 | `rememberSettingBool(key)` / `rememberSettingString(key)` |
-| 分组标题 | `PreferenceGroupHeader` / `CollapsiblePreferenceGroupHeader` |
+| 分组标题 | `CollapsiblePreferenceGroupHeader` |
 | 分割线 | `ItemDivider` / `AppDivider` |
 | 滚动条 | `Modifier.verticalScrollbar(state)` |
 | 拖拽排序 | `ReorderableListItem` / `ReorderableGridItem` + `Modifier.dragHandle()` |
@@ -149,7 +147,6 @@ fun XxxScreen(viewModel: XxxViewModel) {
   迁移后**全仓库已无业务 `AndroidView`**（About 许可页已改为 AboutLibraries compose-m3 组件）；
   新增 `AndroidView` 必须在 PR 里说明为什么无法 Compose 化。
 - 禁止 `LocalContext.current as XxxActivity`；用 `LocalPlatformActions`。
-- 禁止在 Composable 里读写 Room/Prefs、调 `handler/`、起网络请求
-  （唯一例外：`PrefsState.kt` 的两个 `rememberSettingXxx`，仅供没有 ViewModel 的小开关）。
+- 禁止在 Composable 里读写 Room/Prefs、调 `handler/`、起网络请求。
 - 禁止 `GlobalScope`、`runBlocking`。
 - 禁止新增 XML 业务布局（仅 `res/layout` 里 Glance / RemoteViews 需要的系统资源除外）。

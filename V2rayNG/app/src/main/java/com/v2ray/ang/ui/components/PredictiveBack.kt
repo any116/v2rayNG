@@ -23,7 +23,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /** State shared by the platform back observer and Compose-owned back handlers. */
@@ -93,20 +93,13 @@ fun PredictiveBackLayout(
         }
         onDispose { registration?.invoke() }
     }
-    DisposableEffect(lifecycleOwner, state) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (state.enabled) {
-                when (event) {
-                    // Android 14/15 expose no non-consuming progress callback. ON_PAUSE is the
-                    // first common lifecycle signal after a committed system-back transition.
-                    Lifecycle.Event.ON_PAUSE -> state.onBackCommitted()
-                    Lifecycle.Event.ON_RESUME -> state.onBackFinished()
-                    else -> Unit
-                }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    // Android 14/15 expose no non-consuming progress callback. ON_PAUSE is the
+    // first common lifecycle signal after a committed system-back transition.
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE, lifecycleOwner) {
+        if (state.enabled) state.onBackCommitted()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME, lifecycleOwner) {
+        if (state.enabled) state.onBackFinished()
     }
 
     CompositionLocalProvider(LocalPredictiveBackProgress provides state) {

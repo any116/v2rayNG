@@ -6,16 +6,15 @@
 
 1. `MaterialTheme.colorScheme.*` —— M3 语义色，`ui/components/Theme.kt` 里已定义完整的
    `LightColor` / `DarkColor`（含 `surfaceContainer*` 全系列）。
-2. `LocalAppColors.current` —— `AppSemanticColors`（`pingBad`、`fabInactive`、`fabContent`、
-   `divider`、`toastBackground/Success/Error/Info/Content`、`onCameraPreview`），
+2. `LocalAppColors.current` —— `AppSemanticColors`（`pingBad`、`divider`、
+   `toastBackground/Success/Error/Info/Content`、`onCameraPreview`），
    随深浅色自动切换（`LightSemanticColors` / `DarkSemanticColors`）。
 
 规则：
 
 - **Composable 里禁止出现 `Color(0xFF…)` 字面量。** 需要新语义色时加进 `AppSemanticColors`
   并同时补 Light / Dark 两份。
-- `Theme.kt` 顶层的 `colorPing` / `colorPingRed` / `colorConfigType` / `colorFabActive` /
-  `toastIconCircleBg` / `toastTextColor` 是不随主题变化的品牌色/覆盖层色，
+- `Theme.kt` 顶层的 `colorConfigType` / `colorFabActive` 是不随主题变化的品牌色，
   只在既有位置沿用，不要扩充这一组。
 - 需要知道当前是否深色时用 `LocalDarkTheme.current`，不要重复调 `isSystemInDarkTheme()`
   （那会忽略用户在设置里选的 Light/Dark 覆盖）。

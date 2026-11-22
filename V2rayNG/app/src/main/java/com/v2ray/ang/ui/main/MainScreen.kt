@@ -10,7 +10,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -31,7 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.v2ray.ang.R
 import com.v2ray.ang.dto.ConnectionTestResult
@@ -61,15 +60,9 @@ fun MainScreen(
     val predictiveBackState = LocalPredictiveBackProgress.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val drawerState = rememberMainPushDrawerState()
-    DisposableEffect(lifecycleOwner, predictiveBackState, drawerState) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                predictiveBackState?.onBackFinished()
-                drawerState.onDestinationResumed()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME, lifecycleOwner) {
+        predictiveBackState?.onBackFinished()
+        drawerState.onDestinationResumed()
     }
     val dispatch = remember(viewModel) { viewModel::onAction }
     val search = rememberSearchFieldController(

@@ -39,8 +39,7 @@ UI State as single source of truth）与 Room 3 / Paging 3 官方指南。本文
 - `data/`、`handler/`、`core/`、`service/` 不得 import `data/repository/` 与 `ui/`。
 - Composable 不得 import `handler/`、`data/repository/`、`core/`
   （`ui.components.Theme` 对 `ThemeRepository` 的引用是唯一历史例外，不要新增同类）。
-- Composable 不得 import `Prefs`（见 `compose/structure.md` 的例外清单：
-  仅 `ui/components/PrefsState.kt` 的两个 `rememberSettingBool/String` 允许，供无 ViewModel 的小开关使用）。
+- Composable 不得 import `Prefs`。
 
 ## 2. 包归属决策（本仓库的最终答案）
 

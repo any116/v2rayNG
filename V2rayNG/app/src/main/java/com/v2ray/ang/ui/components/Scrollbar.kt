@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.currentStateAsState
 import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
@@ -62,11 +62,8 @@ private fun Modifier.m3Scrollbar(
     config: ScrollbarConfig,
     scrollableState: ScrollableState
 ): Modifier {
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
-    val isResumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
-
-    if (!isResumed) return this
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    if (!lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) return this
 
     val resolvedState = state ?: return this
     val thumbColor = if (config.thumbColor == Color.Unspecified) {

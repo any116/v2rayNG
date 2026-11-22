@@ -38,34 +38,12 @@ import androidx.compose.ui.unit.dp
 import com.v2ray.ang.R
 
 private val ItemPad = 16.dp
-private val GroupHeaderTopPad = 16.dp
-private val GroupHeaderBottomPad = 8.dp
 private val HeaderVerticalPad = 12.dp
 private val IconSize = 24.dp
 private val TitleGap = 4.dp
 private const val DisabledAlpha = 0.38f
 private const val SwitchScale = 0.8f
 private const val MaskedValue = "******"
-
-@Composable
-fun PreferenceGroupHeader(
-    title: String,
-    modifier: Modifier = Modifier
-) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.secondary,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(
-                start = ItemPad,
-                end = ItemPad,
-                top = GroupHeaderTopPad,
-                bottom = GroupHeaderBottomPad
-            )
-    )
-}
 
 @Composable
 fun CollapsiblePreferenceGroupHeader(
@@ -306,12 +284,6 @@ fun SettingsSwitchItem(
 }
 
 // ===== previews =====
-
-@Preview(showBackground = true)
-@Composable
-private fun PreferenceGroupHeaderPreview() = AppTheme {
-    PreferenceGroupHeader(title = "VPN")
-}
 
 @Preview(showBackground = true)
 @Composable

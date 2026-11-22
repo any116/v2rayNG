@@ -390,7 +390,6 @@ private fun PerAppProxyRow(
     AppListItem(
         appName = appRow.appName,
         packageName = packageName,
-        icon = null,
         checked = checked,
         onCheckedChange = onCheckedChange,
         modifier = modifier

@@ -15,14 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.TextObfuscationMode
 import androidx.compose.foundation.text.input.rememberTextFieldState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -68,25 +66,15 @@ fun ConfirmDialog(
     title: String? = null,
     confirmText: String = stringResource(R.string.action_ok),
     dismissText: String? = stringResource(R.string.action_cancel),
-    scrollableMessage: Boolean = false,
     confirmIcon: @Composable (() -> Unit)? = null
 ) {
-    val scrollState = rememberScrollState()
     AlertDialog(
         onDismissRequest = onDismiss,
         title = title?.let { { Text(it) } },
         text = {
             Text(
                 text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = if (scrollableMessage) {
-                    Modifier
-                        .fillMaxWidth()
-                        .verticalScroll(scrollState)
-                        .verticalScrollbar(scrollState)
-                } else {
-                    Modifier
-                }
+                style = MaterialTheme.typography.bodyMedium
             )
         },
         confirmButton = {
@@ -130,7 +118,6 @@ fun DeleteConfirmDialog(
 data class InputField(
     val label: String,
     val state: TextFieldState,
-    val singleLine: Boolean = true,
     val keyboardType: KeyboardType = KeyboardType.Text,
     /** Use Material3's secure state-based field. Secure fields are always single-line. */
     val isPassword: Boolean = false
@@ -151,8 +138,7 @@ fun InputDialog(
     confirmText: String,
     dismissText: String,
     onConfirm: (List<String>) -> Unit,
-    onDismiss: () -> Unit,
-    confirmEnabled: Boolean = true
+    onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -170,10 +156,7 @@ fun InputDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = { onConfirm(snapshotInputFields(fields)) },
-                enabled = confirmEnabled
-            ) {
+            TextButton(onClick = { onConfirm(snapshotInputFields(fields)) }) {
                 Text(confirmText)
             }
         },
@@ -221,11 +204,7 @@ private fun InputDialogField(field: InputField) {
         OutlinedTextField(
             state = field.state,
             label = { Text(field.label) },
-            lineLimits = if (field.singleLine) {
-                TextFieldLineLimits.SingleLine
-            } else {
-                TextFieldLineLimits.MultiLine(maxHeightInLines = 5)
-            },
+            lineLimits = TextFieldLineLimits.SingleLine,
             keyboardOptions = keyboardOptions,
             colors = appFieldColors(),
             modifier = modifier

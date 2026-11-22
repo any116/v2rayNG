@@ -109,13 +109,11 @@ private val DarkColor = darkColorScheme(
 )
 
 /**
- * Semantic colors used across the app (toasts, dividers, FAB states, etc.)
+ * Semantic colors used across the app (toasts, dividers, ping state, etc.)
  */
 @Immutable
 data class AppSemanticColors(
     val pingBad: Color,
-    val fabInactive: Color,
-    val fabContent: Color,
     val divider: Color,
     val toastBackground: Color,
     val toastSuccess: Color,
@@ -127,8 +125,6 @@ data class AppSemanticColors(
 
 private val LightSemanticColors = AppSemanticColors(
     pingBad = Color(0xFFFF0099),   // Pink Red
-    fabInactive = Color(0xFF9C9C9C), // Gray
-    fabContent = Color.White,       // White
     divider = Color(0xFFE0E0E0),    // Light Gray
     toastBackground = Color(0xB3353A3E), // Dark Gray (70%)
     toastSuccess = Color(0xB3388E3C), // Green (70%)
@@ -140,8 +136,6 @@ private val LightSemanticColors = AppSemanticColors(
 
 private val DarkSemanticColors = AppSemanticColors(
     pingBad = Color(0xFFFF0099),
-    fabInactive = Color(0xFF646464),
-    fabContent = Color.White,
     divider = Color(0xFF424242),
     toastBackground = Color(0xB34A4F54),
     toastSuccess = Color(0xB3388E3C),
@@ -152,12 +146,8 @@ private val DarkSemanticColors = AppSemanticColors(
 )
 
 // Additional global color constants (used elsewhere in the app)
-val colorPing = Color(0xFF009966)       // Green
-val colorPingRed = Color(0xFFFF0099)    // Pink Red
 val colorConfigType = Color(0xFFF97910) // Orange
 val colorFabActive = Color(0xFFF97910)  // Orange
-val toastIconCircleBg = Color(0x33FFFFFF) // Semi-transparent White
-val toastTextColor = Color.White
 
 // Composition locals
 val LocalAppColors = staticCompositionLocalOf { LightSemanticColors }

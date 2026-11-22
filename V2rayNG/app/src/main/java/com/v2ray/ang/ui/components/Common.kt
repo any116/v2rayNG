@@ -195,14 +195,13 @@ private fun SearchInputField(
 fun AppListItem(
     appName: String,
     packageName: String,
-    icon: Any?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val model = remember(icon, packageName, context) {
-        icon ?: ImageRequest.Builder(context)
+    val model = remember(packageName, context) {
+        ImageRequest.Builder(context)
             .data("appicon:$packageName")
             .fetcherFactory(AppIconFetcher.Factory(context))
             .build()
@@ -380,7 +379,6 @@ private fun AppListItemPreview() = AppTheme {
         AppListItem(
             appName = "A very long application name that must be ellipsized",
             packageName = "com.example.some.very.long.package.name",
-            icon = null,
             checked = true,
             onCheckedChange = {}
         )
