@@ -36,9 +36,9 @@ class UserAssetUrlSnapshotTest {
     private val store = ViewModelStore()
     private val loaded = AssetUrlItem(guid = "asset", remarks = "loaded", url = "https://example.com/loaded")
     private val repo = mock<UserAssetRepository> {
-        onBlocking { loadAsset(any()) } doReturn loaded
-        onBlocking { isRemarkDuplicated(any(), any()) } doReturn false
-        onBlocking { saveAsset(any(), any(), any()) } doReturn "asset"
+        on { loadAsset(any()) } doReturn loaded
+        on { isRemarkDuplicated(any(), any()) } doReturn false
+        on { saveAsset(any(), any(), any()) } doReturn "asset"
     }
 
     @BeforeEach

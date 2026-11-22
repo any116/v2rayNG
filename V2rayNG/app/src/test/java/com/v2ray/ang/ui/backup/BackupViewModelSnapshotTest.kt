@@ -33,7 +33,7 @@ class BackupViewModelSnapshotTest {
     private val store = ViewModelStore()
     private val loaded = WebDavConfig("https://example.test/loaded")
     private val repo = mock<BackupRepository> {
-        onBlocking { loadWebDav() } doReturn loaded
+        on { loadWebDav() } doReturn loaded
     }
 
     @BeforeEach

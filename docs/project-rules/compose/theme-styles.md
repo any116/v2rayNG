@@ -57,6 +57,8 @@ internal val FieldVerticalPad = 4.dp
   `AppIconSize`、`ItemHorizontalPad`；`FormFields.kt` 的 `FieldHorizontalPad`）。
 - 数值不得内联在布局代码中间（`padding(16.dp)` 只在一次性、无语义的场合允许）。
 - 触控目标最小 48.dp，见 `accessibility.md`。
+- `AppTheme` 通过 `LocalRippleThemeConfiguration` 启用 Material3 原生 inset focus ring；
+  不再收集焦点状态绘制额外边框，自定义 ripple 用 `focusRingShape` 保持圆角一致。
 
 ## 3. 字体
 
@@ -133,7 +135,7 @@ internal val FieldVerticalPad = 4.dp
 - 主屏悬浮底栏左右外边距为 8.dp。面板自身作为 FAB 外区域的完整点击目标，
   覆盖状态文字、圆弧与间隙；嵌套的 FAB 独立处理点击，不触发状态区动作或面板波纹。
   面板按压开始即向原生 ripple 发出一对 Press/Release，触发覆盖整条底栏（含 FAB）的扩散水波纹，
-  不等待真实松手，避免整栏持续色层；视觉源不接收 focus/hover/drag，键盘焦点用细边框提示。
+  不等待真实松手，避免整栏持续色层；视觉源不接收 hover/drag，焦点事件交由原生 inset focus ring。
   服务按钮使用 Material3 FloatingActionButton，保留组件默认独立波纹及按压反馈；未启动时使用透明容器
   直接露出底栏背景，所有交互态 elevation 为 0.dp，避免半透明背景重复叠色与阴影色差，图标使用
   `onPrimaryContainer`。运行时使用 `secondary` / `onSecondary` 并保留默认独立阴影。

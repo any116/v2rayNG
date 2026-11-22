@@ -39,10 +39,10 @@ class RoutingEditSnapshotTest {
     private val store = ViewModelStore()
     private val loaded = RulesetItem(id = "rule", remarks = "loaded", sortOrder = 123L)
     private val repo = mock<RoutingRepository> {
-        onBlocking { loadEditData(any()) } doReturn RoutingEditData(loaded, true)
-        onBlocking { updateRule(any()) } doReturn true
-        onBlocking { insertRule(any()) } doReturn "created"
-        onBlocking { removeRule(any()) } doReturn true
+        on { loadEditData(any()) } doReturn RoutingEditData(loaded, true)
+        on { updateRule(any()) } doReturn true
+        on { insertRule(any()) } doReturn "created"
+        on { removeRule(any()) } doReturn true
     }
 
     @BeforeEach

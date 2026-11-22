@@ -1,12 +1,11 @@
 package com.v2ray.ang.ui.main
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.FocusInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -30,7 +29,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -69,7 +67,6 @@ internal fun MainBottomBar(
     val shape = MaterialTheme.shapes.extraLarge
     val interaction = remember { MutableInteractionSource() }
     val barRipple = rememberBarRippleSource(interaction)
-    val focused by interaction.collectIsFocusedAsState()
     val enabled = isRunning || isTesting
     val actionLabel = stringResource(
         if (isTesting) R.string.acc_cancel_connection_test else R.string.acc_check_connection
@@ -93,11 +90,6 @@ internal fun MainBottomBar(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(
-                    width = BarBorderWidth,
-                    color = if (focused && enabled) colors.outline else Color.Transparent,
-                    shape = shape
-                )
                 .clickable(
                     interactionSource = interaction,
                     indication = null,
@@ -106,7 +98,7 @@ internal fun MainBottomBar(
                     role = Role.Button,
                     onClick = { onAction(MainAction.StatusBarClick) }
                 )
-                .indication(barRipple, ripple())
+                .indication(barRipple, ripple(focusRingShape = shape))
                 .semantics { contentDescription = statusText }
         ) {
             Row(
@@ -162,8 +154,6 @@ private fun ServiceFab(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
-    val interaction = remember { MutableInteractionSource() }
-    val focused by interaction.collectIsFocusedAsState()
     // Reuse the panel backdrop without compositing its translucent color a second time.
     val containerColor = if (isRunning) colors.secondary else Color.Transparent
     val contentColor = if (isRunning) colors.onSecondary else colors.onPrimaryContainer
@@ -183,16 +173,10 @@ private fun ServiceFab(
         onClick = onClick,
         modifier = modifier
             .padding(vertical = FabVerticalPadding)
-            .size(FabSize)
-            .border(
-                width = BarBorderWidth,
-                color = if (focused) contentColor else Color.Transparent,
-                shape = FloatingActionButtonDefaults.shape
-            ),
+            .size(FabSize),
         containerColor = containerColor,
         contentColor = contentColor,
-        elevation = elevation,
-        interactionSource = interaction
+        elevation = elevation
     ) {
         Icon(
             painter = painterResource(if (isRunning) R.drawable.ic_stop_24dp else R.drawable.ic_play_24dp),
@@ -205,20 +189,25 @@ private fun ServiceFab(
 /**
  * Release the visual press immediately: native ripple expands and fades once instead of staying
  * as a panel-wide tint while held. The panel clickable still owns the real press and click lifecycle.
+ * Focus is forwarded unchanged to Material3's inset ring; hover and drag remain filtered.
  */
 @Composable
 private fun rememberBarRippleSource(interaction: MutableInteractionSource): MutableInteractionSource {
     val rippleSource = remember(interaction) { MutableInteractionSource() }
     LaunchedEffect(interaction, rippleSource) {
-        interaction.interactions.collect { press ->
-            if (press !is PressInteraction.Press) return@collect
-            var released = false
-            try {
-                rippleSource.emit(press)
-                rippleSource.emit(PressInteraction.Release(press))
-                released = true
-            } finally {
-                if (!released) rippleSource.tryEmit(PressInteraction.Cancel(press))
+        interaction.interactions.collect { event ->
+            when (event) {
+                is FocusInteraction -> rippleSource.emit(event)
+                is PressInteraction.Press -> {
+                    var released = false
+                    try {
+                        rippleSource.emit(event)
+                        rippleSource.emit(PressInteraction.Release(event))
+                        released = true
+                    } finally {
+                        if (!released) rippleSource.tryEmit(PressInteraction.Cancel(event))
+                    }
+                }
             }
         }
     }

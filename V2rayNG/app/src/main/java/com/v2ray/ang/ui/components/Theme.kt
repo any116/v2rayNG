@@ -5,8 +5,10 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.LocalRippleThemeConfiguration
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.RippleDefaults
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -235,7 +237,8 @@ fun AppTheme(
     CompositionLocalProvider(
         LocalDarkTheme provides darkTheme,
         LocalAppColors provides semanticColors,
-        LocalAppSnackbar provides snackbarController
+        LocalAppSnackbar provides snackbarController,
+        LocalRippleThemeConfiguration provides RippleDefaults.InsetFocusRingThemeConfiguration
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorScheme,

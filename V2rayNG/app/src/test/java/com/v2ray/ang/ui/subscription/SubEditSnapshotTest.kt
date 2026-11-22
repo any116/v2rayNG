@@ -40,8 +40,8 @@ class SubEditSnapshotTest {
     private val store = ViewModelStore()
     private val loaded = SubscriptionItem(guid = "sub", remarks = "loaded", sortOrder = 42L)
     private val repo = mock<SubRepository> {
-        onBlocking { loadEdit(any()) } doReturn SubEditData(loaded, true)
-        onBlocking { validateChain(any(), any()) } doReturn SubChainValidation()
+        on { loadEdit(any()) } doReturn SubEditData(loaded, true)
+        on { validateChain(any(), any()) } doReturn SubChainValidation()
     }
 
     @BeforeEach

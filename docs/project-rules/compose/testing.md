@@ -55,7 +55,7 @@ Repository 声明为 `open class` + `open fun`，直接 mock：
 class XxxViewModelTest {
 
     private val repo = mock<XxxRepository> {
-        onBlocking { load() } doReturn listOf(item("a"), item("b"))
+        on { load() } doReturn listOf(item("a"), item("b"))
     }
 
     @Test

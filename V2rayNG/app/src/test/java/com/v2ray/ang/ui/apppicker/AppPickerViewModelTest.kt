@@ -24,7 +24,7 @@ class AppPickerViewModelTest {
 
     private fun viewModel(selected: List<String> = emptyList()): AppPickerViewModel {
         val repo = mock<AppListRepository> {
-            onBlocking { loadApps(any(), any()) } doReturn emptyList()
+            on { loadApps(any(), any()) } doReturn emptyList()
             on { filter(any(), any()) } doReturn emptyList()
         }
         // Navigation stores a List<String> argument as a String array in the handle.

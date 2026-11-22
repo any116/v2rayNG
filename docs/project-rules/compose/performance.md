@@ -72,7 +72,8 @@ private fun rememberBottomState(viewModel: MainViewModel): State<MainBottomState
 FAB 保留 Material3 组件默认的独立阴影和点击反馈，不将交互转发到面板。
 FAB 外区域统一由面板 clickable 接收，按压水波纹覆盖整条底栏，包括状态区、FAB 与间隙。
 按压开始即向独立视觉源发出配对的 Press/Release，让波纹自行完成扩散与淡出，
-不随真实长按保留整栏色层，也不转发 focus/hover/drag 状态遮罩；点击与取消由原 clickable 处理。
+不随真实长按保留整栏色层，也不转发 hover/drag 状态遮罩；点击与取消由原 clickable 处理。
+焦点事件原样转发，由 Material3 原生 inset focus ring 绘制，不通过 Compose state 重组底栏。
 视觉原点直接使用面板按压坐标，不保存 LayoutCoordinates 或坐标状态；无自定义阴影、缩放、
 颜色或图标过渡动画。视觉释放被取消时同步发送 Cancel 清理。
 列表 bottom padding 使用底栏实测总高度（含外边距与系统 inset）。

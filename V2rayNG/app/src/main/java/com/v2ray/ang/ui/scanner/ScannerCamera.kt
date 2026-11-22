@@ -5,7 +5,8 @@ import androidx.camera.compose.CameraXViewfinder
 import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview as CameraPreview
+import androidx.camera.core.imageAnalysis
+import androidx.camera.core.preview
 import androidx.camera.core.SurfaceRequest
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
@@ -169,35 +170,32 @@ internal fun ScannerCameraPreview(
         var cameraProvider: ProcessCameraProvider? = null
         var disposed = false
 
-        val imageAnalysis = ImageAnalysis.Builder()
-            .setResolutionSelector(
-                ResolutionSelector.Builder()
-                    .setResolutionStrategy(
-                        ResolutionStrategy(
-                            TargetSize(AnalysisWidth, AnalysisHeight),
-                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
-                        )
+        val imageAnalysis = imageAnalysis {
+            resolutionSelector = ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    ResolutionStrategy(
+                        TargetSize(AnalysisWidth, AnalysisHeight),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
                     )
-                    .build()
-            )
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .build()
-            .apply {
-                setAnalyzer(analysisExecutor) { imageProxy ->
-                    val text = try {
-                        if (foundResult.get()) null else decoder.decode(imageProxy)
-                    } finally {
-                        imageProxy.close()
-                    }
-                    if (!text.isNullOrEmpty() && foundResult.compareAndSet(false, true)) {
-                        // Safe off the main thread: it ends in MutableStateFlow.update /
-                        // Channel.trySend, both of which are thread safe.
-                        decodedHandler(text)
-                    }
+                )
+                .build()
+            backpressureStrategy = ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+        }.apply {
+            setAnalyzer(analysisExecutor) { imageProxy ->
+                val text = try {
+                    if (foundResult.get()) null else decoder.decode(imageProxy)
+                } finally {
+                    imageProxy.close()
+                }
+                if (!text.isNullOrEmpty() && foundResult.compareAndSet(false, true)) {
+                    // Safe off the main thread: it ends in MutableStateFlow.update /
+                    // Channel.trySend, both of which are thread safe.
+                    decodedHandler(text)
                 }
             }
+        }
 
-        val preview = CameraPreview.Builder().build().apply {
+        val preview = preview {}.apply {
             setSurfaceProvider { request -> surfaceRequest = request }
         }
 
