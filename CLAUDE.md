@@ -46,8 +46,9 @@ bash compile-hevtun.sh   # 构建 hev-socks5-tunnel（需要 NDK_HOME）→ libs
 - `versionCode 746` / `versionName 2.3.6`（`app/build.gradle.kts`）
 - 渠道维度 `distribution`：`fdroid`（`applicationIdSuffix .fdroid`）与 `playstore`
 - `generateLocaleConfig = true`，`localeFilters` = en / zh-rCN / zh-rTW / vi / ru / fa / ar / bn / bqi-rIR
-- release 当前 `isMinifyEnabled = true`、`isShrinkResources = true`；`proguard-rules.pro` 用
-  `-dontobfuscate` / `-dontoptimize` 保持 DEX 名称稳定并降低行为变化风险，仅保留 R8 移除未使用代码所需的缩减能力
+- release 当前 `isMinifyEnabled = true`、`isShrinkResources = true`，允许 R8 字节码优化；
+  `proguard-rules.pro` 保留 `-dontobfuscate`，不做名称混淆，并保留 `SourceFile` / `LineNumberTable`。
+  方法内联等优化仍可能改变原始堆栈，定位时使用与该 APK 同次构建的 mapping 做 Retrace。
 - Room schema 导出到 `app/schemas/`（`room3 { schemaDirectory(...) }`），**随版本管理提交**
 
 ## Dependency Management
@@ -304,6 +305,11 @@ UI 侧的接收点只有一个：`MainRepository` 内部的 `BroadcastReceiver` 
 拉取子模块 → 装 SDK 37.1 / build-tools 37.0.0 / NDK 29.0.14206865 →
 `compile-hevtun.sh`（带 cache）→ AAR 拷进 `app/libs/` →
 `./gradlew assembleRelease --build-cache --parallel --daemon --warning-mode all` → 发 Release。
+构建后检查 `fdroidRelease` / `playstoreRelease` 的 `app/build/outputs/mapping/<variant>/mapping.txt`
+均存在且非空，打包为一个 `v2rayNG_mappings.zip`，包内分别保留 `fdroidRelease/mapping.txt` 和
+`playstoreRelease/mapping.txt`。同一压缩包先上传到 Actions artifact，再随 APK 上传到同次构建的
+Release；artifact 名包含 commit / run ID / attempt，避免重跑冲突。mapping 不提交到源码仓库。
+下载 APK 时应同时归档其 mapping；现有工作流会删除旧 Release 和旧运行，CI 上传并非永久备份。
 CI 不跑 `test`、不跑 `lint`，所以**本地必须自己跑**。
 
 ## 核心规则

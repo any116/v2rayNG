@@ -1,7 +1,7 @@
-# Resource shrinking requires R8 code shrinking. Keep DEX names stable and disable bytecode
-# optimization; the rules below preserve reflection, serialization, native and Android entry points.
+# Allow R8 shrinking and bytecode optimization while keeping DEX names readable.
+# Preserve source locations; archive each release mapping for Retrace after method inlining.
 -dontobfuscate
--dontoptimize
+-keepattributes SourceFile,LineNumberTable
 
 # Guava uses this optional J2ObjC annotation only for Objective-C memory management, not on Android.
 -dontwarn com.google.j2objc.annotations.RetainedWith

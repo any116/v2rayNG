@@ -110,6 +110,32 @@ jobs:
         chmod 755 gradlew
         ./gradlew -PNDK_VERSION="$NDK_VERSION" assembleRelease --build-cache --parallel --daemon --warning-mode all
 
+    - name: Prepare R8 mappings
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p release-mappings
+        for variant in fdroidRelease playstoreRelease; do
+          mapping="V2rayNG/app/build/outputs/mapping/$variant/mapping.txt"
+          if [[ ! -s "$mapping" ]]; then
+            echo "::error::Missing or empty R8 mapping for $variant: $mapping"
+            exit 1
+          fi
+          mkdir -p "release-mappings/$variant"
+          cp "$mapping" "release-mappings/$variant/mapping.txt"
+        done
+        (
+          cd release-mappings
+          zip -q ../v2rayNG_mappings.zip fdroidRelease/mapping.txt playstoreRelease/mapping.txt
+        )
+
+    - name: Upload R8 mappings
+      uses: actions/upload-artifact@v7
+      with:
+        name: r8-mappings-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ github.workspace }}/v2rayNG_mappings.zip
+        if-no-files-found: error
+
     - name: Delete releases and workflows runs
       uses: ophub/delete-releases-workflows@main
       with:
@@ -132,6 +158,7 @@ jobs:
         draft: false
         files: |
           ${{ github.workspace }}/V2rayNG/app/build/outputs/apk/*/release/*v8*.apk
+          ${{ github.workspace }}/v2rayNG_mappings.zip
           ${{ github.workspace }}/xray-core.tar.gz
           ${{ github.workspace }}/xraylite_android.tar.gz
         tag_name: ${{ env.TAG }}

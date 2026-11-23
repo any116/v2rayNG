@@ -82,7 +82,7 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
-            // AGP requires code shrinking for resource shrinking; proguard-rules.pro disables renaming and optimization.
+            // Enable R8 shrinking and optimization; proguard-rules.pro keeps names readable.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
