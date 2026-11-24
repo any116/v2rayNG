@@ -5,6 +5,8 @@ import com.v2ray.ang.AppConfig.LOOPBACK
 import com.v2ray.ang.BuildConfig
 import com.v2ray.ang.dto.UrlContentRequest
 import okhttp3.Credentials
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.ResponseBody
@@ -97,7 +99,6 @@ object HttpUtil {
             .url(url)
             .get()
             .header("Connection", "close")
-        applyProxyAuthorizationHeader(request, requestBuilder)
         return try {
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
@@ -158,6 +159,9 @@ object HttpUtil {
         var currentUrl = request.url
         var redirects = 0
         val maxRedirects = 3
+        // Subscription credentials and custom headers must remain within the original origin.
+        val originalUrl = (request.url ?: throw IOException("Subscription URL is missing")).toHttpUrl()
+        val headersMap = JsonUtil.parseHeadersToMap(request.requestHeaders)
 
         while (redirects++ < maxRedirects) {
             val requestUrl = currentUrl ?: throw IOException("Subscription URL is missing")
@@ -169,15 +173,18 @@ object HttpUtil {
                 .header("User-agent", finalUserAgent)
                 .header("Connection", "close")
 
-            applyEmbeddedBasicAuthHeader(requestUrl, requestBuilder)
+            val targetUrl = requestUrl.toHttpUrl()
+            val sameOrigin = targetUrl.scheme == originalUrl.scheme &&
+                targetUrl.host == originalUrl.host &&
+                targetUrl.port == originalUrl.port
 
-            val headersMap = JsonUtil.parseHeadersToMap(request.requestHeaders)
-            for ((key, value) in headersMap) {
-                LogUtil.d(AppConfig.TAG, "Adding custom header: $key = $value")
-                runCatching { requestBuilder.header(key, value) }
+            if (sameOrigin) {
+                applyEmbeddedBasicAuthHeader(requestUrl, requestBuilder)
+                for ((key, value) in headersMap) {
+                    LogUtil.d(AppConfig.TAG, "Adding custom header: $key")
+                    runCatching { requestBuilder.header(key, value) }
+                }
             }
-
-            applyProxyAuthorizationHeader(request, requestBuilder)
 
             client.newCall(requestBuilder.build()).execute().use { response ->
                 when {
@@ -186,10 +193,13 @@ object HttpUtil {
                         if (location.isNullOrEmpty()) {
                             throw IOException("Redirect location not found")
                         }
-                        currentUrl = resolveLocation(requestUrl, location)
-                        if (currentUrl.isNullOrEmpty()) {
-                            throw IOException("Failed to resolve redirect location")
+                        val nextUrl = resolveLocation(requestUrl, location)
+                            ?.toHttpUrlOrNull()
+                            ?: throw IOException("Failed to resolve redirect location")
+                        if (targetUrl.isHttps && !nextUrl.isHttps) {
+                            throw IOException("HTTPS to HTTP redirect is not allowed")
                         }
+                        currentUrl = nextUrl.toString()
                         continue
                     }
 
@@ -204,15 +214,6 @@ object HttpUtil {
             }
         }
         throw IOException("Too many redirects")
-    }
-
-    /** Upstream proxies only apply when a local HTTP port is configured. */
-    private fun applyProxyAuthorizationHeader(request: UrlContentRequest, requestBuilder: Request.Builder) {
-        if (request.httpPort == 0) return
-        val username = request.proxyUsername
-        val password = request.proxyPassword
-        if (username.isNullOrBlank() || password.isNullOrBlank()) return
-        requestBuilder.header("Proxy-Authorization", Credentials.basic(username, password))
     }
 
     private fun applyEmbeddedBasicAuthHeader(rawUrl: String, requestBuilder: Request.Builder) {
@@ -278,7 +279,6 @@ object HttpUtil {
             .url(url)
             .get()
             .header("Connection", "close")
-        applyProxyAuthorizationHeader(request, requestBuilder)
 
         return try {
             client.newCall(requestBuilder.build()).execute().use { response ->
