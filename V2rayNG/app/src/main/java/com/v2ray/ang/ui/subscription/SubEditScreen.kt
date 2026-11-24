@@ -125,6 +125,7 @@ fun SubEditScreen(viewModel: SubEditViewModel) {
         if (host.showDelete) {
             DeleteConfirmDialog(
                 message = stringResource(R.string.confirm_delete_subscription_group),
+                targetName = state.initialForm?.remarks.orEmpty().ifBlank { state.subId },
                 onConfirm = host.confirmDelete,
                 onDismiss = host.dismissDelete
             )

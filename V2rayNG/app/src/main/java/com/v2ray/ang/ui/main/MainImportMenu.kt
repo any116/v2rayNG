@@ -91,7 +91,7 @@ fun ShareMethodDialog(
     includeManagement: Boolean,
     onDismiss: () -> Unit,
     onAction: (MainAction) -> Unit,
-    onRequestRemove: (String) -> Unit,
+    onRequestRemove: () -> Unit,
 ) {
     val isComplex = configType.isComplexType()
     val items = ServerMenuItem.entries.filter { item ->
@@ -107,7 +107,7 @@ fun ShareMethodDialog(
                 ServerMenuItem.ShareClipboard -> onAction(MainAction.ShareClipboard(guid))
                 ServerMenuItem.ShareFullContent -> onAction(MainAction.ShareFullContent(guid))
                 ServerMenuItem.Edit -> onAction(MainAction.EditServer(guid, configType))
-                ServerMenuItem.Delete -> onRequestRemove(guid)
+                ServerMenuItem.Delete -> onRequestRemove()
             }
         },
         onDismiss = onDismiss,

@@ -245,10 +245,14 @@ private fun SubscriptionRow(
                         contentDescription = stringResource(R.string.acc_edit)
                     )
                 }
-                IconButton(onClick = { callbacks.onRemove(guid) }) {
+                IconButton(onClick = { callbacks.onRemove(subRow) }) {
                     Icon(
                         painter = painterResource(R.drawable.ic_delete_24dp),
-                        contentDescription = stringResource(R.string.acc_delete)
+                        contentDescription = stringResource(
+                            R.string.acc_action_target,
+                            stringResource(R.string.acc_delete),
+                            subRow.remarks.ifBlank { guid }
+                        )
                     )
                 }
             }

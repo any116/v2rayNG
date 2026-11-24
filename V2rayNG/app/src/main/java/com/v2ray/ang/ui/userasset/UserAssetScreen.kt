@@ -283,6 +283,7 @@ private fun UserAssetDialogs(
     when (dialog) {
         is UserAssetDialog.ConfirmRemove -> DeleteConfirmDialog(
             message = stringResource(R.string.confirm_delete_asset_file, dialog.remarks),
+            targetName = dialog.remarks.ifBlank { dialog.guid },
             onConfirm = { onAction(UserAssetAction.DialogConfirm) },
             onDismiss = { onAction(UserAssetAction.DialogDismiss) }
         )

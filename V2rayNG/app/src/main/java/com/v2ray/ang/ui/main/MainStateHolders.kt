@@ -118,9 +118,9 @@ class MainDialogHost(private val onAction: (MainAction) -> Unit) {
 
     val show: (MainDialog) -> Unit = { current = it }
     val dismiss: () -> Unit = { current = null }
-    val requestRemove: (String) -> Unit = { guid ->
-        if (confirmRemove) current = MainDialog.DeleteOne(guid)
-        else onAction(MainAction.RemoveServer(guid))
+    val requestRemove: (ServerRowItem) -> Unit = { row ->
+        if (confirmRemove) current = MainDialog.DeleteOne(row)
+        else onAction(MainAction.RemoveServer(row.guid))
     }
 }
 
@@ -130,5 +130,5 @@ class MainScreenHandles(
     val slices: MainSlices,
     val scrollStates: GroupScrollStates,
     val showDialog: (MainDialog) -> Unit,
-    val requestRemove: (String) -> Unit,
+    val requestRemove: (ServerRowItem) -> Unit,
 )

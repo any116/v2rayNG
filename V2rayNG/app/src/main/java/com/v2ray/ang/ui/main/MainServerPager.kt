@@ -99,8 +99,8 @@ fun GroupPagerPage(
         ServerRowCallbacks(
             onSelect = { guid -> handles.dispatch(MainAction.SelectServer(guid)) },
             onEdit = { guid, type -> handles.dispatch(MainAction.EditServer(guid, type)) },
-            onShare = { guid, type -> handles.showDialog(MainDialog.Share(guid, type, false)) },
-            onMore = { guid, type -> handles.showDialog(MainDialog.Share(guid, type, true)) },
+            onShare = { row -> handles.showDialog(MainDialog.Share(row, false)) },
+            onMore = { row -> handles.showDialog(MainDialog.Share(row, true)) },
             onRemove = handles.requestRemove
         )
     }
@@ -201,9 +201,9 @@ fun GroupPagerPage(
 class ServerRowCallbacks(
     val onSelect: (String) -> Unit,
     val onEdit: (String, EConfigType) -> Unit,
-    val onShare: (String, EConfigType) -> Unit,
-    val onMore: (String, EConfigType) -> Unit,
-    val onRemove: (String) -> Unit
+    val onShare: (ServerRowItem) -> Unit,
+    val onMore: (ServerRowItem) -> Unit,
+    val onRemove: (ServerRowItem) -> Unit
 )
 
 private class LongPressClickGuard {
@@ -314,7 +314,7 @@ private fun ServerRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (doubleColumnDisplay) {
-                    IconButton({ callbacks.onMore(row.guid, row.configType) }, Modifier.size(RowIconButtonSize)) {
+                    IconButton({ callbacks.onMore(row) }, Modifier.size(RowIconButtonSize)) {
                         Icon(
                             painterResource(R.drawable.ic_more_vert_24dp),
                             stringResource(R.string.acc_more),
@@ -322,7 +322,7 @@ private fun ServerRow(
                         )
                     }
                 } else {
-                    IconButton({ callbacks.onShare(row.guid, row.configType) }, Modifier.size(RowIconButtonSize)) {
+                    IconButton({ callbacks.onShare(row) }, Modifier.size(RowIconButtonSize)) {
                         Icon(
                             painterResource(R.drawable.ic_share_24dp),
                             stringResource(R.string.title_configuration_share),
@@ -336,10 +336,14 @@ private fun ServerRow(
                             Modifier.size(RowIconSize)
                         )
                     }
-                    IconButton({ callbacks.onRemove(row.guid) }, Modifier.size(RowIconButtonSize)) {
+                    IconButton({ callbacks.onRemove(row) }, Modifier.size(RowIconButtonSize)) {
                         Icon(
                             painterResource(R.drawable.ic_delete_24dp),
-                            stringResource(R.string.acc_delete),
+                            stringResource(
+                                R.string.acc_action_target,
+                                stringResource(R.string.acc_delete),
+                                row.remarks.ifBlank { row.guid }
+                            ),
                             Modifier.size(RowIconSize)
                         )
                     }

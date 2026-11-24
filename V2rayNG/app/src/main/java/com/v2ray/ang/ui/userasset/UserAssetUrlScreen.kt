@@ -72,6 +72,7 @@ fun UserAssetUrlScreen(viewModel: UserAssetUrlViewModel) {
         if (state.showDeleteDialog) {
             DeleteConfirmDialog(
                 message = stringResource(R.string.confirm_delete_asset_source),
+                targetName = state.initialForm?.remarks.orEmpty().ifBlank { state.assetId },
                 onConfirm = { onAction(UserAssetUrlAction.DialogConfirm) },
                 onDismiss = { onAction(UserAssetUrlAction.DialogDismiss) }
             )

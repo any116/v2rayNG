@@ -28,7 +28,7 @@ sealed interface SubDialog {
     @Immutable
     data class QrCode(val bitmap: Bitmap) : SubDialog
     @Immutable
-    data class ConfirmRemove(val subId: String) : SubDialog
+    data class ConfirmRemove(val subId: String, val remarks: String) : SubDialog
 }
 
 @Stable
@@ -41,9 +41,9 @@ class SubDialogHost(private val onAction: (SubAction) -> Unit) {
     val show: (SubDialog) -> Unit = { current = it }
     val dismiss: () -> Unit = { current = null }
 
-    val requestRemove: (String) -> Unit = { subId ->
-        if (confirmRemove) current = SubDialog.ConfirmRemove(subId)
-        else onAction(SubAction.RemoveConfirmed(subId))
+    val requestRemove: (SubRow) -> Unit = { row ->
+        if (confirmRemove) current = SubDialog.ConfirmRemove(row.guid, row.remarks)
+        else onAction(SubAction.RemoveConfirmed(row.guid))
     }
 }
 
@@ -78,6 +78,7 @@ fun SubDialogs(
         )
         is SubDialog.ConfirmRemove -> DeleteConfirmDialog(
             message = stringResource(R.string.confirm_delete_subscription_group),
+            targetName = dialog.remarks.ifBlank { dialog.subId },
             onConfirm = { onAction(SubAction.RemoveConfirmed(dialog.subId)) },
             onDismiss = host.dismiss
         )

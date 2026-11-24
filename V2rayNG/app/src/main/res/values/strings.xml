@@ -7,6 +7,8 @@
     <string name="navigation_drawer_title">Navigation menu</string>
     <string name="action_ok">OK</string>
     <string name="action_cancel">Cancel</string>
+    <!-- Both arguments are already localized; this resource only joins the action and target. -->
+    <string name="acc_action_target" translatable="false">%1$s: %2$s</string>
     <string name="action_retry">Retry</string>
     <string name="boot_storage_failed_title">Initialization incomplete</string>
     <string name="boot_storage_failed_message">The app storage is not ready yet. Retry, or restart the app if this keeps happening.</string>

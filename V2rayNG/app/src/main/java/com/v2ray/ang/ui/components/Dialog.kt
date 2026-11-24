@@ -3,6 +3,8 @@ package com.v2ray.ang.ui.components
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -44,6 +46,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -66,7 +70,8 @@ fun ConfirmDialog(
     title: String? = null,
     confirmText: String = stringResource(R.string.action_ok),
     dismissText: String? = stringResource(R.string.action_cancel),
-    confirmIcon: @Composable (() -> Unit)? = null
+    confirmIcon: @Composable (() -> Unit)? = null,
+    confirmContentDescription: String? = null
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -74,11 +79,17 @@ fun ConfirmDialog(
         text = {
             Text(
                 text = message,
+                modifier = Modifier.verticalScroll(rememberScrollState()),
                 style = MaterialTheme.typography.bodyMedium
             )
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(); onDismiss() }) {
+            TextButton(
+                onClick = { onConfirm(); onDismiss() },
+                modifier = Modifier.semantics {
+                    if (confirmContentDescription != null) contentDescription = confirmContentDescription
+                }
+            ) {
                 if (confirmIcon != null) {
                     confirmIcon()
                     Spacer(Modifier.width(DialogGap))
@@ -93,17 +104,25 @@ fun ConfirmDialog(
     )
 }
 
+/** Keeps the target readable in the dialog and on its confirmation button, even with large text. */
 @Composable
 fun DeleteConfirmDialog(
     message: String,
     onConfirm: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    targetName: String? = null
 ) {
+    val target = targetName?.takeIf { it.isNotBlank() }
+    val deleteText = stringResource(R.string.action_delete)
     ConfirmDialog(
-        message = message,
+        message = if (target == null) message else "$target\n\n$message",
         onConfirm = onConfirm,
         onDismiss = onDismiss,
-        confirmText = stringResource(R.string.action_delete),
+        title = deleteText,
+        confirmText = deleteText,
+        confirmContentDescription = target?.let {
+            stringResource(R.string.acc_action_target, deleteText, it)
+        },
         confirmIcon = {
             Icon(
                 painter = painterResource(R.drawable.ic_delete_24dp),

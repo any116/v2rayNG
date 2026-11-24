@@ -218,7 +218,13 @@ private fun ChainMemberRow(
         IconButton(onClick = onRemove) {
             Icon(
                 painterResource(R.drawable.ic_delete_24dp),
-                contentDescription = stringResource(R.string.action_delete)
+                contentDescription = stringResource(
+                    R.string.acc_action_target,
+                    stringResource(R.string.action_delete),
+                    member.remarks.text.toString().ifBlank {
+                        stringResource(R.string.server_proxy_chain_member_unselected)
+                    }
+                )
             )
         }
     }

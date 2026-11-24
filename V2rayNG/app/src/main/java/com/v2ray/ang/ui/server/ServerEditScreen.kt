@@ -122,6 +122,8 @@ fun ServerEditScreen(viewModel: ServerEditViewModel) {
             confirmDelete = confirmDelete,
             pendingRemovalId = pendingRemovalId,
             configType = state.configType,
+            profileName = state.initialForm?.remarks.orEmpty().ifBlank { state.guid },
+            editor = editor,
             onAction = onAction,
             onRemoveChainMember = editor::removeChainMember,
             onDismiss = {
@@ -194,6 +196,8 @@ private fun ServerEditDialogs(
     confirmDelete: Boolean,
     pendingRemovalId: String?,
     configType: EConfigType,
+    profileName: String,
+    editor: ServerEditorState,
     onAction: (ServerAction) -> Unit,
     onRemoveChainMember: (String) -> Unit,
     onDismiss: () -> Unit
@@ -204,6 +208,7 @@ private fun ServerEditDialogs(
                 if (configType == EConfigType.POLICYGROUP) R.string.confirm_delete_policy_group
                 else R.string.confirm_delete_profile
             ),
+            targetName = profileName,
             onConfirm = {
                 onAction(ServerAction.ConfirmDeleteProfile)
                 onDismiss()
@@ -213,6 +218,8 @@ private fun ServerEditDialogs(
 
         pendingRemovalId != null -> DeleteConfirmDialog(
             message = stringResource(R.string.confirm_delete_proxy_chain_member),
+            targetName = editor.chainMembers.firstOrNull { it.id == pendingRemovalId }
+                ?.remarks?.text?.toString().orEmpty().ifBlank { pendingRemovalId },
             onConfirm = {
                 onRemoveChainMember(pendingRemovalId)
                 onDismiss()

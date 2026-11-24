@@ -77,7 +77,7 @@ sealed interface SubEvent : BaseEvent.Platform {
 class SubRowCallbacks(
     val onShare: (String) -> Unit,
     val onEdit: (String) -> Unit,
-    val onRemove: (String) -> Unit,
+    val onRemove: (SubRow) -> Unit,
     val onToggle: (String, Boolean) -> Unit,
     val onUpdate: (String) -> Unit
 )
