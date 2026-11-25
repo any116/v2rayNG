@@ -16,19 +16,24 @@ import com.v2ray.ang.data.entities.RulesetItem
 import com.v2ray.ang.di.IoDispatcher
 import com.v2ray.ang.dto.RoutingEditData
 import com.v2ray.ang.dto.RoutingRuleRow
+import com.v2ray.ang.dto.UrlContentRequest
 import com.v2ray.ang.dto.toRuleRows
 import com.v2ray.ang.enums.EConfigType
 import com.v2ray.ang.enums.RoutingType
 import com.v2ray.ang.extension.normalizeLike
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.ui.components.DropdownOption
+import com.v2ray.ang.util.HttpUtil
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.util.UUID
 import javax.inject.Inject
 
@@ -132,9 +137,30 @@ open class RoutingRepository @Inject constructor(
         SettingsManager.resetRoutingRulesetsFromPresets(app, type)
     }
 
+    /**
+     * Clipboard and scanner imports share this entry point so HTTP(S) URLs behave the same as JSON.
+     * Fetch before resetting any rules; retry through the local proxy when direct access fails.
+     */
     open suspend fun importRulesets(text: String?): Boolean = runIO(false) {
-        if (text.isNullOrBlank()) return@runIO false
-        SettingsManager.resetRoutingRulesets(text)
+        val input = text?.trim()?.takeIf { it.isNotEmpty() } ?: return@runIO false
+        val url = input.toHttpUrlOrNull()
+        val content = if (url == null) {
+            input
+        } else {
+            val request = UrlContentRequest(url = url.toString())
+            val direct = HttpUtil.getUrlContent(request)?.takeIf { it.isNotBlank() }
+            currentCoroutineContext().ensureActive()
+            direct ?: HttpUtil.getUrlContent(
+                request.copy(
+                    httpPort = SettingsManager.getHttpPort(),
+                    proxyUsername = SettingsManager.getSocksUsername(),
+                    proxyPassword = SettingsManager.getSocksPassword()
+                )
+            )?.takeIf { it.isNotBlank() } ?: return@runIO false
+        }
+        // Blocking HTTP calls may finish after the importing screen has been closed.
+        currentCoroutineContext().ensureActive()
+        SettingsManager.resetRoutingRulesets(content)
     }
 
     open suspend fun readClipboard(): String = runIO("") { Utils.getClipboard(app) }
