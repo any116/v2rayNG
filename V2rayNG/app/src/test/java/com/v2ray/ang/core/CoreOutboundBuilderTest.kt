@@ -25,7 +25,7 @@ class CoreOutboundBuilderTest {
         val profile = xdriveProfile().apply {
             service = AppConfig.XDRIVE_SERVICE_TEMPLATE
             remoteFolder = "folder"
-            secrets = "user\npass"
+            secrets = "user, pass"
             this.template = template
         }
         val stream = OutboundBean.StreamSettingsBean()
@@ -56,6 +56,31 @@ class CoreOutboundBuilderTest {
     }
 
     @Test
+    fun xdriveExtraIsMergedWithoutReplacingBackendSettings() {
+        val profile = s3Profile().apply {
+            xdriveExtra = """{"segmentBytes":65536,"sessionTtlSeconds":60,"xmux":{"maxConnections":"1-2"}}"""
+        }
+        val outbound = checkNotNull(CoreOutboundBuilder.convert(profile))
+        val settings = checkNotNull(outbound.streamSettings?.xdriveSettings)
+        val json = checkNotNull(JsonUtil.parseString(JsonUtil.toJson(settings)))
+
+        assertEquals(65536, json.get("segmentBytes").asInt)
+        assertEquals(60, json.get("sessionTtlSeconds").asInt)
+        assertEquals("1-2", json.getAsJsonObject("xmux").get("maxConnections").asString)
+        assertEquals(JsonUtil.parseString(profile.s3), json.getAsJsonObject("s3"))
+        assertEquals(listOf("access", "secret", "token"), settings.secrets)
+        assertEquals(true, outbound.mux?.enabled)
+        assertTrue(!json.has("extra"))
+    }
+
+    @Test
+    fun invalidXdriveExtraDoesNotGenerateAnOutbound() {
+        listOf("[]", """{"service":"local"}""", """{"segmentBytes":-1}""").forEach { extra ->
+            assertNull(CoreOutboundBuilder.convert(s3Profile().apply { xdriveExtra = extra }))
+        }
+    }
+
+    @Test
     fun s3SettingsAreNotEmittedForOtherServices() {
         val profile = s3Profile().apply { service = AppConfig.XDRIVE_SERVICE_LOCAL }
         val stream = OutboundBean.StreamSettingsBean()
@@ -68,17 +93,17 @@ class CoreOutboundBuilderTest {
 
     @Test
     fun invalidS3ProfilesAreNotConvertedIntoCoreOutbounds() {
-        assertNotNull(CoreOutboundBuilder.convert(s3Profile().apply { secrets = "access\nsecret" }))
+        assertNotNull(CoreOutboundBuilder.convert(s3Profile().apply { secrets = "access, secret" }))
         assertNull(CoreOutboundBuilder.convert(s3Profile().apply { s3 = null }))
         assertNull(CoreOutboundBuilder.convert(s3Profile().apply { s3 = "{}" }))
-        assertNull(CoreOutboundBuilder.convert(s3Profile().apply { secrets = "access\n\ntoken" }))
+        assertNull(CoreOutboundBuilder.convert(s3Profile().apply { secrets = "access, , token" }))
         assertNull(CoreOutboundBuilder.convert(s3Profile().apply { remoteFolder = "/streams" }))
     }
 
     private fun s3Profile() = xdriveProfile().apply {
         service = AppConfig.XDRIVE_SERVICE_S3
         remoteFolder = "streams/client/"
-        secrets = "access\nsecret\ntoken"
+        secrets = "access, secret, token"
         s3 = """{"endpoint":"https://s3.example.com","region":"us-east-1","bucket":"bucket","pathStyle":true}"""
     }
 

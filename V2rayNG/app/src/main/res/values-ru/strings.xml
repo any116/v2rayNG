@@ -131,11 +131,14 @@
     <string name="server_lab_masque_warp_address_error">Введите не более одного корректного IPv4- и одного корректного IPv6-адреса</string>
     <string name="server_lab_masque_warp_auth_error">WARP через MASQUE нельзя использовать с именем пользователя или паролем</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
-    <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
-    <string name="server_lab_xdrive_secrets">secrets (по одному в строке)</string>
+    <string name="server_lab_xdrive_secrets">Учётные данные XDRIVE (через запятую)</string>
+    <string name="server_lab_xdrive_google_drive_secrets_hint">Google Drive: ClientID, ClientSecret, RefreshToken</string>
+    <string name="server_lab_xdrive_s3_secrets">S3: AccessKeyID, SecretAccessKey, SessionToken (необязательно)</string>
     <string name="server_lab_xdrive_template">template JSON</string>
-    <string name="server_lab_xdrive_secrets_error">Для Google Drive нужны ровно 3 непустых secret, по одному в строке</string>
+    <string name="server_lab_xdrive_s3_secrets_error">Для S3 укажите AccessKeyID и SecretAccessKey, при необходимости добавьте SessionToken. Разделяйте значения запятыми и используйте допустимые значения заголовков HTTP.</string>
+    <string name="server_lab_xdrive_secrets_format_error">Разделяйте значения запятыми. Если значение содержит запятую или двойную кавычку, заключите его в двойные кавычки, а внутренние двойные кавычки удвойте.</string>
+    <string name="server_lab_xdrive_secrets_error">Для Google Drive укажите ClientID, ClientSecret и RefreshToken через запятую.</string>
     <string name="server_lab_xdrive_service_error">Неподдерживаемый сервис XDRIVE</string>
     <string name="server_lab_xdrive_vless_error">Для XDRIVE требуется исходящий VLESS</string>
     <string name="server_lab_xdrive_encryption_error">Для XDRIVE требуется шифрование VLESS, созданное через xray vlessenc</string>

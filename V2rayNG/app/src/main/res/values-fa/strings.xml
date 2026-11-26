@@ -131,11 +131,14 @@
     <string name="server_lab_masque_warp_address_error">حداکثر یک نشانی معتبر IPv4 و یک نشانی معتبر IPv6 وارد کنید</string>
     <string name="server_lab_masque_warp_auth_error">WARP از طریق MASQUE نمی‌تواند از نام کاربری یا گذرواژه استفاده کند</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
-    <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
-    <string name="server_lab_xdrive_secrets">secrets (هر مورد در یک خط)</string>
+    <string name="server_lab_xdrive_secrets">اطلاعات احراز هویت XDRIVE (جداشده با ویرگول)</string>
+    <string name="server_lab_xdrive_google_drive_secrets_hint">Google Drive: ClientID, ClientSecret, RefreshToken</string>
+    <string name="server_lab_xdrive_s3_secrets">S3: AccessKeyID, SecretAccessKey, SessionToken (اختیاری)</string>
     <string name="server_lab_xdrive_template">template JSON</string>
-    <string name="server_lab_xdrive_secrets_error">Google Drive دقیقاً به ۳ secret غیرخالی، هر کدام در یک خط، نیاز دارد</string>
+    <string name="server_lab_xdrive_s3_secrets_error">برای S3، AccessKeyID و SecretAccessKey الزامی و SessionToken اختیاری است. مقادیر را با ویرگول انگلیسی جدا کنید و از مقادیر معتبر برای سرآیندهای HTTP استفاده کنید.</string>
+    <string name="server_lab_xdrive_secrets_format_error">مقادیر را با ویرگول انگلیسی جدا کنید. اگر مقداری ویرگول یا علامت نقل‌قول دوتایی دارد، آن را درون علامت نقل‌قول دوتایی قرار دهید و هر علامت نقل‌قول دوتایی داخل آن را دو بار بنویسید.</string>
+    <string name="server_lab_xdrive_secrets_error">برای Google Drive، مقادیر ClientID، ClientSecret و RefreshToken را با ویرگول انگلیسی جدا کنید.</string>
     <string name="server_lab_xdrive_service_error">سرویس XDRIVE پشتیبانی نمی‌شود</string>
     <string name="server_lab_xdrive_vless_error">XDRIVE به خروجی VLESS نیاز دارد</string>
     <string name="server_lab_xdrive_encryption_error">XDRIVE به رمزنگاری VLESS تولیدشده با xray vlessenc نیاز دارد</string>

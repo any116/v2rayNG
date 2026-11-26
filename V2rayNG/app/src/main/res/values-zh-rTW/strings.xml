@@ -131,11 +131,15 @@
     <string name="server_lab_masque_warp_address_error">請輸入最多一個有效的 IPv4 位址和一個有效的 IPv6 位址</string>
     <string name="server_lab_masque_warp_auth_error">透過 MASQUE 使用 WARP 不可使用使用者名稱或密碼</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
-    <string name="server_lab_xdrive_service">service</string>
+    <string name="server_lab_xdrive_service">XDRIVE 服務</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
-    <string name="server_lab_xdrive_secrets">secrets（每行一個）</string>
+    <string name="server_lab_xdrive_secrets">XDRIVE 憑證資料（以半形逗號分隔）</string>
+    <string name="server_lab_xdrive_google_drive_secrets_hint">Google Drive: ClientID, ClientSecret, RefreshToken</string>
+    <string name="server_lab_xdrive_s3_secrets">S3: AccessKeyID, SecretAccessKey, SessionToken (選填)</string>
     <string name="server_lab_xdrive_template">template JSON</string>
-    <string name="server_lab_xdrive_secrets_error">Google Drive 需要 3 個非空 secret，每行一個</string>
+    <string name="server_lab_xdrive_s3_secrets_error">S3 需要填寫 AccessKeyID 和 SecretAccessKey，SessionToken 選填。請以半形逗號分隔，並使用有效的 HTTP 標頭值。</string>
+    <string name="server_lab_xdrive_secrets_format_error">請以半形逗號分隔各項。若值中包含逗號或半形雙引號，請以半形雙引號括住該值，並將其中每個雙引號寫成兩個。</string>
+    <string name="server_lab_xdrive_secrets_error">Google Drive 需要依序填寫 ClientID、ClientSecret、RefreshToken，並以半形逗號分隔。</string>
     <string name="server_lab_xdrive_service_error">不支援的 XDRIVE 服務</string>
     <string name="server_lab_xdrive_vless_error">XDRIVE 需要使用 VLESS 出站</string>
     <string name="server_lab_xdrive_encryption_error">XDRIVE 需要使用 xray vlessenc 產生的 VLESS 加密</string>

@@ -66,18 +66,26 @@ class XdriveConfigValidatorTest {
 
     @Test
     fun s3AcceptsTwoCredentialsAndAnOptionalSessionTokenWithoutShiftingBlankSlots() {
-        listOf("access\nsecret", "access\nsecret\ntoken", "access\r\nsecret\r\ntoken\r\n").forEach {
-            assertTrue(XdriveConfigValidator.isValidS3Secrets(it))
+        listOf("access, secret", "access,secret,token", "access, secret, ").forEach {
+            assertTrue(XdriveConfigValidator.parseSecrets(it)?.let(XdriveConfigValidator::isValidS3Secrets) == true)
         }
         listOf(
-            null, "", "access", "access\nsecret\ntoken\nextra", "access\n\ntoken", "\nsecret\ntoken",
-            "access/key\nsecret", "access key\nsecret", "access,key\nsecret", "access\nsec\u0000ret"
-        ).forEach { assertFalse(XdriveConfigValidator.isValidS3Secrets(it)) }
+            null, "", "access", "access, secret, token, extra", "access, , token", ", secret, token",
+            "access/key, secret", "access key, secret", "\"access,key\", secret", "access, sec\u0000ret"
+        ).forEach {
+            assertFalse(XdriveConfigValidator.parseSecrets(it)?.let(XdriveConfigValidator::isValidS3Secrets) == true)
+        }
+        assertEquals(listOf("access", "", "token"), XdriveConfigValidator.parseSecrets("access, , token"))
+    }
+
+    @Test
+    fun parseSecretsSupportsQuotedCommasAndRejectsLegacyLines() {
         assertEquals(
-            listOf("access", "", "token"),
-            XdriveConfigValidator.secrets("access\n\ntoken", AppConfig.XDRIVE_SERVICE_S3)
+            listOf("access", "secret,with,commas", "token\"suffix"),
+            XdriveConfigValidator.parseSecrets("access, \"secret,with,commas\", \"token\"\"suffix\"")
         )
-        assertEquals(listOf("a", "b", "c"), XdriveConfigValidator.secrets("a\n\nb\nc\n"))
+        assertEquals(null, XdriveConfigValidator.parseSecrets("access\nsecret\ntoken"))
+        assertEquals(null, XdriveConfigValidator.parseSecrets("access, \"unfinished"))
     }
 
     private fun s3Json(

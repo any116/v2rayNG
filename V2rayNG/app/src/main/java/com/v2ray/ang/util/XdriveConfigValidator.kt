@@ -1,6 +1,9 @@
 package com.v2ray.ang.util
 
+import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
+import com.google.gson.JsonParseException
+import com.google.gson.Strictness
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_LOCAL
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_S3
@@ -17,20 +20,74 @@ internal object XdriveConfigValidator {
         XDRIVE_SERVICE_TEMPLATE
     )
 
+    private val extraJson = GsonBuilder().setStrictness(Strictness.STRICT).create()
+    private val tuningFields = setOf(
+        "segmentBytes", "flushIntervalMs", "pollIntervalMs", "maxPollIntervalMs",
+        "sessionTtlSeconds", "concurrency", "eagerWindowMs", "holeTimeoutMs"
+    )
+
+    /** Extra only supplies tuning; it cannot replace the backend settings or credentials. */
+    fun parseExtra(value: String): JsonObject? {
+        val extra = try {
+            extraJson.fromJson(value, JsonObject::class.java) ?: return null
+        } catch (_: JsonParseException) {
+            return null
+        }
+        return extra.takeIf { obj ->
+            obj.entrySet().all { (name, setting) ->
+                when (name) {
+                    "xmux" -> setting.isJsonObject
+                    in tuningFields -> setting.isJsonPrimitive && setting.asJsonPrimitive.isNumber &&
+                        setting.asString.toUIntOrNull() != null
+                    else -> false
+                }
+            }
+        }
+    }
+
     fun usesSecrets(service: String): Boolean = when (service) {
         XDRIVE_SERVICE_GOOGLE_DRIVE, XDRIVE_SERVICE_S3, XDRIVE_SERVICE_TEMPLATE -> true
         else -> false
     }
 
-    /** S3 credentials are positional: a blank required slot must not shift the session token. */
-    fun secrets(value: String?, service: String? = null): List<String> {
-        val lines = value.orEmpty().lineSequence().map(String::trim).toList()
-        return if (service == XDRIVE_SERVICE_S3) lines.dropLastWhile(String::isEmpty)
-        else lines.filter(String::isNotEmpty)
+    /** Parses single-line comma-separated credentials. Empty positions are not shifted. */
+    fun parseSecrets(value: String?): List<String>? {
+        if (value == null) return emptyList()
+        if ('\n' in value || '\r' in value) return null
+        val parts = mutableListOf<String>()
+        var index = 0
+        while (true) {
+            while (index < value.length && value[index].isWhitespace()) index++
+            if (index < value.length && value[index] == '"') {
+                index++
+                val part = StringBuilder()
+                while (true) {
+                    if (index == value.length) return null
+                    val char = value[index++]
+                    if (char == '"') {
+                        if (index == value.length || value[index] != '"') break
+                        index++
+                    }
+                    part.append(char)
+                }
+                parts.add(part.toString())
+                while (index < value.length && value[index].isWhitespace()) index++
+                if (index < value.length && value[index] != ',') return null
+            } else {
+                val end = value.indexOf(',', index).takeIf { it >= 0 } ?: value.length
+                parts.add(value.substring(index, end).trim())
+                index = end
+            }
+            if (index == value.length) return parts.dropLastWhile(String::isEmpty)
+            index++ // comma
+        }
     }
 
-    fun isValidS3Secrets(value: String?): Boolean {
-        val credentials = secrets(value, XDRIVE_SERVICE_S3)
+    fun isValidGoogleDriveSecrets(credentials: List<String>): Boolean =
+        credentials.size == 3 && credentials.all(String::isNotBlank)
+
+    /** S3 credentials are positional: a blank required slot must not shift the session token. */
+    fun isValidS3Secrets(credentials: List<String>): Boolean {
         return credentials.size in 2..3 && credentials[0].isNotEmpty() && credentials[1].isNotEmpty() &&
             credentials.all(::isValidHeaderValue) && credentials[0].none { it in "/ ,\t" }
     }

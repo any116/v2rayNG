@@ -21,8 +21,9 @@ class VlessFmtTest {
             network = NetworkType.XDRIVE.type
             remoteFolder = "streams/client/"
             service = AppConfig.XDRIVE_SERVICE_S3
-            secrets = "access\nsecret+/=\ntoken+/="
+            secrets = "access, secret+/=, token+/="
             s3 = """{"endpoint":"https://s3.example.com/base%2Fpath","bucket":"bucket","pathStyle":true}"""
+            xdriveExtra = """{"flushIntervalMs":10,"xmux":{"maxConnections":"1-2"}}"""
         }
 
         val parsed = checkNotNull(VlessFmt.parse(AppConfig.VLESS + VlessFmt.toUri(profile)))
@@ -32,6 +33,8 @@ class VlessFmtTest {
         assertEquals(profile.remoteFolder, parsed.remoteFolder)
         assertEquals(profile.secrets, parsed.secrets)
         assertEquals(profile.s3, parsed.s3)
+        assertEquals(profile.xdriveExtra, parsed.xdriveExtra)
+        assertEquals(null, parsed.xhttpExtra)
     }
 
     @Test
@@ -46,7 +49,7 @@ class VlessFmtTest {
             security = AppConfig.TLS
             remoteFolder = "folder"
             service = AppConfig.XDRIVE_SERVICE_TEMPLATE
-            secrets = "user\npass"
+            secrets = "user, pass"
             template = "{\"put\":{\"url\":\"https://storage.example/{name}\"}}"
         }
 
@@ -56,7 +59,7 @@ class VlessFmtTest {
         assertEquals(NetworkType.XDRIVE.type, parsed?.network)
         assertEquals("folder", parsed?.remoteFolder)
         assertEquals(AppConfig.XDRIVE_SERVICE_TEMPLATE, parsed?.service)
-        assertEquals("user\npass", parsed?.secrets)
+        assertEquals("user, pass", parsed?.secrets)
         assertEquals(profile.template, parsed?.template)
     }
 }

@@ -109,7 +109,7 @@ internal class ProfileStorageTest {
             network = NetworkType.XDRIVE.type
             remoteFolder = "folder"
             service = "template"
-            secrets = "user\npass"
+            secrets = "user, pass"
             template = "{\"put\":{\"url\":\"https://storage.example/{name}\"}}"
         }
 
@@ -122,12 +122,26 @@ internal class ProfileStorageTest {
     }
 
     @Test
+    fun xdriveExtraRoundTripsAndCanBeClearedFromThePayload() {
+        val original = profile("xdrive", type = EConfigType.VLESS).apply {
+            network = NetworkType.XDRIVE.type
+            xdriveExtra = """{"segmentBytes":65536}"""
+        }
+        val payload = original.toPayloadItem()
+        assertEquals(original.xdriveExtra, original.toMetadataItem().merge(payload).xdriveExtra)
+
+        val cleared = original.copy(xdriveExtra = null)
+        val updated = cleared.toPayloadItem(previousContent = payload.content)
+        assertNull(cleared.toMetadataItem().merge(updated).xdriveExtra)
+    }
+
+    @Test
     fun s3SettingsRoundTripAndCanBeClearedFromThePayload() {
         val original = profile("s3", type = EConfigType.VLESS).apply {
             network = NetworkType.XDRIVE.type
             remoteFolder = "streams/client"
             service = "s3"
-            secrets = "access\nsecret\ntoken"
+            secrets = "access, secret, token"
             s3 = """{"endpoint":"https://s3.example.com","bucket":"bucket","pathStyle":true}"""
         }
         val payload = original.toPayloadItem()

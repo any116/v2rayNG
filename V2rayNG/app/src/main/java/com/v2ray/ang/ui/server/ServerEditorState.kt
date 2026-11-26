@@ -141,10 +141,11 @@ internal class ServerEditorState private constructor(
                 val fieldState = restoreTextField(pair.getOrNull(1)) ?: return null
                 restored[field] = fieldState
             }
-            if (ServerField.entries.any { it !in restored }) return null
+            // Drafts saved before XDRIVE Extra was added have no entry for that optional field.
+            if (ServerField.entries.any { it != ServerField.XDRIVE_EXTRA && it !in restored }) return null
 
             val rawContent = restoreTextField(values.getOrNull(1)) ?: return null
-            val fields = ServerField.entries.associateWith { restored.getValue(it) }
+            val fields = ServerField.entries.associateWith { restored[it] ?: TextFieldState() }
             val membersPayload = values.getOrNull(4) as? List<*> ?: return null
             val members = mutableListOf<ServerChainMemberState>()
             for (entry in membersPayload) {

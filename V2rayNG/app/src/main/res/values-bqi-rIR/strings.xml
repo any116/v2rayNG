@@ -131,11 +131,14 @@
     <string name="server_lab_masque_warp_address_error">حداکثر یه نشونی IPv4 درست و یه نشونی IPv6 درست وارد کۊنین</string>
     <string name="server_lab_masque_warp_auth_error">WARP وا MASQUE ن تونه کاربَر یا رمز کار ببره</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
-    <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
-    <string name="server_lab_xdrive_secrets">secrets (هر یه خط یه مورد)</string>
+    <string name="server_lab_xdrive_secrets">داده‌یل ورود XDRIVE (وا ویرگول جودا کۊنین)</string>
+    <string name="server_lab_xdrive_google_drive_secrets_hint">Google Drive: ClientID, ClientSecret, RefreshToken</string>
+    <string name="server_lab_xdrive_s3_secrets">S3: AccessKeyID, SecretAccessKey, SessionToken (اختیاری)</string>
     <string name="server_lab_xdrive_template">template JSON</string>
-    <string name="server_lab_xdrive_secrets_error">Google Drive سی ۳ تا secret خالی‌نبۊ هر یه خط یه مورد لازم هسته</string>
+    <string name="server_lab_xdrive_s3_secrets_error">سی S3، AccessKeyID و SecretAccessKey لازم هسته وو SessionToken اختیاری هڌ. مقدارا ن وا ویرگول انگلیسی جودا کۊنین وو مقدار موئتبر سی سربرگا HTTP و کار بگیرین.</string>
+    <string name="server_lab_xdrive_secrets_format_error">مقدارا ن وا ویرگول انگلیسی جودا کۊنین. ٱر یه مقدار ویرگول یا گیومه دوتایی داره، نِهَش من گیومه دوتایی وو گیومه‌یل تۊش ن دوتا کۊنین.</string>
+    <string name="server_lab_xdrive_secrets_error">سی Google Drive، ClientID و ClientSecret و RefreshToken ن وا ویرگول انگلیسی جودا کۊنین.</string>
     <string name="server_lab_xdrive_service_error">سرویس XDRIVE پشتیبانی نِکونه</string>
     <string name="server_lab_xdrive_vless_error">XDRIVE سی یه خروجی VLESS لازم هسته</string>
     <string name="server_lab_xdrive_encryption_error">XDRIVE سی رمزگذاری VLESS ساخته‌بوُده با xray vlessenc لازم هسته</string>

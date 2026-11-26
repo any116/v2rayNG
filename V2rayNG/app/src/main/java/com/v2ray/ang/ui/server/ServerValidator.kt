@@ -104,6 +104,9 @@ internal object ServerValidator {
             errors[ServerField.PATH] = R.string.server_lab_masque_path_error
         }
         if (form.network == NetworkType.XDRIVE.type) {
+            if (form.xdriveExtra.isNotBlank() && XdriveConfigValidator.parseExtra(form.xdriveExtra) == null) {
+                errors[ServerField.XDRIVE_EXTRA] = R.string.server_lab_xdrive_extra_error
+            }
             if (configType != EConfigType.VLESS) {
                 errors[ServerField.NETWORK] = R.string.server_lab_xdrive_vless_error
             }
@@ -121,9 +124,14 @@ internal object ServerValidator {
                     errors[ServerField.FLOW] = R.string.server_lab_xdrive_flow_error
                 }
             }
+            val usesSecrets = XdriveConfigValidator.usesSecrets(form.service)
+            val secrets = if (usesSecrets) XdriveConfigValidator.parseSecrets(form.secrets) else null
+            if (usesSecrets && secrets == null) {
+                errors[ServerField.SECRETS] = R.string.server_lab_xdrive_secrets_format_error
+            }
             when (form.service) {
                 XDRIVE_SERVICE_GOOGLE_DRIVE -> {
-                    if (XdriveConfigValidator.secrets(form.secrets).size != 3) {
+                    if (secrets != null && !XdriveConfigValidator.isValidGoogleDriveSecrets(secrets)) {
                         errors[ServerField.SECRETS] = R.string.server_lab_xdrive_secrets_error
                     }
                 }
@@ -131,7 +139,7 @@ internal object ServerValidator {
                     if (!XdriveConfigValidator.isValidS3(form.s3)) {
                         errors[ServerField.S3] = R.string.server_lab_xdrive_s3_error
                     }
-                    if (!XdriveConfigValidator.isValidS3Secrets(form.secrets)) {
+                    if (secrets != null && !XdriveConfigValidator.isValidS3Secrets(secrets)) {
                         errors[ServerField.SECRETS] = R.string.server_lab_xdrive_s3_secrets_error
                     }
                     if (!XdriveConfigValidator.isValidS3RemoteFolder(form.remoteFolder)) {
@@ -203,6 +211,10 @@ internal object ServerValidator {
             }
         }
         if (profile.network == NetworkType.XDRIVE.type) {
+            val extra = profile.xdriveExtra
+            if (!extra.isNullOrBlank() && XdriveConfigValidator.parseExtra(extra) == null) {
+                return BaseText.of(R.string.server_lab_xdrive_extra_error)
+            }
             if (configType != EConfigType.VLESS) {
                 return BaseText.of(R.string.server_lab_xdrive_vless_error)
             }
@@ -221,8 +233,14 @@ internal object ServerValidator {
             if (!profile.flow.isNullOrBlank()) {
                 return BaseText.of(R.string.server_lab_xdrive_flow_error)
             }
+            val credentials = if (XdriveConfigValidator.usesSecrets(profile.service.orEmpty())) {
+                XdriveConfigValidator.parseSecrets(profile.secrets)
+                    ?: return BaseText.of(R.string.server_lab_xdrive_secrets_format_error)
+            } else {
+                emptyList()
+            }
             if (profile.service == XDRIVE_SERVICE_GOOGLE_DRIVE &&
-                XdriveConfigValidator.secrets(profile.secrets).size != 3
+                !XdriveConfigValidator.isValidGoogleDriveSecrets(credentials)
             ) {
                 return BaseText.of(R.string.server_lab_xdrive_secrets_error)
             }
@@ -230,7 +248,7 @@ internal object ServerValidator {
                 if (!XdriveConfigValidator.isValidS3(profile.s3)) {
                     return BaseText.of(R.string.server_lab_xdrive_s3_error)
                 }
-                if (!XdriveConfigValidator.isValidS3Secrets(profile.secrets)) {
+                if (!XdriveConfigValidator.isValidS3Secrets(credentials)) {
                     return BaseText.of(R.string.server_lab_xdrive_s3_secrets_error)
                 }
                 if (!XdriveConfigValidator.isValidS3RemoteFolder(profile.remoteFolder)) {

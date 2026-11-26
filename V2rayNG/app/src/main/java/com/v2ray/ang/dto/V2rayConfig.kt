@@ -290,25 +290,18 @@ data class V2rayConfig(
                 var remoteFolder: String? = null,
                 var service: String? = null,
                 var secrets: List<String>? = null,
-                var concurrency: Int? = null,
-                var flushIntervalMs: Int? = null,
-                var maxPollIntervalMs: Int? = null,
-                var eagerWindowMs: Int? = null,
-                var segmentBytes: Int? = null,
-                var pollIntervalMs: Int? = null,
-                var xmux: XmuxSettingsBean? = null,
+                var concurrency: Long? = null,
+                var flushIntervalMs: Long? = null,
+                var maxPollIntervalMs: Long? = null,
+                var eagerWindowMs: Long? = null,
+                var segmentBytes: Long? = null,
+                var pollIntervalMs: Long? = null,
+                var sessionTtlSeconds: Long? = null,
+                var holeTimeoutMs: Long? = null,
+                var xmux: JsonObject? = null,
                 var template: JsonObject? = null,
                 var s3: JsonObject? = null
-            ) {
-                data class XmuxSettingsBean(
-                    var maxConnections: Any? = null,
-                    var maxConcurrency: Any? = null,
-                    var cMaxReuseTimes: Any? = null,
-                    var hMaxRequestTimes: Any? = null,
-                    var hMaxReusableSecs: Any? = null,
-                    var hKeepAlivePeriod: Any? = null
-                )
-            }
+            )
 
             //https://xtls.github.io/config/transport.html#finalmaskobject
             data class FinalMaskBean(

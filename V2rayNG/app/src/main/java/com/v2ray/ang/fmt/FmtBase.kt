@@ -73,6 +73,7 @@ open class FmtBase {
             config.secrets = queryParam["secrets"]
             config.template = queryParam["template"]
             config.s3 = queryParam["s3"]
+            config.xdriveExtra = queryParam["extra"]
         }
 
         config.seed = queryParam["seed"]
@@ -84,7 +85,7 @@ open class FmtBase {
         config.serviceName = queryParam["serviceName"]
         config.authority = queryParam["authority"]
         config.xhttpMode = queryParam["mode"]
-        config.xhttpExtra = queryParam["extra"]
+        if (config.network != NetworkType.XDRIVE.type) config.xhttpExtra = queryParam["extra"]
         config.finalMask = queryParam["fm"]
 
         config.security = queryParam["security"]
@@ -180,6 +181,7 @@ open class FmtBase {
                 config.service?.nullIfBlank()?.let { dicQuery["service"] = it }
                 config.secrets?.nullIfBlank()?.let { dicQuery["secrets"] = it }
                 config.template?.nullIfBlank()?.let { dicQuery["template"] = it }
+                config.xdriveExtra?.nullIfBlank()?.let { dicQuery["extra"] = it }
                 if (config.service == AppConfig.XDRIVE_SERVICE_S3) {
                     config.s3?.nullIfBlank()?.let { dicQuery["s3"] = it }
                 }

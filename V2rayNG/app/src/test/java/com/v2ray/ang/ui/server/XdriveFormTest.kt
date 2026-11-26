@@ -13,13 +13,13 @@ class XdriveFormTest {
 
     @Test
     fun templateKeepsOptionalFolderAndSecretsWhenSaved() {
-        val form = validTemplateForm(remoteFolder = "folder", secrets = "user\npass")
+        val form = validTemplateForm(remoteFolder = "folder", secrets = "user, pass")
         val saved = form.toProfileItem(ProfileItem.create(EConfigType.VLESS), EConfigType.VLESS)
 
         assertEquals(NetworkType.XDRIVE.type, saved.network)
         assertEquals(AppConfig.XDRIVE_SERVICE_TEMPLATE, saved.service)
         assertEquals("folder", saved.remoteFolder)
-        assertEquals("user\npass", saved.secrets)
+        assertEquals("user, pass", saved.secrets)
         assertEquals(form.template, saved.template)
         assertEquals(null, saved.flow)
     }
@@ -43,13 +43,13 @@ class XdriveFormTest {
             network = NetworkType.XDRIVE.type,
             service = AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE,
             remoteFolder = "folder-id",
-            secrets = "client-id\nclient-secret\nrefresh-token",
+            secrets = "client-id, client-secret, refresh-token",
         )
 
         assertTrue(ServerValidator.validateForm(EConfigType.VLESS, valid).isEmpty())
         assertEquals(
             R.string.server_lab_xdrive_secrets_error,
-            ServerValidator.validateForm(EConfigType.VLESS, valid.copy(secrets = "one\ntwo"))[ServerField.SECRETS]
+            ServerValidator.validateForm(EConfigType.VLESS, valid.copy(secrets = "one, two"))[ServerField.SECRETS]
         )
     }
 
@@ -69,7 +69,7 @@ class XdriveFormTest {
         val nonVlessErrors = ServerValidator.validateForm(EConfigType.VMESS, validTemplateForm())
         val oldServiceErrors = ServerValidator.validateForm(
             EConfigType.VLESS,
-            validTemplateForm(service = "Google Drive", remoteFolder = "folder", secrets = "a\nb\nc")
+            validTemplateForm(service = "Google Drive", remoteFolder = "folder", secrets = "a, b, c")
         )
 
         assertEquals(R.string.server_lab_xdrive_vless_error, nonVlessErrors[ServerField.NETWORK])
@@ -93,7 +93,7 @@ class XdriveFormTest {
 
         assertEquals(AppConfig.XDRIVE_SERVICE_S3, saved.service)
         assertEquals(form.s3, saved.s3)
-        assertEquals(form.secrets, saved.secrets)
+        assertEquals("access, secret, token", saved.secrets)
         assertEquals(form.remoteFolder, restored.remoteFolder)
         assertEquals(form.s3, restored.s3)
         assertEquals(form.secrets, restored.secrets)
@@ -107,7 +107,7 @@ class XdriveFormTest {
         val cases = listOf(
             Triple(validS3Form().copy(s3 = "{}"), ServerField.S3, R.string.server_lab_xdrive_s3_error),
             Triple(
-                validS3Form().copy(secrets = "access\n\ntoken"),
+                validS3Form().copy(secrets = "access, , token"),
                 ServerField.SECRETS,
                 R.string.server_lab_xdrive_s3_secrets_error
             ),
@@ -128,6 +128,21 @@ class XdriveFormTest {
     }
 
     @Test
+    fun extraIsOptionalAndOnlyAppliesToXdrive() {
+        val form = validS3Form().copy(xdriveExtra = """{"pollIntervalMs":50}""")
+        val saved = form.toProfileItem(ProfileItem.create(EConfigType.VLESS), EConfigType.VLESS)
+
+        assertTrue(ServerValidator.validateForm(EConfigType.VLESS, form).isEmpty())
+        assertEquals(form.xdriveExtra, ServerForm.from(saved).xdriveExtra)
+        assertEquals(null, form.copy(xdriveExtra = " ").toProfileItem(saved, EConfigType.VLESS).xdriveExtra)
+        assertEquals(null, form.copy(network = NetworkType.TCP.type).toProfileItem(saved, EConfigType.VLESS).xdriveExtra)
+        assertEquals(
+            R.string.server_lab_xdrive_extra_error,
+            ServerValidator.validateForm(EConfigType.VLESS, form.copy(xdriveExtra = "[]"))[ServerField.XDRIVE_EXTRA]
+        )
+    }
+
+    @Test
     fun switchingAwayFromS3ClearsItsSettings() {
         val form = validS3Form()
         val initial = form.toProfileItem(ProfileItem.create(EConfigType.VLESS), EConfigType.VLESS)
@@ -143,7 +158,7 @@ class XdriveFormTest {
     private fun validS3Form() = validTemplateForm(
         service = AppConfig.XDRIVE_SERVICE_S3,
         remoteFolder = "streams/client/",
-        secrets = "access\nsecret\ntoken"
+        secrets = "access, secret, token"
     ).copy(s3 = """{"endpoint":"https://s3.example.com","bucket":"bucket","pathStyle":true}""")
 
     private fun validTemplateForm(

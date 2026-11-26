@@ -73,6 +73,7 @@ data class ServerForm(
     val secrets: String = "",
     val template: String = "",
     val s3: String = "",
+    val xdriveExtra: String = "",
     val finalMask: String = "",
     val kcpMtu: String = "",
     val kcpTti: String = "",
@@ -165,12 +166,13 @@ data class ServerForm(
             remoteFolder = if (isXdrive) remoteFolder.nullIfBlank() else null,
             service = if (isXdrive) service.nullIfBlank() else null,
             secrets = if (isXdrive && XdriveConfigValidator.usesSecrets(service)) {
-                secrets.nullIfBlank()
+                secrets.trim().nullIfBlank()
             } else {
                 null
             },
             template = if (isXdrive && service == XDRIVE_SERVICE_TEMPLATE) template.nullIfBlank() else null,
             s3 = if (isXdrive && service == XDRIVE_SERVICE_S3) s3.nullIfBlank() else null,
+            xdriveExtra = if (isXdrive) xdriveExtra.nullIfBlank() else null,
             finalMask = finalMask.nullIfBlank(),
             seed = seed.nullIfBlank(),
             kcpMtu = kcpMtu.toIntOrNull(),
@@ -246,6 +248,7 @@ data class ServerForm(
                 secrets = profile.secrets.orEmpty(),
                 template = profile.template.orEmpty(),
                 s3 = profile.s3.orEmpty(),
+                xdriveExtra = profile.xdriveExtra.orEmpty(),
                 finalMask = profile.finalMask.orEmpty(),
                 seed = profile.seed.orEmpty(),
                 kcpMtu = profile.kcpMtu?.toString().orEmpty(),
@@ -316,6 +319,7 @@ enum class ServerField(
     SECRETS({ it.secrets }, { f, v -> f.copy(secrets = v) }),
     TEMPLATE({ it.template }, { f, v -> f.copy(template = v) }),
     S3({ it.s3 }, { f, v -> f.copy(s3 = v) }),
+    XDRIVE_EXTRA({ it.xdriveExtra }, { f, v -> f.copy(xdriveExtra = v) }),
     FINAL_MASK({ it.finalMask }, { f, v -> f.copy(finalMask = v) }),
     KCP_MTU({ it.kcpMtu }, { f, v -> f.copy(kcpMtu = v) }),
     KCP_TTI({ it.kcpTti }, { f, v -> f.copy(kcpTti = v) }),

@@ -44,6 +44,10 @@ object CoreOutboundBuilder {
         }
 
         outbound ?: return null
+        if (profileItem.network == NetworkType.XDRIVE.type && outbound.streamSettings?.xdriveSettings == null) {
+            LogUtil.w(AppConfig.TAG, "Skipping XDRIVE profile with invalid Extra")
+            return null
+        }
         val ret = updateOutboundWithGlobalSettings(outbound)
         if (!ret) return null
         return outbound
@@ -112,10 +116,15 @@ object CoreOutboundBuilder {
         if (service !in XdriveConfigValidator.services) return false
         if (service != AppConfig.XDRIVE_SERVICE_TEMPLATE && profileItem.remoteFolder.isNullOrBlank()) return false
 
+        val credentials = if (XdriveConfigValidator.usesSecrets(service)) {
+            XdriveConfigValidator.parseSecrets(profileItem.secrets) ?: return false
+        } else {
+            emptyList()
+        }
         return when (service) {
-            AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE -> XdriveConfigValidator.secrets(profileItem.secrets).size == 3
+            AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE -> XdriveConfigValidator.isValidGoogleDriveSecrets(credentials)
             AppConfig.XDRIVE_SERVICE_S3 -> XdriveConfigValidator.isValidS3(profileItem.s3) &&
-                XdriveConfigValidator.isValidS3Secrets(profileItem.secrets) &&
+                XdriveConfigValidator.isValidS3Secrets(credentials) &&
                 XdriveConfigValidator.isValidS3RemoteFolder(profileItem.remoteFolder)
             AppConfig.XDRIVE_SERVICE_TEMPLATE -> XdriveConfigValidator.isValidTemplate(profileItem.template)
             else -> true
@@ -522,20 +531,22 @@ object CoreOutboundBuilder {
 
             NetworkType.XDRIVE.type -> {
                 val service = profileItem.service ?: AppConfig.XDRIVE_SERVICE_LOCAL
-                val xdriveSetting = OutboundBean.StreamSettingsBean.XdriveSettingsBean(
-                    remoteFolder = profileItem.remoteFolder?.nullIfBlank(),
-                    service = service,
-                    secrets = profileItem.secrets
-                        ?.takeIf { XdriveConfigValidator.usesSecrets(service) }
-                        ?.let { XdriveConfigValidator.secrets(it, service) },
-                    template = profileItem.template
-                        ?.takeIf { service == AppConfig.XDRIVE_SERVICE_TEMPLATE }
-                        ?.let { JsonUtil.parseString(it) },
-                    s3 = profileItem.s3
-                        ?.takeIf { service == AppConfig.XDRIVE_SERVICE_S3 }
-                        ?.let { JsonUtil.parseString(it) }
-                )
-                streamSettings.xdriveSettings = xdriveSetting
+                val settings = profileItem.xdriveExtra.nullIfBlank()?.let { extra ->
+                    val tuning = XdriveConfigValidator.parseExtra(extra) ?: return null
+                    JsonUtil.fromJson(tuning.toString(), OutboundBean.StreamSettingsBean.XdriveSettingsBean::class.java)
+                        ?: return null
+                } ?: OutboundBean.StreamSettingsBean.XdriveSettingsBean()
+                settings.service = service
+                settings.remoteFolder = profileItem.remoteFolder.nullIfBlank()
+                if (XdriveConfigValidator.usesSecrets(service)) {
+                    settings.secrets = (XdriveConfigValidator.parseSecrets(profileItem.secrets) ?: return null)
+                        .takeIf { it.isNotEmpty() }
+                }
+                when (service) {
+                    AppConfig.XDRIVE_SERVICE_TEMPLATE -> settings.template = JsonUtil.parseString(profileItem.template)
+                    AppConfig.XDRIVE_SERVICE_S3 -> settings.s3 = JsonUtil.parseString(profileItem.s3)
+                }
+                streamSettings.xdriveSettings = settings
             }
 
             NetworkType.H2.type, NetworkType.HTTP.type -> {

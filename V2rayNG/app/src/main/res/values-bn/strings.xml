@@ -131,11 +131,14 @@
     <string name="server_lab_masque_warp_address_error">সর্বাধিক একটি বৈধ IPv4 এবং একটি বৈধ IPv6 ঠিকানা লিখুন</string>
     <string name="server_lab_masque_warp_auth_error">MASQUE-এর মাধ্যমে WARP ব্যবহারকারীর নাম বা পাসওয়ার্ড ব্যবহার করতে পারে না</string>
     <string name="server_lab_xdrive_remote_folder">remoteFolder</string>
-    <string name="server_lab_xdrive_service">service</string>
     <string name="server_lab_xdrive_service_google_drive" translatable="false">google-drive</string>
-    <string name="server_lab_xdrive_secrets">secrets (প্রতি লাইনে একটি)</string>
+    <string name="server_lab_xdrive_secrets">XDRIVE-এর পরিচয়পত্র (কমা দিয়ে আলাদা করুন)</string>
+    <string name="server_lab_xdrive_google_drive_secrets_hint">Google Drive: ClientID, ClientSecret, RefreshToken</string>
+    <string name="server_lab_xdrive_s3_secrets">S3: AccessKeyID, SecretAccessKey, SessionToken (ঐচ্ছিক)</string>
     <string name="server_lab_xdrive_template">template JSON</string>
-    <string name="server_lab_xdrive_secrets_error">Google Drive-এর জন্য প্রতি লাইনে একটি করে ঠিক ৩টি খালি নয় এমন secret প্রয়োজন</string>
+    <string name="server_lab_xdrive_s3_secrets_error">S3-এর জন্য AccessKeyID ও SecretAccessKey আবশ্যক, SessionToken ঐচ্ছিক। মানগুলো কমা দিয়ে আলাদা করুন এবং বৈধ HTTP হেডার মান ব্যবহার করুন।</string>
+    <string name="server_lab_xdrive_secrets_format_error">মানগুলো কমা দিয়ে আলাদা করুন। কোনো মানে কমা বা দ্বৈত উদ্ধৃতি চিহ্ন থাকলে, মানটি দ্বৈত উদ্ধৃতির মধ্যে লিখুন এবং ভেতরের প্রতিটি দ্বৈত উদ্ধৃতি চিহ্ন দুবার লিখুন।</string>
+    <string name="server_lab_xdrive_secrets_error">Google Drive-এর জন্য ClientID, ClientSecret ও RefreshToken কমা দিয়ে আলাদা করে লিখুন।</string>
     <string name="server_lab_xdrive_service_error">অসমর্থিত XDRIVE পরিষেবা</string>
     <string name="server_lab_xdrive_vless_error">XDRIVE-এর জন্য VLESS আউটবাউন্ড প্রয়োজন</string>
     <string name="server_lab_xdrive_encryption_error">XDRIVE-এর জন্য xray vlessenc দিয়ে তৈরি VLESS এনক্রিপশন প্রয়োজন</string>

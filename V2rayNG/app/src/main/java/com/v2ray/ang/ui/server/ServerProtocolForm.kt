@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import com.v2ray.ang.AppConfig.HYSTERIA2_OBFS_GECKO
 import com.v2ray.ang.AppConfig.HYSTERIA2_OBFS_NONE
+import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_GOOGLE_DRIVE
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_S3
 import com.v2ray.ang.AppConfig.XDRIVE_SERVICE_TEMPLATE
 import com.v2ray.ang.AppConfig.REALITY
@@ -339,10 +340,16 @@ private fun NetworkFields(
                 editor, fieldErrors
             )
             if (XdriveConfigValidator.usesSecrets(service)) {
-                ServerTextField(
-                    if (service == XDRIVE_SERVICE_S3) R.string.server_lab_xdrive_s3_secrets
-                    else R.string.server_lab_xdrive_secrets,
-                    ServerField.SECRETS, editor, fieldErrors
+                val hint = when (service) {
+                    XDRIVE_SERVICE_GOOGLE_DRIVE -> stringResource(R.string.server_lab_xdrive_google_drive_secrets_hint)
+                    XDRIVE_SERVICE_S3 -> stringResource(R.string.server_lab_xdrive_s3_secrets)
+                    else -> null
+                }
+                FormTextField(
+                    label = stringResource(R.string.server_lab_xdrive_secrets),
+                    state = editor[ServerField.SECRETS],
+                    isError = ServerField.SECRETS in fieldErrors,
+                    supportingText = fieldErrors.errorMessage(ServerField.SECRETS) ?: hint
                 )
             }
             if (service == XDRIVE_SERVICE_S3) {
@@ -360,6 +367,13 @@ private fun NetworkFields(
                     editor, fieldErrors
                 )
             }
+            FormTextField(
+                label = stringResource(R.string.server_lab_xdrive_extra),
+                state = editor[ServerField.XDRIVE_EXTRA],
+                isError = ServerField.XDRIVE_EXTRA in fieldErrors,
+                supportingText = fieldErrors.errorMessage(ServerField.XDRIVE_EXTRA)
+                    ?: stringResource(R.string.server_lab_xdrive_extra_hint)
+            )
             return@Column
         }
 
