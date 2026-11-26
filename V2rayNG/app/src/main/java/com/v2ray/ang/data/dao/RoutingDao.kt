@@ -7,6 +7,7 @@ import androidx.room3.Upsert
 import com.v2ray.ang.data.entities.ProfileItem
 import com.v2ray.ang.data.entities.RulesetItem
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
 
 @Dao
 interface RoutingDao {
@@ -22,6 +23,9 @@ interface RoutingDao {
 
     @Query("SELECT * FROM routing_rules WHERE id = :id")
     suspend fun find(id: String): RulesetItem?
+
+    @Query("SELECT id FROM routing_rules")
+    suspend fun allIds(): List<String>
 
     @Query("SELECT IFNULL(MAX(sortOrder), 0) FROM routing_rules")
     suspend fun maxSortOrder(): Long
@@ -54,14 +58,23 @@ interface RoutingDao {
         ids.forEachIndexed { index, id -> setSortOrder(id, (index + 1) * ProfileItem.SORT_STEP) }
     }
 
-    /** Reset to presets. Rules with locked == true survive, matching resetRoutingRulesetsCommon. */
+    /** Replaces unlocked rules and appends imports without overwriting retained rules. */
     @Transaction
     suspend fun replaceAll(rules: List<RulesetItem>) {
         deleteUnlocked()
         val base = maxSortOrder()
+        val usedIds = allIds().toMutableSet()
+        // Keep generated IDs clear of IDs that later imports should retain.
+        val reservedIds = rules.mapTo(usedIds.toMutableSet()) { it.id }
         upsertAll(
             rules.mapIndexed { index, rule ->
-                rule.copy(sortOrder = base + (index + 1) * ProfileItem.SORT_STEP)
+                val originalId = rule.id
+                val id = if (originalId.isNullOrBlank() || !usedIds.add(originalId)) {
+                    generateSequence { UUID.randomUUID().toString() }.first { reservedIds.add(it) }
+                } else {
+                    originalId
+                }
+                rule.copy(id = id, sortOrder = base + (index + 1) * ProfileItem.SORT_STEP)
             }
         )
     }
