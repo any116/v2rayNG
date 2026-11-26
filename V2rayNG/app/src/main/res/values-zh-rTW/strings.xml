@@ -108,7 +108,8 @@
     <string name="server_min_packet_size">最小封包大小（位元組，預設 512）</string>
     <string name="server_max_packet_size">最大封包大小（位元組，預設 1200）</string>
     <string name="server_lab_port_hop">跳躍連接埠 (會覆蓋伺服器連接埠)</string>
-    <string name="server_lab_port_hop_interval">連接埠跳躍間隔 (秒)</string>
+    <string name="server_lab_port_hop_interval">連接埠跳躍間隔（秒或最小值-最大值）</string>
+    <string name="title_pref_hysteria2_hop_interval">Hysteria2 預設連接埠跳躍間隔（秒或最小值-最大值）</string>
     <string name="server_lab_bandwidth_down">下載頻寬（支援的單位：k/m/g/t）</string>
     <string name="server_lab_bandwidth_up">上傳頻寬（支援的單位：k/m/g/t）</string>
     <string name="server_lab_xhttp_mode">XHTTP 模式</string>

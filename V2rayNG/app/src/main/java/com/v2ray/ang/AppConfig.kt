@@ -49,6 +49,7 @@ object AppConfig {
     const val PREF_FRAGMENT_LENGTH = "pref_fragment_length"
     const val PREF_FRAGMENT_INTERVAL = "pref_fragment_interval"
     const val PREF_FRAGMENT_MAXSPLIT = "pref_fragment_maxsplit"
+    const val PREF_HYSTERIA2_HOP_INTERVAL = "pref_hysteria2_hop_interval"
     const val PREF_OBSERVATORY_LEAST_PING_INTERVAL = "pref_observatory_least_ping_interval"
     const val PREF_OBSERVATORY_LEAST_LOAD_INTERVAL = "pref_observatory_least_load_interval"
     const val PREF_OBSERVATORY_LEAST_LOAD_METHOD = "pref_observatory_least_load_method"
@@ -296,6 +297,7 @@ object AppConfig {
     const val DEFAULT_SECURITY = "auto"
     const val DEFAULT_LEVEL = 8
     const val DEFAULT_NETWORK = "tcp"
+    const val HYSTERIA2_HOP_INTERVAL_DEFAULT = "30"
     const val HYSTERIA2_OBFS_NONE = "none"
     const val HYSTERIA2_OBFS_SALAMANDER = "salamander"
     const val HYSTERIA2_OBFS_GECKO = "gecko"

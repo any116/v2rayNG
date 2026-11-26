@@ -530,6 +530,12 @@ private fun CoreSection(state: SettingsUiState, onAction: (SettingsAction) -> Un
         rememberStringOptions(R.array.outbound_domain_resolve_method_value),
         onAction = onAction
     )
+    TextItem(
+        StringPref.HYSTERIA2_HOP_INTERVAL,
+        state[StringPref.HYSTERIA2_HOP_INTERVAL],
+        R.string.title_pref_hysteria2_hop_interval,
+        onAction = onAction
+    )
 }
 
 @Composable

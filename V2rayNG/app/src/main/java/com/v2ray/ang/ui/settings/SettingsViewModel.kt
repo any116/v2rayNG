@@ -130,6 +130,8 @@ class SettingsViewModel @Inject constructor(
 
             StringPref.OBS_LEAST_LOAD_SAMPLING -> applyString(pref, validSampling(text) ?: return)
 
+            StringPref.HYSTERIA2_HOP_INTERVAL -> applyString(pref, text.ifEmpty { pref.default })
+
             // Switching back to VPN re-arms the hev requirements.
             StringPref.MODE -> {
                 applyString(pref, text)

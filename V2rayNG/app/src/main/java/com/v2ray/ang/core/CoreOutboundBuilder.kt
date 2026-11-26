@@ -590,13 +590,15 @@ object CoreOutboundBuilder {
                 val udpMasks = mutableListOf<OutboundBean.StreamSettingsBean.FinalMaskBean.MaskBean>()
                 if (profileItem.portHopping.isNotNullEmpty()) {
                     val rawInterval = profileItem.portHoppingInterval?.trim().nullIfBlank()
+                        ?: Prefs.string(AppConfig.PREF_HYSTERIA2_HOP_INTERVAL)?.trim().nullIfBlank()
+                    val defaultInterval = AppConfig.HYSTERIA2_HOP_INTERVAL_DEFAULT
                     val interval = if (rawInterval == null) {
-                        "30"
+                        defaultInterval
                     } else {
                         val singleValue = rawInterval.toIntOrNull()
                         if (singleValue != null) {
                             if (singleValue < 5) {
-                                "30"
+                                defaultInterval
                             } else {
                                 rawInterval
                             }
@@ -610,10 +612,10 @@ object CoreOutboundBuilder {
                                     val minEnd = maxOf(minStart, end)
                                     "$minStart-$minEnd"
                                 } else {
-                                    "30"
+                                    defaultInterval
                                 }
                             } else {
-                                "30"
+                                defaultInterval
                             }
                         }
                     }

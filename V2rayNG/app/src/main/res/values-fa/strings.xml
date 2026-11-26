@@ -108,7 +108,8 @@
     <string name="server_min_packet_size">حداقل اندازه بسته (بایت، پیش‌فرض 512)</string>
     <string name="server_max_packet_size">حداکثر اندازه بسته (بایت، پیش‌فرض 1200)</string>
     <string name="server_lab_port_hop">پرش پورت (پورت سرور را بازنویسی می‌کند)</string>
-    <string name="server_lab_port_hop_interval">فاصله پورت پرش (ثانیه)</string>
+    <string name="server_lab_port_hop_interval">فاصله پورت پرش (ثانیه یا حداقل-حداکثر)</string>
+    <string name="title_pref_hysteria2_hop_interval">فاصلهٔ پیش‌فرض تغییر درگاه Hysteria2 (ثانیه یا حداقل-حداکثر)</string>
     <string name="server_lab_bandwidth_down">پهنای باند دانلود (واحدهای پشتیبانی‌شده: k/m/g/t)</string>
     <string name="server_lab_bandwidth_up">پهنای باند آپلود (واحدهای پشتیبانی‌شده: k/m/g/t)</string>
     <string name="server_lab_xhttp_mode">حالت XHTTP</string>

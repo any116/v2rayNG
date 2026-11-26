@@ -108,7 +108,8 @@
     <string name="server_min_packet_size">کۊچک‌ترین ٱنداڌه بسته (بایت، پؽش فرض 512)</string>
     <string name="server_max_packet_size">گپ‌ترین ٱنداڌه بسته (بایت، پؽش فرض 1200)</string>
     <string name="server_lab_port_hop">پورت گوم (درگا سرورن ز نۊ هؽل اکونه)</string>
-    <string name="server_lab_port_hop_interval">فاصله پورت گوم (ثانیه)</string>
+    <string name="server_lab_port_hop_interval">فاصله پورت گوم (ثانیه یا کمینه-بیشینه)</string>
+    <string name="title_pref_hysteria2_hop_interval">فاصله پؽش‌فرض پورت گوم Hysteria2 (ثانیه یا کمینه-بیشینه)</string>
     <string name="server_lab_bandwidth_down">ب لم ٱووڌن پئنا باند (واهڌ)</string>
     <string name="server_lab_bandwidth_up">وا روء رئڌن پئنا باند (واهڌ)</string>
     <string name="server_lab_xhttp_mode">حالت XHTTP</string>
