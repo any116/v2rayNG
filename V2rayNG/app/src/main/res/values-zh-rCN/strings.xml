@@ -243,6 +243,14 @@
 
 
     <string name="title_pref_domestic_dns">直连 DNS（可选）</string>
+    <string name="title_pref_dns_parallel_query">DNS 并行查询</string>
+    <string name="dns_parallel_query_auto">自动（服务器超过两个时开启）</string>
+    <string name="dns_parallel_query_on">开启</string>
+    <string name="dns_parallel_query_off">关闭</string>
+    <string name="title_pref_dns_serve_stale">DNS 乐观缓存</string>
+    <string name="summary_pref_dns_serve_stale">在后台刷新 DNS 结果的同时，允许使用已过期的缓存。</string>
+    <string name="title_pref_dns_validate_region">校验 DNS 结果地区</string>
+    <string name="summary_pref_dns_validate_region">根据已启用的路由规则和已安装的 Geo 数据校验直连 DNS 结果。不符合时使用远程 DNS。</string>
 
     <string name="title_pref_dns_hosts">DNS 主机映射（格式：domain:address,…）</string>
 

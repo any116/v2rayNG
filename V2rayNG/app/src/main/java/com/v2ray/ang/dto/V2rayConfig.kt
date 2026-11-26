@@ -393,7 +393,8 @@ data class V2rayConfig(
         val queryStrategy: String? = null,
         val disableFallbackIfMatch: Boolean? = null,
         val enableParallelQuery: Boolean? = null,
-        val tag: String? = null
+        val tag: String? = null,
+        val serveStale: Boolean? = null,
     ) {
         data class ServersBean(
             var address: String = "",

@@ -242,6 +242,14 @@
 
 
     <string name="title_pref_domestic_dns">সরাসরি DNS (ঐচ্ছিক)</string>
+    <string name="title_pref_dns_parallel_query">সমান্তরাল DNS কুয়েরি</string>
+    <string name="dns_parallel_query_auto">স্বয়ংক্রিয় (সার্ভারের সংখ্যা দুইয়ের বেশি হলে)</string>
+    <string name="dns_parallel_query_on">চালু</string>
+    <string name="dns_parallel_query_off">বন্ধ</string>
+    <string name="title_pref_dns_serve_stale">আশাবাদী DNS ক্যাশ</string>
+    <string name="summary_pref_dns_serve_stale">পটভূমিতে DNS ফলাফল হালনাগাদ করার সময় মেয়াদোত্তীর্ণ ফলাফল ব্যবহার করুন।</string>
+    <string name="title_pref_dns_validate_region">DNS ফলাফলের অঞ্চল যাচাই</string>
+    <string name="summary_pref_dns_validate_region">সক্রিয় রাউটিং নিয়ম ও ইনস্টল করা Geo ডেটা দিয়ে সরাসরি DNS-এর ফলাফল যাচাই করুন। ফলাফল না মিললে দূরবর্তী DNS ব্যবহার করুন।</string>
 
     <string name="title_pref_dns_hosts">DNS হোস্ট ম্যাপিং (বিন্যাস: domain:address,…)</string>
 

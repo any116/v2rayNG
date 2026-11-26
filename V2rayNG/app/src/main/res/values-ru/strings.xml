@@ -242,6 +242,14 @@
 
 
     <string name="title_pref_domestic_dns">DNS для прямых подключений (необязательно)</string>
+    <string name="title_pref_dns_parallel_query">Параллельные DNS-запросы</string>
+    <string name="dns_parallel_query_auto">Автоматически (если серверов больше двух)</string>
+    <string name="dns_parallel_query_on">Включено</string>
+    <string name="dns_parallel_query_off">Выключено</string>
+    <string name="title_pref_dns_serve_stale">Оптимистичный кеш DNS</string>
+    <string name="summary_pref_dns_serve_stale">Использовать устаревшие результаты DNS, пока они обновляются в фоновом режиме.</string>
+    <string name="title_pref_dns_validate_region">Проверка региона в результатах DNS</string>
+    <string name="summary_pref_dns_validate_region">Проверять результаты прямого DNS по включённым правилам маршрутизации и установленным геоданным. При несовпадении использовать удалённый DNS.</string>
 
     <string name="title_pref_dns_hosts">Сопоставления DNS (формат: domain:address,…)</string>
 

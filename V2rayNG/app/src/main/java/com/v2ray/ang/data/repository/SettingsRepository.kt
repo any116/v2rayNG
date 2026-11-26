@@ -21,6 +21,8 @@ enum class BoolPref(val key: String, val default: Boolean) {
     PREFER_IPV6(AppConfig.PREF_PREFER_IPV6, false),
     LOCAL_DNS(AppConfig.PREF_LOCAL_DNS_ENABLED, false),
     FAKE_DNS(AppConfig.PREF_FAKE_DNS_ENABLED, false),
+    DNS_SERVE_STALE(AppConfig.PREF_DNS_SERVE_STALE, false),
+    DNS_VALIDATE_REGION(AppConfig.PREF_DNS_VALIDATE_REGION, true),
     APPEND_HTTP_PROXY(AppConfig.PREF_APPEND_HTTP_PROXY, false),
     USE_HEV_TUNNEL(AppConfig.PREF_USE_HEV_TUNNEL, true),
 
@@ -62,6 +64,7 @@ enum class StringPref(val key: String, val default: String) {
     SOCKS_PASSWORD(AppConfig.PREF_SOCKS_PASSWORD, ""),
     REMOTE_DNS(AppConfig.PREF_REMOTE_DNS, ""),
     DOMESTIC_DNS(AppConfig.PREF_DOMESTIC_DNS, ""),
+    DNS_PARALLEL_QUERY(AppConfig.PREF_DNS_PARALLEL_QUERY, AppConfig.DNS_PARALLEL_QUERY_AUTO),
     DNS_HOSTS(AppConfig.PREF_DNS_HOSTS, ""),
     CORE_LOGLEVEL(AppConfig.PREF_LOGLEVEL, "warning"),
     // Was "0" while both read sites fell back to "1".

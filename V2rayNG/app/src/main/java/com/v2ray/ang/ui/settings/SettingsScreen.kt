@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.v2ray.ang.AppConfig
 import com.v2ray.ang.R
 import com.v2ray.ang.data.repository.BoolPref
 import com.v2ray.ang.data.repository.StringPref
@@ -33,6 +34,7 @@ import com.v2ray.ang.ui.components.SettingsMenuItem
 import com.v2ray.ang.ui.components.SettingsSwitchItem
 import com.v2ray.ang.ui.components.StringOptions
 import com.v2ray.ang.ui.components.rememberStringOptions
+import com.v2ray.ang.ui.components.toStringOptions
 import com.v2ray.ang.ui.components.verticalScrollbar
 
 @Composable
@@ -476,6 +478,34 @@ private fun CoreSection(state: SettingsUiState, onAction: (SettingsAction) -> Un
         StringPref.DOMESTIC_DNS,
         state[StringPref.DOMESTIC_DNS],
         R.string.title_pref_domestic_dns,
+        onAction = onAction
+    )
+    OptionItem(
+        StringPref.DNS_PARALLEL_QUERY,
+        state[StringPref.DNS_PARALLEL_QUERY],
+        R.string.title_pref_dns_parallel_query,
+        rememberStringOptions(R.array.dns_parallel_query_modes),
+        remember {
+            listOf(
+                AppConfig.DNS_PARALLEL_QUERY_AUTO,
+                AppConfig.DNS_PARALLEL_QUERY_ON,
+                AppConfig.DNS_PARALLEL_QUERY_OFF,
+            ).toStringOptions()
+        },
+        onAction = onAction
+    )
+    BoolItem(
+        BoolPref.DNS_SERVE_STALE,
+        state[BoolPref.DNS_SERVE_STALE],
+        R.string.title_pref_dns_serve_stale,
+        R.string.summary_pref_dns_serve_stale,
+        onAction = onAction
+    )
+    BoolItem(
+        BoolPref.DNS_VALIDATE_REGION,
+        state[BoolPref.DNS_VALIDATE_REGION],
+        R.string.title_pref_dns_validate_region,
+        R.string.summary_pref_dns_validate_region,
         onAction = onAction
     )
     TextItem(

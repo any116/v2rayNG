@@ -242,6 +242,14 @@
 
 
     <string name="title_pref_domestic_dns">DNS cho kết nối trực tiếp (không bắt buộc)</string>
+    <string name="title_pref_dns_parallel_query">Truy vấn DNS song song</string>
+    <string name="dns_parallel_query_auto">Tự động (khi có hơn hai máy chủ)</string>
+    <string name="dns_parallel_query_on">Bật</string>
+    <string name="dns_parallel_query_off">Tắt</string>
+    <string name="title_pref_dns_serve_stale">Bộ nhớ đệm DNS lạc quan</string>
+    <string name="summary_pref_dns_serve_stale">Dùng kết quả DNS đã hết hạn trong khi cập nhật chúng ở chế độ nền.</string>
+    <string name="title_pref_dns_validate_region">Xác minh khu vực của kết quả DNS</string>
+    <string name="summary_pref_dns_validate_region">Dùng các quy tắc định tuyến đã bật và dữ liệu Geo đã cài đặt để kiểm tra kết quả DNS trực tiếp. Nếu không khớp, dùng DNS từ xa.</string>
 
     <string name="title_pref_dns_hosts">Ánh xạ máy chủ DNS (định dạng: domain:address,…)</string>
 

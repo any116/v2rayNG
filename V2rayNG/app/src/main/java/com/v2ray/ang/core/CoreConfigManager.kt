@@ -194,7 +194,8 @@ object CoreConfigManager {
         v2rayConfig.log.loglevel = Prefs.string(AppConfig.PREF_LOGLEVEL) ?: "warning"
         v2rayConfig.remarks = primaryResolvedOutbound.profile.remarks
 
-        configureInbounds(v2rayConfig)
+        val fakeDnsDomains = fakeDnsDomains(configContext)
+        configureInbounds(v2rayConfig, enableFakeDns = fakeDnsDomains.isNotEmpty())
 
         if (v2rayConfig.outbounds.isNotEmpty()) {
             v2rayConfig.outbounds.removeAt(0)
@@ -218,9 +219,9 @@ object CoreConfigManager {
 
         // User routing rules (policyGroupBalancerTags rewrites TAG_PROXY→balancer when main is POLICYGROUP).
         configureRouting(configContext, v2rayConfig, policyGroupBalancerTags)
-        configureFakeDns(v2rayConfig)
         configureDns(configContext, v2rayConfig, policyGroupBalancerTags)
-        configureLocalDns(configContext, v2rayConfig)
+        configureFakeDns(v2rayConfig, fakeDnsDomains)
+        configureLocalDns(v2rayConfig)
         configureRootModeDns(v2rayConfig)
 
         // (added by getDns / getCustomLocalDns) to use the balancer, then add
@@ -535,7 +536,7 @@ object CoreConfigManager {
     /**
      * Configure inbound listeners and related runtime options.
      */
-    private fun configureInbounds(v2rayConfig: V2rayConfig) {
+    private fun configureInbounds(v2rayConfig: V2rayConfig, enableFakeDns: Boolean) {
         val vpn = SettingsManager.isVpnMode()
         val useHev = SettingsManager.isUsingHevTun()
         val forcedByHev = vpn && useHev
@@ -573,16 +574,15 @@ object CoreConfigManager {
             inbound1.settings?.auth = "noauth"
             inbound1.settings?.accounts = null
         }
-        val fakedns = Prefs.bool(AppConfig.PREF_FAKE_DNS_ENABLED) == true
         val sniffAllTlsAndHttp =
             Prefs.bool(AppConfig.PREF_SNIFFING_ENABLED, true) != false
-        inbound1.sniffing?.enabled = fakedns || sniffAllTlsAndHttp
+        inbound1.sniffing?.enabled = enableFakeDns || sniffAllTlsAndHttp
         inbound1.sniffing?.routeOnly =
             Prefs.bool(AppConfig.PREF_ROUTE_ONLY_ENABLED, false)
         if (!sniffAllTlsAndHttp) {
             inbound1.sniffing?.destOverride?.clear()
         }
-        if (fakedns) {
+        if (enableFakeDns) {
             inbound1.sniffing?.destOverride?.add("fakedns")
         }
 
@@ -608,43 +608,37 @@ object CoreConfigManager {
         }
     }
 
-    /**
-     * Enable fake DNS when local DNS and fake DNS are both enabled.
-     */
-    private fun configureFakeDns(v2rayConfig: V2rayConfig) {
-        if (Prefs.bool(AppConfig.PREF_LOCAL_DNS_ENABLED) == true
-            && Prefs.bool(AppConfig.PREF_FAKE_DNS_ENABLED) == true
-        ) {
-            v2rayConfig.fakedns = listOf(V2rayConfig.FakednsBean())
+    private fun fakeDnsDomains(configContext: CoreConfigContext): List<String> {
+        if (!Prefs.bool(AppConfig.PREF_LOCAL_DNS_ENABLED) || !Prefs.bool(AppConfig.PREF_FAKE_DNS_ENABLED)) {
+            return emptyList()
         }
+        return configContext.routingDomainRules.asSequence()
+            .filter { it.outboundTag != AppConfig.TAG_BLOCKED }
+            .flatMap { it.domain.asSequence() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+    }
+
+    private fun configureFakeDns(v2rayConfig: V2rayConfig, domains: List<String>) {
+        // With no eligible domains, ordinary DNS handles every query.
+        if (domains.isEmpty()) return
+        v2rayConfig.fakedns = listOf(V2rayConfig.FakednsBean())
+        v2rayConfig.dns?.servers?.add(
+            0,
+            V2rayConfig.DnsBean.ServersBean(
+                address = "fakedns",
+                domains = domains,
+                skipFallback = true,
+            )
+        )
     }
 
     /**
      * Configure local DNS inbounds, outbounds, and routing rules.
      */
-    private fun configureLocalDns(configContext: CoreConfigContext, v2rayConfig: V2rayConfig) {
-        if (Prefs.bool(AppConfig.PREF_LOCAL_DNS_ENABLED) != true) {
-            return
-        }
-
-        if (Prefs.bool(AppConfig.PREF_FAKE_DNS_ENABLED) == true) {
-            val geositeCn = arrayListOf(AppConfig.GEOSITE_CN)
-            val routingDomains = configContext.routingDomainRules
-                .asSequence()
-                .filter { it.outboundTag != AppConfig.TAG_BLOCKED }
-                .flatMap { it.domain.asSequence() }
-                .toList()
-                .distinct()
-            val finalDomain = geositeCn + routingDomains
-            // fakedns with all domains to make it always top priority
-            v2rayConfig.dns?.servers?.add(
-                0,
-                V2rayConfig.DnsBean.ServersBean(
-                    address = "fakedns",
-                    domains = finalDomain
-                )
-            )
-        }
+    private fun configureLocalDns(v2rayConfig: V2rayConfig) {
+        if (!Prefs.bool(AppConfig.PREF_LOCAL_DNS_ENABLED)) return
 
         if (SettingsManager.isVpnMode()) {
             if (SettingsManager.isUsingHevTun()) {
@@ -732,37 +726,36 @@ object CoreConfigManager {
         v2rayConfig: V2rayConfig,
         policyGroupBalancerTags: Map<String, String>,
     ) {
-        val servers = ArrayList<Any>()
         val remoteDns = SettingsManager.getRemoteDnsServers()
             .map { RootCertificateManager.applyDnsCertificateFile(it, configContext.context) }
         val domesticDns = SettingsManager.getDomesticDnsServers()
             .map { RootCertificateManager.applyDnsCertificateFile(it, configContext.context) }
 
-        remoteDns.forEach { servers.add(it) }
-
         val hosts = buildDnsHostsFromRoutingRules(configContext)
-        val cnModeAddedDomestic = buildDnsCnModeFromRoutingRules(
-            configContext = configContext,
-            servers = servers,
-            remoteDns = remoteDns,
-            domesticDns = domesticDns
-        )
-        val ruleAddedDomestic = buildDnsFromRoutingRules(
-            configContext = configContext,
-            servers = servers,
-            remoteDns = remoteDns,
-            domesticDns = domesticDns
-        )
-        val hasDomesticDns = cnModeAddedDomestic || ruleAddedDomestic
+        val regionPolicies = if (Prefs.bool(AppConfig.PREF_DNS_VALIDATE_REGION, true)) {
+            DnsRegionPolicy.detect(configContext)
+        } else {
+            emptyList()
+        }
+        val servers = buildDnsServers(configContext.routingDomainRules, regionPolicies, remoteDns, domesticDns)
+        val hasDomesticDns = servers.any {
+            it is V2rayConfig.DnsBean.ServersBean && it.tag == AppConfig.TAG_DOMESTIC_DNS
+        }
+        val enableParallelQuery = when (Prefs.string(AppConfig.PREF_DNS_PARALLEL_QUERY)) {
+            AppConfig.DNS_PARALLEL_QUERY_ON -> true
+            AppConfig.DNS_PARALLEL_QUERY_OFF -> false
+            else -> true.takeIf { domesticDns.size + remoteDns.size > 2 }
+        }
 
         v2rayConfig.dns = V2rayConfig.DnsBean(
-            servers = deduplicateDnsServers(servers),
+            servers = servers,
             hosts = hosts,
             tag = AppConfig.TAG_DNS,
             // Keep all matching policy groups, but do not query unmatched default resolvers.
             // If every matching group fails, resolution intentionally fails as well.
             disableFallbackIfMatch = true,
-            enableParallelQuery = if ((domesticDns.size + remoteDns.size) > 2) true else null
+            serveStale = Prefs.bool(AppConfig.PREF_DNS_SERVE_STALE).takeIf { it },
+            enableParallelQuery = enableParallelQuery,
         )
 
         // Both DNS routing rules go ahead of every user rule, in this order. The bundled rule
@@ -845,135 +838,6 @@ object CoreConfigManager {
         }
 
         return hosts
-    }
-
-    /**
-     * Adds CN-filtered domestic and remote groups before the ordinary routing-derived groups.
-     * All domestic servers share a tag so equivalent policies can race within one Xray group.
-     * Returns whether a domestic server was added, for the matching routing rule.
-     */
-    private fun buildDnsCnModeFromRoutingRules(
-        configContext: CoreConfigContext,
-        servers: ArrayList<Any>,
-        remoteDns: List<String>,
-        domesticDns: List<String>
-    ): Boolean {
-        val cnRegionFilter = { domain: String ->
-            domain.startsWith("geosite:") && (domain.endsWith("-cn") || domain.endsWith("@cn"))
-                    || domain == AppConfig.GEOSITE_CN
-        }
-        val isCnRoutingMode = configContext.routingDomainRules
-            .asSequence()
-            .filter { it.outboundTag == AppConfig.TAG_DIRECT }
-            .flatMap { it.domain.asSequence() }
-            .any { it == AppConfig.GEOSITE_CN }
-
-        if (!isCnRoutingMode) {
-            return false
-        }
-
-        val geoipCn = arrayListOf(AppConfig.GEOIP_CN)
-        val cnDomains = configContext.routingDomainRules
-            .asSequence()
-            .filter { it.outboundTag == AppConfig.TAG_DIRECT }
-            .flatMap { it.domain.asSequence() }
-            .filter { cnRegionFilter(it) }
-            .distinct()
-            .toList()
-        if (cnDomains.isEmpty()) {
-            return false
-        }
-
-        domesticDns.forEach { address ->
-            servers.add(
-                V2rayConfig.DnsBean.ServersBean(
-                    address = address,
-                    domains = cnDomains,
-                    expectIPs = geoipCn,
-                    skipFallback = true,
-                    tag = AppConfig.TAG_DOMESTIC_DNS
-                )
-            )
-        }
-        remoteDns.forEach { address ->
-            servers.add(
-                V2rayConfig.DnsBean.ServersBean(
-                    address = address,
-                    domains = cnDomains,
-                    expectIPs = geoipCn,
-                    skipFallback = true
-                )
-            )
-        }
-        return domesticDns.isNotEmpty()
-    }
-
-    /**
-     * Direct rules use all domestic resolvers; other non-blocked rules use all remote resolvers.
-     * Keep unfiltered CN entries: unlike the preceding expectIPs groups, they can accept
-     * non-CN addresses. Sharing a domain and address does not make those policies equivalent.
-     * Returns whether a domestic server was added, for the matching routing rule.
-     */
-    private fun buildDnsFromRoutingRules(
-        configContext: CoreConfigContext,
-        servers: ArrayList<Any>,
-        remoteDns: List<String>,
-        domesticDns: List<String>
-    ): Boolean {
-        var hasDomestic = false
-        configContext.routingDomainRules.forEach { rule ->
-            val domains = rule.domain.distinct()
-            if (domains.isEmpty()) {
-                return@forEach
-            }
-            when (rule.outboundTag) {
-                AppConfig.TAG_DIRECT -> {
-                    domesticDns.forEach { address ->
-                        servers.add(
-                            V2rayConfig.DnsBean.ServersBean(
-                                address = address,
-                                domains = domains,
-                                skipFallback = true,
-                                // Xray's policyID includes tag; per-address tags prevent group races.
-                                tag = AppConfig.TAG_DOMESTIC_DNS
-                            )
-                        )
-                    }
-                    hasDomestic = hasDomestic || domesticDns.isNotEmpty()
-                }
-
-                AppConfig.TAG_BLOCKED -> Unit
-                else -> {
-                    remoteDns.forEach { address ->
-                        servers.add(
-                            V2rayConfig.DnsBean.ServersBean(
-                                address = address,
-                                domains = domains
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        return hasDomestic
-    }
-
-    /**
-     * Removes equivalent entries while retaining the first occurrence and query-policy order.
-     * Compare complete server settings, with rule lists normalized only for equality; different
-     * expectIPs, tags or fallback settings must remain separate policies, even for one address.
-     */
-    private fun deduplicateDnsServers(servers: List<Any>): ArrayList<Any> {
-        return ArrayList(servers.distinctBy { server ->
-            if (server is V2rayConfig.DnsBean.ServersBean) {
-                server.copy(
-                    domains = server.domains?.distinct()?.sorted(),
-                    expectIPs = server.expectIPs?.distinct()?.sorted()
-                )
-            } else {
-                server
-            }
-        })
     }
 
     //endregion

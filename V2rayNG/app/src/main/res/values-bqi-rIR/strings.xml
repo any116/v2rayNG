@@ -242,6 +242,14 @@
 
 
     <string name="title_pref_domestic_dns">DNS موستقیم (اختیاری)</string>
+    <string name="title_pref_dns_parallel_query">درخواستا هم‌زمون DNS</string>
+    <string name="dns_parallel_query_auto">خوتکار (وختی سرورا ز دوتا بؽتر بۊن)</string>
+    <string name="dns_parallel_query_on">رۊشن</string>
+    <string name="dns_parallel_query_off">خامۊش</string>
+    <string name="title_pref_dns_serve_stale">کَش خوش‌بینانه DNS</string>
+    <string name="summary_pref_dns_serve_stale">تا نتیجه‌یل DNS من پس‌زمینه نو ابۊن، نتیجه‌یل وخت‌گۊڌشته ن و کار بگیرین.</string>
+    <string name="title_pref_dns_validate_region">بررسی منطقه نتیجه‌یل DNS</string>
+    <string name="summary_pref_dns_validate_region">نتیجه‌یل DNS موستقیم ن و قاعده‌یل ره‌ونده تور جوستن وو داده‌یل Geo نصب‌شڌه بررسی کۊنین. ٱر نتیجه‌یل جور نبیڌن، DNS ز ره دیر ن و کار بگیرین.</string>
 
     <string name="title_pref_dns_hosts">هاستا DNS (قالوو: domain:address,…)</string>
 

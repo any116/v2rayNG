@@ -253,6 +253,14 @@
 
 
     <string name="title_pref_domestic_dns">Direct DNS (optional)</string>
+    <string name="title_pref_dns_parallel_query">DNS parallel queries</string>
+    <string name="dns_parallel_query_auto">Automatic (more than two servers)</string>
+    <string name="dns_parallel_query_on">On</string>
+    <string name="dns_parallel_query_off">Off</string>
+    <string name="title_pref_dns_serve_stale">DNS optimistic cache</string>
+    <string name="summary_pref_dns_serve_stale">Use expired DNS results while refreshing them in the background.</string>
+    <string name="title_pref_dns_validate_region">Validate DNS region</string>
+    <string name="summary_pref_dns_validate_region">Use enabled routing rules and installed Geo data to check direct DNS results. Use remote DNS if the results do not match.</string>
 
     <string name="title_pref_dns_hosts">DNS host mappings (format: domain:address,…)</string>
 

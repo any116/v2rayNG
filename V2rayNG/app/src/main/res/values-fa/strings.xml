@@ -242,6 +242,14 @@
 
 
     <string name="title_pref_domestic_dns">DNS مستقیم (اختیاری)</string>
+    <string name="title_pref_dns_parallel_query">پرس‌وجوی موازی DNS</string>
+    <string name="dns_parallel_query_auto">خودکار (وقتی بیش از دو سرور وجود دارد)</string>
+    <string name="dns_parallel_query_on">روشن</string>
+    <string name="dns_parallel_query_off">خاموش</string>
+    <string name="title_pref_dns_serve_stale">کش خوش‌بینانهٔ DNS</string>
+    <string name="summary_pref_dns_serve_stale">هنگام به‌روزرسانی نتایج DNS در پس‌زمینه، از نتایج منقضی‌شده استفاده کنید.</string>
+    <string name="title_pref_dns_validate_region">بررسی منطقهٔ جغرافیایی نتایج DNS</string>
+    <string name="summary_pref_dns_validate_region">نتایج DNS مستقیم را با قوانین مسیریابی فعال و داده‌های Geo نصب‌شده بررسی کنید. اگر نتایج مطابقت نداشتند، از DNS راه‌دور استفاده کنید.</string>
 
     <string name="title_pref_dns_hosts">نگاشت‌های میزبان DNS (قالب: domain:address,…)</string>
 

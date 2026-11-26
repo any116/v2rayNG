@@ -243,6 +243,14 @@
 
 
     <string name="title_pref_domestic_dns">直接連線 DNS（可選）</string>
+    <string name="title_pref_dns_parallel_query">DNS 平行查詢</string>
+    <string name="dns_parallel_query_auto">自動（伺服器超過兩台時啟用）</string>
+    <string name="dns_parallel_query_on">啟用</string>
+    <string name="dns_parallel_query_off">停用</string>
+    <string name="title_pref_dns_serve_stale">DNS 樂觀快取</string>
+    <string name="summary_pref_dns_serve_stale">在背景更新 DNS 結果時，允許使用已過期的快取。</string>
+    <string name="title_pref_dns_validate_region">驗證 DNS 結果的地區</string>
+    <string name="summary_pref_dns_validate_region">依據已啟用的路由規則和已安裝的 Geo 資料，驗證直接連線 DNS 的結果。若不符合預期，則使用遠端 DNS。</string>
 
     <string name="title_pref_dns_hosts">DNS 主機對應（格式：domain:address,…）</string>
 

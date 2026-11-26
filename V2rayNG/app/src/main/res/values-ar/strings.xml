@@ -242,6 +242,14 @@
 
 
     <string name="title_pref_domestic_dns">DNS المباشر (اختياري)</string>
+    <string name="title_pref_dns_parallel_query">استعلامات DNS المتوازية</string>
+    <string name="dns_parallel_query_auto">تلقائي (عند وجود أكثر من خادمين)</string>
+    <string name="dns_parallel_query_on">تشغيل</string>
+    <string name="dns_parallel_query_off">إيقاف</string>
+    <string name="title_pref_dns_serve_stale">التخزين المؤقت المتفائل لـ DNS</string>
+    <string name="summary_pref_dns_serve_stale">استخدم نتائج DNS منتهية الصلاحية أثناء تحديثها في الخلفية.</string>
+    <string name="title_pref_dns_validate_region">التحقق من المنطقة الجغرافية لنتائج DNS</string>
+    <string name="summary_pref_dns_validate_region">تحقّق من نتائج DNS المباشر باستخدام قواعد التوجيه المفعّلة وبيانات Geo المثبّتة. استخدم DNS البعيد إذا لم تتطابق النتائج.</string>
 
     <string name="title_pref_dns_hosts">تعيينات مضيفي DNS (التنسيق: domain:address,…)</string>
 
